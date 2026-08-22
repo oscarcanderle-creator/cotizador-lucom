@@ -1,0 +1,25 @@
+import { createClient } from '../../utils/supabase/server'import { createClient } from '@/utils/supabase/server'
+
+export default async function TestSupabasePage() {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.auth.getUser()
+
+  return (
+    <main style={{ padding: '40px', fontFamily: 'Arial' }}>
+      <h1>Prueba Supabase</h1>
+
+      {error ? (
+        <>
+          <p>Conexión realizada, pero no hay usuario autenticado.</p>
+          <pre>{error.message}</pre>
+        </>
+      ) : (
+        <>
+          <p>Conexión correcta.</p>
+          <pre>{JSON.stringify(data, null, 2)}</pre>
+        </>
+      )}
+    </main>
+  )
+}
