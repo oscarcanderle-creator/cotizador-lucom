@@ -130,6 +130,20 @@ export default async function AdminPage() {
             className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
           >
             <div className="text-lg font-semibold text-gray-900">
+{/* USUARIOS */}
+
+<a
+  href="/admin/usuarios"
+  className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+>
+  <div className="text-lg font-semibold text-gray-900">
+    Usuarios
+  </div>
+
+  <div className="text-sm text-gray-500 mt-2">
+    Administrá vendedores, roles y accesos.
+  </div>
+</a>
               Volver al Cotizador
             </div>
 
