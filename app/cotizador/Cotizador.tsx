@@ -1169,35 +1169,67 @@ async function compartirPropuesta() {
 
                     {/* CANTIDAD */}
 
-                    <div>
+<div>
 
-                      <label className="block text-sm text-gray-500 mb-1">
-                        Cant.
-                      </label>
+  <label className="block text-sm text-gray-500 mb-1">
+    Cant.
+  </label>
 
-                      <input
-                        type="number"
+  <div className="flex items-center border border-gray-300 rounded-lg bg-white overflow-hidden">
 
-                        min="1"
+    <button
+      type="button"
+      onClick={() =>
+        actualizarLinea(
+          linea.id,
+          'cantidad',
+          Math.max(
+            1,
+            linea.cantidad - 1
+          )
+        )
+      }
+      className="w-11 h-11 text-xl font-semibold text-gray-600 hover:bg-gray-100 active:bg-gray-200"
+    >
+      −
+    </button>
 
-                        value={
-                          linea.cantidad
-                        }
+    <input
+      type="number"
+      inputMode="numeric"
+      min="1"
+      value={linea.cantidad}
+      onChange={(e) =>
+        actualizarLinea(
+          linea.id,
+          'cantidad',
+          Math.max(
+            1,
+            Number(e.target.value)
+          )
+        )
+      }
+      className="w-14 h-11 text-center border-x border-gray-200 bg-white text-gray-900 font-semibold outline-none"
+    />
 
-                        onChange={(e) =>
-                          actualizarLinea(
-                            linea.id,
+    <button
+      type="button"
+      onClick={() =>
+        actualizarLinea(
+          linea.id,
+          'cantidad',
+          linea.cantidad + 1
+        )
+      }
+      className="w-11 h-11 text-xl font-semibold text-gray-600 hover:bg-gray-100 active:bg-gray-200"
+    >
+      +
+    </button>
 
-                            'cantidad',
+  </div>
 
-                            e.target.value
-                          )
-                        }
+</div>
 
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
-                      />
-
-                    </div>
 
                     {/* TIPO */}
 
