@@ -1,8 +1,11 @@
 import { redirect } from 'next/navigation'
+
 import { createClient } from '../../utils/supabase/server'
+
 import CerrarSesion from '../CerrarSesion'
 
 export default async function AdminPage() {
+
   const supabase = await createClient()
 
   const {
@@ -27,9 +30,17 @@ export default async function AdminPage() {
     redirect('/cotizador')
   }
 
+  const nombreUsuario =
+    profile.nombre?.trim() ||
+    user.email ||
+    'Administrador'
+
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-6 sm:p-8">
+
       <div className="max-w-6xl mx-auto">
+
+        {/* CABECERA */}
 
         <div className="mb-8">
 
@@ -41,28 +52,27 @@ export default async function AdminPage() {
             Administración del Cotizador
           </p>
 
-            Usuario: {profile.nombre}
+          <div className="flex items-center gap-3 mt-4 text-sm">
 
-<div className="flex items-center gap-3 mt-2">
+            <span className="text-gray-500">
+              Usuario: {nombreUsuario}
+            </span>
 
-  <p className="text-sm text-gray-400">
-    Usuario: {profile.nombre}
-  </p>
+            <span className="text-gray-300">
+              ·
+            </span>
 
-  <span className="text-gray-300">
-    ·
-  </span>
+            <CerrarSesion />
 
-  <CerrarSesion />
-
-</div>
-
+          </div>
 
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* TARJETAS */}
 
-          {/* REGLAS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+          {/* REGLAS COMERCIALES */}
 
           <a
             href="/admin/reglas"
@@ -77,7 +87,7 @@ export default async function AdminPage() {
             </div>
           </a>
 
-          {/* FLASH */}
+          {/* PROMOCIONES FLASH */}
 
           <a
             href="/admin/flash"
@@ -110,6 +120,7 @@ export default async function AdminPage() {
           {/* PRODUCTOS */}
 
           <div className="bg-white border border-gray-200 rounded-xl p-5">
+
             <div className="text-lg font-semibold text-gray-900">
               Productos y Precios
             </div>
@@ -121,29 +132,31 @@ export default async function AdminPage() {
             <div className="text-xs text-gray-400 mt-3">
               Sin edición directa desde ADMIN.
             </div>
+
           </div>
 
-          {/* COTIZADOR */}
+          {/* USUARIOS */}
+
+          <a
+            href="/admin/usuarios"
+            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+          >
+            <div className="text-lg font-semibold text-gray-900">
+              Usuarios
+            </div>
+
+            <div className="text-sm text-gray-500 mt-2">
+              Administrá vendedores, roles y accesos.
+            </div>
+          </a>
+
+          {/* VOLVER AL COTIZADOR */}
 
           <a
             href="/cotizador"
             className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
           >
             <div className="text-lg font-semibold text-gray-900">
-{/* USUARIOS */}
-
-<a
-  href="/admin/usuarios"
-  className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
->
-  <div className="text-lg font-semibold text-gray-900">
-    Usuarios
-  </div>
-
-  <div className="text-sm text-gray-500 mt-2">
-    Administrá vendedores, roles y accesos.
-  </div>
-</a>
               Volver al Cotizador
             </div>
 
@@ -155,6 +168,7 @@ export default async function AdminPage() {
         </div>
 
       </div>
+
     </main>
   )
 }
