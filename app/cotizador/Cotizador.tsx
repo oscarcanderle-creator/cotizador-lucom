@@ -1627,6 +1627,9 @@ async function compartirPropuesta() {
             <h2 className="text-xl sm:text-2xl font-bold mt-1">
               Propuesta Comercial
             </h2>
+<div className="text-sm font-medium text-gray-900 mt-1">
+  Lucom Agente Oficial Claro
+</div>
           </div>
 
           {/* DATOS DEL CLIENTE */}
