@@ -57,6 +57,7 @@ type DatosCliente = {
   dni: string
   telefono: string
   email: string
+  companiaActual: string
   domicilio: string
   entreCalles: string
   localidad: string
@@ -118,6 +119,7 @@ export default function Cotizador({
       dni: '',
       telefono: '',
       email: '',
+      companiaActual: '',
       domicilio: '',
       entreCalles: '',
       localidad: '',
@@ -135,6 +137,7 @@ export default function Cotizador({
     datosCliente.dni.trim() !== '' &&
     datosCliente.telefono.trim() !== '' &&
     emailValido(datosCliente.email) &&
+    datosCliente.companiaActual.trim() !== '' &&
     datosCliente.domicilio.trim() !== '' &&
     datosCliente.entreCalles.trim() !== '' &&
     datosCliente.localidad.trim() !== '' &&
@@ -875,31 +878,8 @@ async function compartirPropuesta() {
                   />
                 </div>
 
-                <div className="sm:col-span-2 lg:col-span-2">
-                  <label className="block text-sm text-gray-500 mb-1">
-                    Email *
-                  </label>
-                  <input
-                    type="email"
-                    value={datosCliente.email}
-                    onChange={(e) =>
-                      actualizarDatoCliente(
-                        'email',
-                        e.target.value
-                      )
-                    }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
-                  />
-
-                  {datosCliente.email.trim() !== '' &&
-                    !emailValido(datosCliente.email) && (
-                    <div className="text-xs text-red-600 mt-1">
-                      Ingresá una dirección de email válida.
-                    </div>
-                  )}
-                </div>
-
-                <div className="sm:col-span-2 lg:col-span-2">
+                <div className="sm:col-span-2 lg:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+                <div>
                   <label className="block text-sm text-gray-500 mb-1">
                     Domicilio *
                   </label>
@@ -933,7 +913,7 @@ async function compartirPropuesta() {
                   />
                 </div>
 
-                <div>
+                <div className="">
                   <label className="block text-sm text-gray-500 mb-1">
                     Localidad *
                   </label>
@@ -943,6 +923,49 @@ async function compartirPropuesta() {
                     onChange={(e) =>
                       actualizarDatoCliente(
                         'localidad',
+                        e.target.value
+                      )
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                  />
+                </div>
+
+                </div>
+
+                <div className="sm:col-span-2 lg:col-span-2">
+                  <label className="block text-sm text-gray-500 mb-1">
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={datosCliente.email}
+                    onChange={(e) =>
+                      actualizarDatoCliente(
+                        'email',
+                        e.target.value
+                      )
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                  />
+
+                  {datosCliente.email.trim() !== '' &&
+                    !emailValido(datosCliente.email) && (
+                    <div className="text-xs text-red-600 mt-1">
+                      Ingresá una dirección de email válida.
+                    </div>
+                  )}
+                </div>
+
+                <div className="sm:col-span-2 lg:col-span-2">
+                  <label className="block text-sm text-gray-500 mb-1">
+                    Compañía Actual *
+                  </label>
+                  <input
+                    type="text"
+                    value={datosCliente.companiaActual}
+                    onChange={(e) =>
+                      actualizarDatoCliente(
+                        'companiaActual',
                         e.target.value
                       )
                     }
@@ -1676,6 +1699,15 @@ async function compartirPropuesta() {
                 </span>
                 <span>
                   {datosCliente.email || '—'}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-gray-500">
+                  Compañía Actual:{' '}
+                </span>
+                <span>
+                  {datosCliente.companiaActual || '—'}
                 </span>
               </div>
 
