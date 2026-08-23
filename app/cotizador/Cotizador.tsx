@@ -714,7 +714,7 @@ async function compartirPropuesta() {
 
       {/* CABECERA */}
 
-      <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3">
+      <header className="bg-white border-b border-gray-200 px-3 sm:px-5 py-2">
 
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-4">
 
@@ -748,7 +748,7 @@ async function compartirPropuesta() {
 
       </header>
 
-      <div className="max-w-7xl mx-auto px-3 py-4 sm:p-6 grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-5 lg:gap-6">
+      <div className="max-w-7xl mx-auto px-3 py-3 sm:px-5 sm:py-4 grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-4 lg:gap-5">
 
         {/* ==================================================
             PANEL IZQUIERDO
@@ -758,13 +758,13 @@ async function compartirPropuesta() {
 
           {/* MASIVO / PYME */}
 
-          <div className="grid grid-cols-2 gap-2 mb-4">
+          <div className="grid grid-cols-2 gap-2 mb-3">
 
-            <button className="bg-red-600 text-white font-semibold rounded-lg py-2.5 sm:py-2">
+            <button className="bg-red-600 text-white font-semibold rounded-lg py-2">
               MASIVO
             </button>
 
-            <button className="bg-white border border-gray-300 text-gray-500 font-semibold rounded-lg py-2.5 sm:py-2">
+            <button className="bg-white border border-gray-300 text-gray-500 font-semibold rounded-lg py-2">
               PYME
             </button>
 
@@ -774,9 +774,9 @@ async function compartirPropuesta() {
               DATOS DEL CLIENTE
           ================================================== */}
 
-          <div className="mb-6">
+          <div className="mb-4">
 
-            <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="flex items-start justify-between gap-3 mb-2">
 
               <div>
                 <h2 className="text-lg font-semibold">
@@ -802,9 +802,9 @@ async function compartirPropuesta() {
 
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
+            <div className="bg-white border border-gray-200 rounded-xl px-3 py-2 sm:p-4">
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
 
                 <div>
                   <label className="block text-sm text-gray-500 mb-1">
@@ -819,7 +819,7 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                   />
                 </div>
 
@@ -836,7 +836,7 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                   />
                 </div>
 
@@ -854,7 +854,7 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                   />
                 </div>
 
@@ -871,11 +871,11 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                   />
                 </div>
 
-                <div className="md:col-span-2">
+                <div className="sm:col-span-2 lg:col-span-2">
                   <label className="block text-sm text-gray-500 mb-1">
                     Email *
                   </label>
@@ -888,7 +888,7 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                   />
 
                   {datosCliente.email.trim() !== '' &&
@@ -899,7 +899,7 @@ async function compartirPropuesta() {
                   )}
                 </div>
 
-                <div className="md:col-span-2">
+                <div className="sm:col-span-2 lg:col-span-2">
                   <label className="block text-sm text-gray-500 mb-1">
                     Domicilio *
                   </label>
@@ -912,7 +912,7 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                   />
                 </div>
 
@@ -929,7 +929,7 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                   />
                 </div>
 
@@ -946,16 +946,16 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                   />
                 </div>
 
-                <div className="md:col-span-2">
+                <div className="sm:col-span-2 lg:col-span-4">
                   <label className="block text-sm text-gray-500 mb-1">
                     Observaciones del domicilio *
                   </label>
                   <textarea
-                    rows={3}
+                    rows={2}
                     value={
                       datosCliente.observacionesDomicilio
                     }
@@ -965,13 +965,13 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900 resize-y"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 resize-y"
                   />
                 </div>
 
               </div>
 
-              <div className="border-t border-gray-100 mt-5 pt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm">
+              <div className="border-t border-gray-100 mt-3 pt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs sm:text-sm">
 
                 <div>
                   <span className="text-gray-500">
@@ -994,8 +994,8 @@ async function compartirPropuesta() {
               <div
                 className={
                   datosClienteCompletos
-                    ? 'mt-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700'
-                    : 'mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700'
+                    ? 'mt-3 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs sm:text-sm text-green-700'
+                    : 'mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs sm:text-sm text-amber-700'
                 }
               >
                 {datosClienteCompletos
@@ -1009,13 +1009,13 @@ async function compartirPropuesta() {
 
           {/* CLIENTE CLARO */}
 
-          <div className="mb-5">
+          <div className="mb-3">
 
             <h2 className="text-base font-semibold mb-2">
               Cliente Claro
             </h2>
 
-            <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+            <div className="bg-white border border-gray-200 rounded-xl px-3 py-2">
 
               <div className="flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-2">
 
@@ -1077,7 +1077,7 @@ async function compartirPropuesta() {
               LÍNEAS MÓVILES
           ================================================== */}
 
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
 
             <h2 className="text-lg font-semibold">
               Líneas Móviles
@@ -1097,7 +1097,7 @@ async function compartirPropuesta() {
 
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-2">
 
             {lineas.length === 0 && (
 
@@ -1113,10 +1113,10 @@ async function compartirPropuesta() {
                 <div
                   key={linea.id}
 
-                  className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5"
+                  className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4"
                 >
 
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_90px_1fr_auto] gap-3 sm:gap-4 items-end">
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_155px_1fr_auto] gap-2 sm:gap-3 items-end">
 
                     {/* PLAN */}
 
@@ -1141,7 +1141,7 @@ async function compartirPropuesta() {
                           )
                         }
 
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                       >
 
                         {planesMoviles.map(
@@ -1189,7 +1189,7 @@ async function compartirPropuesta() {
           )
         )
       }
-      className="w-11 h-11 text-xl font-semibold text-gray-600 hover:bg-gray-100 active:bg-gray-200"
+      className="w-10 h-10 text-lg font-semibold text-gray-600 hover:bg-gray-100 active:bg-gray-200"
     >
       −
     </button>
@@ -1209,7 +1209,7 @@ async function compartirPropuesta() {
           )
         )
       }
-      className="w-14 h-11 text-center border-x border-gray-200 bg-white text-gray-900 font-semibold outline-none"
+      className="w-12 h-10 text-center border-x border-gray-200 bg-white text-gray-900 font-semibold outline-none"
     />
 
     <button
@@ -1221,7 +1221,7 @@ async function compartirPropuesta() {
           linea.cantidad + 1
         )
       }
-      className="w-11 h-11 text-xl font-semibold text-gray-600 hover:bg-gray-100 active:bg-gray-200"
+      className="w-10 h-10 text-lg font-semibold text-gray-600 hover:bg-gray-100 active:bg-gray-200"
     >
       +
     </button>
@@ -1255,7 +1255,7 @@ async function compartirPropuesta() {
                           )
                         }
 
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                       >
 
                         <option value="LINEA NUEVA">
@@ -1289,7 +1289,7 @@ async function compartirPropuesta() {
                         )
                       }
 
-                      className="h-[42px] w-full sm:w-auto px-4 border border-gray-300 rounded-lg text-gray-500 hover:text-red-600 hover:border-red-300"
+                      className="h-10 w-full sm:w-auto px-4 border border-gray-300 rounded-lg text-gray-500 hover:text-red-600 hover:border-red-300"
                     >
                       ×
                     </button>
@@ -1307,9 +1307,9 @@ async function compartirPropuesta() {
               INTERNET / BAF
           ================================================== */}
 
-          <div className="mt-5">
+          <div className="mt-4">
 
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-2 mb-2">
 
               <input
                 type="checkbox"
@@ -1335,7 +1335,7 @@ async function compartirPropuesta() {
 
             {internetActivo && (
 
-              <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
+              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4">
 
                 <label className="block text-sm text-gray-500 mb-1">
                   Plan de Internet
@@ -1352,7 +1352,7 @@ async function compartirPropuesta() {
                     )
                   }
 
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                 >
 
                   {planesInternet.map(
@@ -1386,9 +1386,9 @@ async function compartirPropuesta() {
               CLARO TV
           ================================================== */}
 
-          <div className="mt-5">
+          <div className="mt-4">
 
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-2">
 
               <div>
 
@@ -1431,7 +1431,7 @@ async function compartirPropuesta() {
             {tvActivo &&
               puedeContratarTV && (
 
-              <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
+              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4">
 
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-4">
 
@@ -1460,7 +1460,7 @@ async function compartirPropuesta() {
 
                 </div>
 
-                <div className="mt-5">
+                <div className="mt-4">
 
                   <label className="block text-sm text-gray-500 mb-1">
                     Decodificadores adicionales
@@ -1479,7 +1479,7 @@ async function compartirPropuesta() {
                       )
                     }
 
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 sm:py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                   >
 
                     <option value="0">
@@ -1523,7 +1523,7 @@ async function compartirPropuesta() {
 
           {/* CLARO PAY */}
 
-          <div className="mt-5">
+          <div className="mt-4">
 
             <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
 
@@ -1548,9 +1548,9 @@ async function compartirPropuesta() {
 
           {/* PACKS INFORMATIVOS */}
 
-          <div className="mt-5">
+          <div className="mt-4">
 
-            <div className="flex items-baseline justify-between gap-3 mb-2">
+            <div className="flex items-baseline justify-between gap-3 mb-1">
               <h2 className="text-base font-semibold">
                 Packs · Información
               </h2>
@@ -1572,7 +1572,7 @@ async function compartirPropuesta() {
                   {packsDatos.map((pack) => (
                     <div
                       key={pack.id}
-                      className="flex flex-wrap justify-between gap-2 gap-3 text-sm py-1"
+                      className="flex flex-wrap justify-between gap-2 gap-3 text-xs sm:text-sm py-0.5"
                     >
                       <span>{pack.plan}</span>
                       <span className="font-semibold">
@@ -1590,7 +1590,7 @@ async function compartirPropuesta() {
                   {packsTV.map((pack) => (
                     <div
                       key={pack.id}
-                      className="flex flex-wrap justify-between gap-2 gap-3 text-sm py-1"
+                      className="flex flex-wrap justify-between gap-2 gap-3 text-xs sm:text-sm py-0.5"
                     >
                       <span>{pack.plan}</span>
                       <span className="font-semibold">
@@ -1602,7 +1602,7 @@ async function compartirPropuesta() {
 
               </div>
 
-              <div className="border-t border-gray-100 mt-2 pt-2 text-[11px] text-gray-400">
+              <div className="border-t border-gray-100 mt-1 pt-1 text-[10px] text-gray-400">
                 Valores informativos · No se suman a la propuesta.
               </div>
 
@@ -1616,31 +1616,31 @@ async function compartirPropuesta() {
             PRESUPUESTO
         ================================================== */}
 
-        <aside className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm h-fit lg:sticky lg:top-4">
+        <aside className="bg-white border border-gray-200 rounded-2xl p-3 sm:p-4 shadow-sm h-fit lg:sticky lg:top-3">
 
           <div ref={propuestaRef}>
 
-          <div className="border-b border-gray-200 pb-4 mb-6">
-            <div className="text-2xl sm:text-3xl font-bold text-red-600">
+          <div className="border-b border-gray-200 pb-2 mb-3">
+            <div className="text-xl sm:text-2xl font-bold text-red-600">
               Claro
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold mt-1">
+            <h2 className="text-lg sm:text-lg font-bold mt-0.5">
               Propuesta Comercial
             </h2>
-<div className="text-sm font-bold text-gray-900 mt-1">
+<div className="text-xs sm:text-sm font-bold text-gray-900 mt-0.5">
   Lucom Agente Oficial Claro
 </div>
           </div>
 
           {/* DATOS DEL CLIENTE */}
 
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 sm:p-4 mb-5 sm:mb-6">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3">
 
-            <div className="text-xs font-semibold text-gray-500 mb-3">
+            <div className="text-[11px] font-semibold text-gray-500 mb-2">
               DATOS DEL CLIENTE
             </div>
 
-            <div className="space-y-1 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs sm:text-sm">
 
               <div>
                 <span className="text-gray-500">
@@ -1715,7 +1715,7 @@ async function compartirPropuesta() {
                 </span>
               </div>
 
-              <div className="border-t border-gray-200 pt-2 mt-2">
+              <div className="sm:col-span-2 border-t border-gray-200 pt-1 mt-1">
                 <span className="text-gray-500">
                   Vendedor:{' '}
                 </span>
@@ -1753,11 +1753,11 @@ async function compartirPropuesta() {
 
             <>
 
-              <div className="text-xs font-semibold text-gray-500 mb-3">
+              <div className="text-[11px] font-semibold text-gray-500 mb-2">
                 LÍNEAS MÓVILES
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
 
                 {resultado.lineas.map(
                   (linea) => (
@@ -1765,7 +1765,7 @@ async function compartirPropuesta() {
                     <div
                       key={linea.id}
 
-                      className="bg-gray-50 rounded-xl p-4"
+                      className="bg-gray-50 rounded-lg p-3"
                     >
 
                       <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-4">
@@ -1793,7 +1793,7 @@ async function compartirPropuesta() {
 
                       </div>
 
-                      <div className="text-sm mt-2">
+                      <div className="text-xs sm:text-sm mt-1">
 
                         <span className="line-through text-gray-400">
                           {dinero(
@@ -1821,7 +1821,7 @@ async function compartirPropuesta() {
                       {linea.tipoDescuento ===
                         'CONEXION_FULL' && (
 
-                        <div className="text-sm text-green-600 mt-2">
+                        <div className="text-xs sm:text-sm text-green-600 mt-1">
                           Conexión Full · 10 GB de regalo x 12 meses
                         </div>
 
@@ -1830,7 +1830,7 @@ async function compartirPropuesta() {
                       {linea.tipoDescuento ===
                         'FLASH' && (
 
-                        <div className="text-sm text-amber-600 mt-2">
+                        <div className="text-xs sm:text-sm text-amber-600 mt-1">
                           ⚡{' '}
                           {linea.nombreFlash ??
                             'Promo Flash'}
@@ -1842,7 +1842,7 @@ async function compartirPropuesta() {
                         'NORMAL' &&
                         linea.beneficiosNormal && (
 
-                        <div className="text-sm text-red-600 mt-2">
+                        <div className="text-xs sm:text-sm text-red-600 mt-1">
                           🎁{' '}
                           {
                             linea.beneficiosNormal
@@ -1858,7 +1858,7 @@ async function compartirPropuesta() {
 
               </div>
 
-              <div className="bg-gray-100 rounded-lg px-4 py-3 mt-3 flex flex-wrap justify-between gap-2 font-semibold">
+              <div className="bg-gray-100 rounded-lg px-3 py-2 mt-2 flex flex-wrap justify-between gap-2 text-sm font-semibold">
 
                 <span>
                   Subtotal Móvil
@@ -1883,11 +1883,11 @@ async function compartirPropuesta() {
 
   <>
 
-    <div className="text-xs font-semibold text-gray-500 mt-6 mb-3">
+    <div className="text-[11px] font-semibold text-gray-500 mt-4 mb-2">
       INTERNET WIFI
     </div>
 
-    <div className="bg-gray-50 rounded-xl p-4">
+    <div className="bg-gray-50 rounded-lg p-3">
 
       <div className="flex flex-wrap justify-between gap-2">
 
@@ -1903,13 +1903,13 @@ async function compartirPropuesta() {
 
       </div>
 
-      <div className="text-sm text-amber-600 mt-2">
+      <div className="text-xs sm:text-sm text-amber-600 mt-1">
         🎁 Instalación + 1er mes GRATIS
       </div>
 
     </div>
 
-    <div className="bg-gray-100 rounded-lg px-4 py-3 mt-3 flex flex-wrap justify-between gap-2 font-semibold">
+    <div className="bg-gray-100 rounded-lg px-3 py-2 mt-2 flex flex-wrap justify-between gap-2 text-sm font-semibold">
 
       <span>
         Subtotal Internet
@@ -1933,11 +1933,11 @@ async function compartirPropuesta() {
 
             <>
 
-              <div className="text-xs font-semibold text-gray-500 mt-6 mb-3">
+              <div className="text-[11px] font-semibold text-gray-500 mt-4 mb-2">
                 CLARO TV
               </div>
 
-              <div className="bg-gray-50 rounded-xl p-4">
+              <div className="bg-gray-50 rounded-lg p-3">
 
                 <div className="flex flex-wrap justify-between gap-2">
 
@@ -1954,7 +1954,7 @@ async function compartirPropuesta() {
 
                 </div>
 
-                <div className="text-sm text-green-600 mt-2">
+                <div className="text-xs sm:text-sm text-green-600 mt-1">
                   ✓ 1 decodificador incluido sin cargo
                 </div>
 
@@ -2002,7 +2002,7 @@ async function compartirPropuesta() {
           {resultado
             .hayConexionFull && (
 
-            <div className="mt-5 bg-green-50 border border-green-200 rounded-lg p-3 text-green-700 text-sm">
+            <div className="mt-3 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-green-700 text-xs sm:text-sm">
               Beneficios de Conexión Full aplicados.
             </div>
 
@@ -2010,7 +2010,7 @@ async function compartirPropuesta() {
 
           {/* TOTALES */}
 
-          <div className="border-t border-gray-200 mt-6 pt-5">
+          <div className="border-t border-gray-200 mt-4 pt-3">
 
             <div className="flex flex-wrap justify-between gap-2 text-gray-600">
 
@@ -2030,7 +2030,7 @@ async function compartirPropuesta() {
             {resultado
               .hayConvergencia && (
 
-              <div className="flex flex-wrap justify-between gap-2 text-green-600 mt-3">
+              <div className="flex flex-wrap justify-between gap-2 text-green-600 mt-2">
 
                 <span>
                   Descuento Convergente
@@ -2051,7 +2051,7 @@ async function compartirPropuesta() {
             {resultado
               .hayConvergencia && (
 
-              <div className="flex flex-wrap justify-between gap-2 text-gray-600 mt-3">
+              <div className="flex flex-wrap justify-between gap-2 text-gray-600 mt-2">
 
                 <span>
                   Subtotal con Convergencia
@@ -2109,13 +2109,13 @@ async function compartirPropuesta() {
 
             )}
 
-            <div className="bg-red-600 text-white rounded-xl px-4 sm:px-5 py-3 sm:py-4 mt-5 flex justify-between items-center gap-3">
+            <div className="bg-red-600 text-white rounded-lg px-4 py-3 mt-3 flex justify-between items-center gap-3">
 
-              <span className="text-xl font-bold">
+              <span className="text-lg font-bold">
                 Total
               </span>
 
-              <span className="text-xl font-bold">
+              <span className="text-lg font-bold">
                 {dinero(
                   resultado.total
                 )}
@@ -2129,20 +2129,20 @@ async function compartirPropuesta() {
 
           {novedades.length > 0 && (
 
-            <div className="mt-5 space-y-3">
+            <div className="mt-3 space-y-2">
 
               {novedades.map((novedad) => (
 
                 <div
                   key={novedad.id}
-                  className="border border-red-200 bg-red-50 rounded-xl p-4"
+                  className="border border-red-200 bg-red-50 rounded-lg px-3 py-2"
                 >
 
                   <div className="text-sm font-semibold text-red-700">
                     {novedad.titulo}
                   </div>
 
-                  <div className="text-sm text-gray-700 mt-1 leading-relaxed whitespace-pre-line">
+                  <div className="text-xs sm:text-sm text-gray-700 mt-0.5 leading-snug whitespace-pre-line">
                     {novedad.contenido}
                   </div>
 
@@ -2154,7 +2154,7 @@ async function compartirPropuesta() {
 
           )}
 
-          <div className="mt-5 border border-gray-200 bg-gray-50 rounded-xl p-4 text-xs leading-relaxed text-gray-600">
+          <div className="mt-5 border border-gray-200 bg-gray-50 rounded-lg p-3 text-xs leading-relaxed text-gray-600">
             <strong className="text-gray-800">
               Conformidad:
             </strong>{' '}
@@ -2164,7 +2164,7 @@ async function compartirPropuesta() {
 
           </div>
 
-          <div className="border-t border-gray-100 mt-4 pt-4">
+          <div className="border-t border-gray-100 mt-3 pt-3">
 
             <div className="grid grid-cols-3 gap-2">
 
