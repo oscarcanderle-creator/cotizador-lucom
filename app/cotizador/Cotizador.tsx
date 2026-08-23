@@ -1874,37 +1874,55 @@ async function compartirPropuesta() {
 
           )}
 
-          {/* INTERNET */}
+{/* INTERNET */}
 
-          {productoInternet && (
+{productoInternet && (
 
-            <>
+  <>
 
-              <div className="text-xs font-semibold text-gray-500 mt-6 mb-3">
-                INTERNET WIFI
-              </div>
+    <div className="text-xs font-semibold text-gray-500 mt-6 mb-3">
+      INTERNET WIFI
+    </div>
 
-              <div className="bg-gray-50 rounded-xl p-4 flex flex-wrap justify-between gap-2">
+    <div className="bg-gray-50 rounded-xl p-4">
 
-                <span>
-                  {
-                    productoInternet.plan
-                  }
-                </span>
+      <div className="flex flex-wrap justify-between gap-2">
 
-                <span className="font-semibold">
-                  {dinero(
-                    resultado
-                      .subtotalBAF
-                  )}
-                </span>
+        <span>
+          {productoInternet.plan}
+        </span>
 
-              </div>
-
-            </>
-
+        <span className="font-semibold">
+          {dinero(
+            resultado.subtotalBAF
           )}
+        </span>
 
+      </div>
+
+      <div className="text-sm text-amber-600 mt-2">
+        🎁 Instalación + 1er mes GRATIS
+      </div>
+
+    </div>
+
+    <div className="bg-gray-100 rounded-lg px-4 py-3 mt-3 flex flex-wrap justify-between gap-2 font-semibold">
+
+      <span>
+        Subtotal Internet
+      </span>
+
+      <span>
+        {dinero(
+          resultado.subtotalBAF
+        )}
+      </span>
+
+    </div>
+
+  </>
+
+)}
           {/* TV */}
 
           {resultado.subtotalTV >
