@@ -1770,7 +1770,7 @@ async function compartirPropuesta() {
                   Vigencia:{' '}
                 </span>
                 <span className="font-medium">
-                  solo por hoy
+                {fechaEmision}
                 </span>
               </div>
 
