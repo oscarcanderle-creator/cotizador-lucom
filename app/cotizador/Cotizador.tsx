@@ -44,11 +44,17 @@ type Props = {
   usuario: string
 }
 
+type PortabilidadUI = {
+  nim: string
+  origen: 'PRE' | 'POS'
+}
+
 type LineaUI = {
   id: number
   tipo: TipoLinea
   plan: string
   cantidad: number
+  portabilidades: PortabilidadUI[]
 }
 
 type DatosCliente = {
@@ -187,6 +193,7 @@ export default function Cotizador({
         tipo: 'LINEA NUEVA',
         plan: '7 Gigas',
         cantidad: 1,
+        portabilidades: [],
       },
     ])
 
@@ -352,23 +359,68 @@ export default function Cotizador({
     valor: string | number
   ) {
     setLineas((actuales) =>
+      actuales.map((linea) => {
+        if (linea.id !== id) return linea
+
+        const nuevoTipo =
+          campo === 'tipo'
+            ? (valor as TipoLinea)
+            : linea.tipo
+
+        let portabilidades = linea.portabilidades ?? []
+
+        if (nuevoTipo === 'LINEA NUEVA') {
+          portabilidades = []
+        } else {
+          portabilidades = [
+            portabilidades[0] ?? {
+              nim: '',
+              origen: 'PRE' as const,
+            },
+          ]
+        }
+
+        return {
+          ...linea,
+          [campo]: valor,
+          cantidad: 1,
+          portabilidades,
+        }
+      })
+    )
+  }
+
+  function actualizarPortabilidad(
+    lineaId: number,
+    indice: number,
+    campo: keyof PortabilidadUI,
+    valor: string
+  ) {
+    setLineas((actuales) =>
       actuales.map((linea) =>
-        linea.id === id
+        linea.id === lineaId
           ? {
               ...linea,
-
-              [campo]:
-                campo === 'cantidad'
-                  ? Math.max(
-                      1,
-                      Number(valor)
-                    )
-                  : valor,
+              portabilidades: linea.portabilidades.map(
+                (p, i) =>
+                  i === indice
+                    ? { ...p, [campo]: valor }
+                    : p
+              ),
             }
           : linea
       )
     )
   }
+
+  const portabilidadesCompletas = lineas.every(
+    (linea) =>
+      linea.tipo === 'LINEA NUEVA' ||
+      (
+        linea.portabilidades.length === 1 &&
+        linea.portabilidades[0].nim.trim() !== ''
+      )
+  )
 
   function agregarLinea() {
     setLineas((actuales) => [
@@ -379,6 +431,7 @@ export default function Cotizador({
         tipo: 'LINEA NUEVA',
         plan: '7 Gigas',
         cantidad: 1,
+        portabilidades: [],
       },
     ])
 
@@ -501,8 +554,7 @@ export default function Cotizador({
             tipo: linea.tipo,
             plan: linea.plan,
 
-            cantidad:
-              linea.cantidad,
+            cantidad: 1,
 
             precioLista:
               Number(
@@ -606,12 +658,21 @@ export default function Cotizador({
    */
 
   function validarExportacion() {
-    if (datosClienteCompletos) return true
+    if (!datosClienteCompletos) {
+      window.alert(
+        'Completá todos los datos obligatorios del cliente antes de generar la propuesta.'
+      )
+      return false
+    }
 
-    window.alert(
-      'Completá todos los datos obligatorios del cliente antes de generar la propuesta.'
-    )
-    return false
+    if (!portabilidadesCompletas) {
+      window.alert(
+        'Completá el NIM y el origen PRE/POS de todas las portabilidades.'
+      )
+      return false
+    }
+
+    return true
   }
 
   function nombreArchivo(extension: 'jpg' | 'pdf') {
@@ -810,7 +871,7 @@ async function compartirPropuesta() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
 
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">
+                  <label className="block text-xs text-gray-500 mb-0.5">
                     Nombre *
                   </label>
                   <input
@@ -822,12 +883,12 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">
+                  <label className="block text-xs text-gray-500 mb-0.5">
                     Apellido *
                   </label>
                   <input
@@ -839,12 +900,12 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">
+                  <label className="block text-xs text-gray-500 mb-0.5">
                     DNI *
                   </label>
                   <input
@@ -857,12 +918,12 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">
+                  <label className="block text-xs text-gray-500 mb-0.5">
                     Teléfono *
                   </label>
                   <input
@@ -874,13 +935,13 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                   />
                 </div>
 
                 <div className="sm:col-span-2 lg:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">
+                  <label className="block text-xs text-gray-500 mb-0.5">
                     Domicilio *
                   </label>
                   <input
@@ -892,12 +953,12 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-500 mb-1">
+                  <label className="block text-xs text-gray-500 mb-0.5">
                     Entre calles *
                   </label>
                   <input
@@ -909,12 +970,12 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                   />
                 </div>
 
                 <div className="">
-                  <label className="block text-sm text-gray-500 mb-1">
+                  <label className="block text-xs text-gray-500 mb-0.5">
                     Localidad *
                   </label>
                   <input
@@ -926,14 +987,14 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                   />
                 </div>
 
                 </div>
 
                 <div className="sm:col-span-2 lg:col-span-2">
-                  <label className="block text-sm text-gray-500 mb-1">
+                  <label className="block text-xs text-gray-500 mb-0.5">
                     Email *
                   </label>
                   <input
@@ -945,7 +1006,7 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                   />
 
                   {datosCliente.email.trim() !== '' &&
@@ -957,7 +1018,7 @@ async function compartirPropuesta() {
                 </div>
 
                 <div className="sm:col-span-2 lg:col-span-2">
-                  <label className="block text-sm text-gray-500 mb-1">
+                  <label className="block text-xs text-gray-500 mb-0.5">
                     Compañía Actual *
                   </label>
                   <input
@@ -969,12 +1030,12 @@ async function compartirPropuesta() {
                         e.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                   />
                 </div>
 
                 <div className="sm:col-span-2 lg:col-span-4">
-                  <label className="block text-sm text-gray-500 mb-1">
+                  <label className="block text-xs text-gray-500 mb-0.5">
                     Observaciones del domicilio *
                   </label>
                   <textarea
@@ -1100,7 +1161,7 @@ async function compartirPropuesta() {
               LÍNEAS MÓVILES
           ================================================== */}
 
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-1.5">
 
             <h2 className="text-lg font-semibold">
               Líneas Móviles
@@ -1113,14 +1174,14 @@ async function compartirPropuesta() {
                 agregarLinea
               }
 
-              className="text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-lg text-sm font-medium"
+              className="text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium"
             >
               + Agregar línea
             </button>
 
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
 
             {lineas.length === 0 && (
 
@@ -1136,16 +1197,16 @@ async function compartirPropuesta() {
                 <div
                   key={linea.id}
 
-                  className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4"
+                  className="bg-white border border-gray-200 rounded-lg px-3 py-2.5"
                 >
 
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_155px_1fr_auto] gap-2 sm:gap-3 items-end">
+                  <div className="grid grid-cols-1 sm:grid-cols-[1.15fr_.95fr_auto] gap-2 items-end">
 
                     {/* PLAN */}
 
                     <div>
 
-                      <label className="block text-sm text-gray-500 mb-1">
+                      <label className="block text-xs text-gray-500 mb-0.5">
                         Plan
                       </label>
 
@@ -1164,7 +1225,7 @@ async function compartirPropuesta() {
                           )
                         }
 
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                        className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                       >
 
                         {planesMoviles.map(
@@ -1190,75 +1251,11 @@ async function compartirPropuesta() {
 
                     </div>
 
-                    {/* CANTIDAD */}
-
-<div>
-
-  <label className="block text-sm text-gray-500 mb-1">
-    Cant.
-  </label>
-
-  <div className="flex items-center border border-gray-300 rounded-lg bg-white overflow-hidden">
-
-    <button
-      type="button"
-      onClick={() =>
-        actualizarLinea(
-          linea.id,
-          'cantidad',
-          Math.max(
-            1,
-            linea.cantidad - 1
-          )
-        )
-      }
-      className="w-10 h-10 text-lg font-semibold text-gray-600 hover:bg-gray-100 active:bg-gray-200"
-    >
-      −
-    </button>
-
-    <input
-      type="number"
-      inputMode="numeric"
-      min="1"
-      value={linea.cantidad}
-      onChange={(e) =>
-        actualizarLinea(
-          linea.id,
-          'cantidad',
-          Math.max(
-            1,
-            Number(e.target.value)
-          )
-        )
-      }
-      className="w-12 h-10 text-center border-x border-gray-200 bg-white text-gray-900 font-semibold outline-none"
-    />
-
-    <button
-      type="button"
-      onClick={() =>
-        actualizarLinea(
-          linea.id,
-          'cantidad',
-          linea.cantidad + 1
-        )
-      }
-      className="w-10 h-10 text-lg font-semibold text-gray-600 hover:bg-gray-100 active:bg-gray-200"
-    >
-      +
-    </button>
-
-  </div>
-
-</div>
-
-
                     {/* TIPO */}
 
                     <div>
 
-                      <label className="block text-sm text-gray-500 mb-1">
+                      <label className="block text-xs text-gray-500 mb-0.5">
                         Tipo
                       </label>
 
@@ -1278,7 +1275,7 @@ async function compartirPropuesta() {
                           )
                         }
 
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                        className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                       >
 
                         <option value="LINEA NUEVA">
@@ -1312,12 +1309,49 @@ async function compartirPropuesta() {
                         )
                       }
 
-                      className="h-10 w-full sm:w-auto px-4 border border-gray-300 rounded-lg text-gray-500 hover:text-red-600 hover:border-red-300"
+                      className="h-8 w-full sm:w-9 px-2 border border-gray-300 rounded-md text-gray-500 hover:text-red-600 hover:border-red-300"
                     >
                       ×
                     </button>
 
                   </div>
+                  {linea.tipo !== 'LINEA NUEVA' && linea.portabilidades[0] && (
+                    <div className="mt-1.5 pt-1.5 border-t border-gray-100">
+                      <div className="grid grid-cols-[1fr_72px] gap-1.5 items-center">
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          placeholder="NIM · número a portar"
+                          value={linea.portabilidades[0].nim}
+                          onChange={(e) =>
+                            actualizarPortabilidad(
+                              linea.id,
+                              0,
+                              'nim',
+                              e.target.value.replace(/\D/g, '')
+                            )
+                          }
+                          className="min-w-0 w-full border border-gray-300 rounded-md px-2 py-1 text-sm bg-white text-gray-900"
+                        />
+
+                        <select
+                          value={linea.portabilidades[0].origen}
+                          onChange={(e) =>
+                            actualizarPortabilidad(
+                              linea.id,
+                              0,
+                              'origen',
+                              e.target.value
+                            )
+                          }
+                          className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm bg-white text-gray-900"
+                        >
+                          <option value="PRE">PRE</option>
+                          <option value="POS">POS</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
 
                 </div>
 
@@ -1358,9 +1392,9 @@ async function compartirPropuesta() {
 
             {internetActivo && (
 
-              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4">
+              <div className="bg-white border border-gray-200 rounded-lg px-3 py-2.5">
 
-                <label className="block text-sm text-gray-500 mb-1">
+                <label className="block text-xs text-gray-500 mb-0.5">
                   Plan de Internet
                 </label>
 
@@ -1375,7 +1409,7 @@ async function compartirPropuesta() {
                     )
                   }
 
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                  className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                 >
 
                   {planesInternet.map(
@@ -1411,7 +1445,7 @@ async function compartirPropuesta() {
 
           <div className="mt-4">
 
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-1.5">
 
               <div>
 
@@ -1454,7 +1488,7 @@ async function compartirPropuesta() {
             {tvActivo &&
               puedeContratarTV && (
 
-              <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4">
+              <div className="bg-white border border-gray-200 rounded-lg px-3 py-2.5">
 
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-4">
 
@@ -1485,7 +1519,7 @@ async function compartirPropuesta() {
 
                 <div className="mt-4">
 
-                  <label className="block text-sm text-gray-500 mb-1">
+                  <label className="block text-xs text-gray-500 mb-0.5">
                     Decodificadores adicionales
                   </label>
 
@@ -1502,7 +1536,7 @@ async function compartirPropuesta() {
                       )
                     }
 
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                    className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
                   >
 
                     <option value="0">
@@ -1659,7 +1693,7 @@ async function compartirPropuesta() {
 
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3">
 
-            <div className="text-[11px] font-semibold text-gray-500 mb-2">
+            <div className="text-[10px] font-semibold text-gray-500 mb-1.5">
               DATOS DEL CLIENTE
             </div>
 
@@ -1785,11 +1819,11 @@ async function compartirPropuesta() {
 
             <>
 
-              <div className="text-[11px] font-semibold text-gray-500 mb-2">
+              <div className="text-[10px] font-semibold text-gray-500 mb-1.5">
                 LÍNEAS MÓVILES
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
 
                 {resultado.lineas.map(
                   (linea) => (
@@ -1797,7 +1831,7 @@ async function compartirPropuesta() {
                     <div
                       key={linea.id}
 
-                      className="bg-gray-50 rounded-lg p-3"
+                      className="bg-gray-50 rounded-md px-3 py-2"
                     >
 
                       <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-4">
@@ -1805,7 +1839,6 @@ async function compartirPropuesta() {
                         <div>
 
                           <span className="font-medium">
-                            {linea.cantidad}x{' '}
                             {linea.plan}
                           </span>
 
@@ -1824,6 +1857,18 @@ async function compartirPropuesta() {
                         </div>
 
                       </div>
+                      {linea.tipo !== 'LINEA NUEVA' && (
+                        <div className="mt-0.5 text-[11px] text-gray-600">
+                          NIM:{' '}
+                          <strong>
+                            {lineas.find((l) => l.id === linea.id)
+                              ?.portabilidades[0]?.nim || '—'}
+                          </strong>
+                          {' · '}
+                          {lineas.find((l) => l.id === linea.id)
+                            ?.portabilidades[0]?.origen || 'PRE'}
+                        </div>
+                      )}
 
                       <div className="text-xs sm:text-sm mt-1">
 
@@ -1919,7 +1964,7 @@ async function compartirPropuesta() {
       INTERNET WIFI
     </div>
 
-    <div className="bg-gray-50 rounded-lg p-3">
+    <div className="bg-gray-50 rounded-md px-3 py-2">
 
       <div className="flex flex-wrap justify-between gap-2">
 
@@ -1973,7 +2018,7 @@ async function compartirPropuesta() {
                 CLARO TV
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-3">
+              <div className="bg-gray-50 rounded-md px-3 py-2">
 
                 <div className="flex flex-wrap justify-between gap-2">
 
@@ -2207,7 +2252,7 @@ async function compartirPropuesta() {
               <button
                 type="button"
                 onClick={descargarJPG}
-                disabled={!datosClienteCompletos || exportando}
+                disabled={!datosClienteCompletos || !portabilidadesCompletas || exportando}
                 className="rounded-md bg-red-600 text-white font-medium text-xs sm:text-sm px-2 sm:px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {exportando ? 'Generando...' : 'JPG'}
@@ -2216,7 +2261,7 @@ async function compartirPropuesta() {
               <button
                 type="button"
                 onClick={descargarPDF}
-                disabled={!datosClienteCompletos || exportando}
+                disabled={!datosClienteCompletos || !portabilidadesCompletas || exportando}
                 className="rounded-md bg-white border border-gray-300 text-gray-800 font-medium text-xs sm:text-sm px-2 sm:px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 PDF
@@ -2225,7 +2270,7 @@ async function compartirPropuesta() {
               <button
                 type="button"
                 onClick={compartirPropuesta}
-                disabled={!datosClienteCompletos || exportando}
+                disabled={!datosClienteCompletos || !portabilidadesCompletas || exportando}
                 className="rounded-md bg-green-600 text-white font-medium text-xs sm:text-sm px-2 sm:px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Compartir
