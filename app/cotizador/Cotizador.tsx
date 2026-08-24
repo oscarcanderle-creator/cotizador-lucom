@@ -241,7 +241,7 @@ export default function Cotizador({
   const [
     pagaClaroPay,
     setPagaClaroPay,
-  ] = useState(false)
+  ] = useState(true)
 
   /*
    * =====================================================
