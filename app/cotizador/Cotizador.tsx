@@ -1939,6 +1939,10 @@ async function compartirPropuesta() {
         🎁 Instalación + 1er mes GRATIS
       </div>
 
+      <div className="text-xs sm:text-sm text-gray-700 mt-1">
+      ☎️ Incluye Línea Fija c/8000 Minutos libres
+      </div>
+
     </div>
 
     <div className="bg-gray-100 rounded-lg px-3 py-2 mt-2 flex flex-wrap justify-between gap-2 text-sm font-semibold">
