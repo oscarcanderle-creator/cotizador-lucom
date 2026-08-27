@@ -15,18 +15,49 @@ export default function LoginPage() {
 
   async function iniciarSesion(e: React.FormEvent) {
     e.preventDefault()
-
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
+    const {
+      data,
+      error: loginError,
+    } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
       password,
     })
 
-    if (error) {
+    if (loginError || !data.user) {
       setError('Usuario o contraseña incorrectos.')
       setLoading(false)
+      return
+    }
+
+    const {
+      data: profile,
+      error: profileError,
+    } = await supabase
+      .from('profiles')
+      .select('activo, debe_cambiar_password')
+      .eq('id', data.user.id)
+      .single()
+
+    if (profileError || !profile) {
+      await supabase.auth.signOut()
+      setError('No se pudo verificar el perfil del usuario.')
+      setLoading(false)
+      return
+    }
+
+    if (!profile.activo) {
+      await supabase.auth.signOut()
+      setError('El usuario se encuentra inactivo. Contacte al administrador.')
+      setLoading(false)
+      return
+    }
+
+    if (profile.debe_cambiar_password) {
+      router.push('/cambiar-password')
+      router.refresh()
       return
     }
 
@@ -37,7 +68,6 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-red-600">
             Claro
@@ -53,7 +83,6 @@ export default function LoginPage() {
         </h2>
 
         <form onSubmit={iniciarSesion} className="space-y-5">
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Correo electrónico
@@ -96,9 +125,16 @@ export default function LoginPage() {
           >
             {loading ? 'Ingresando...' : 'Ingresar'}
           </button>
-
         </form>
 
+        <div className="mt-5 text-center">
+          <a
+            href="/recuperar-password"
+            className="text-sm text-red-600 hover:text-red-700 font-medium"
+          >
+            ¿Olvidaste tu contraseña?
+          </a>
+        </div>
       </div>
     </main>
   )

@@ -4,7 +4,9 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '../../../utils/supabase/server'
 import { createAdminClient } from '../../../utils/supabase/admin'
 
-export default async function AdminUsuariosPage() {
+type RolUsuario = 'ADMIN' | 'SUPERVISOR' | 'VENDEDOR'
+
+async function validarAdmin() {
   const supabase = await createClient()
 
   const {
@@ -29,13 +31,39 @@ export default async function AdminUsuariosPage() {
     redirect('/cotizador')
   }
 
+  return {
+    supabase,
+    user,
+    adminClient: createAdminClient(),
+  }
+}
+
+function validarRol(valor: string): RolUsuario {
+  if (
+    valor !== 'ADMIN' &&
+    valor !== 'SUPERVISOR' &&
+    valor !== 'VENDEDOR'
+  ) {
+    throw new Error('Rol de usuario inválido.')
+  }
+
+  return valor
+}
+
+export default async function AdminUsuariosPage() {
+  const {
+    supabase,
+    user,
+    adminClient,
+  } = await validarAdmin()
+
   const {
     data: usuarios,
     error,
   } = await supabase
     .from('profiles')
     .select(
-      'id, nombre, rol, activo, created_at'
+      'id, nombre, vendedor, rol, activo, debe_cambiar_password, created_at'
     )
     .order('nombre')
 
@@ -44,50 +72,47 @@ export default async function AdminUsuariosPage() {
   }
 
   /*
+   * Traemos el email desde Supabase Auth.
+   * La contraseña nunca se lee ni se muestra.
+   */
+  const {
+    data: authData,
+    error: errorAuthListado,
+  } = await adminClient.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  })
+
+  if (errorAuthListado) {
+    throw new Error(errorAuthListado.message)
+  }
+
+  const emailPorId = new Map(
+    authData.users.map((authUser) => [
+      authUser.id,
+      authUser.email ?? '',
+    ])
+  )
+
+  /*
    * =====================================================
    * CREAR USUARIO
    * =====================================================
    */
-
   async function crearUsuario(
     formData: FormData
   ) {
     'use server'
 
-    const supabase =
-      await createClient()
+    const { adminClient } =
+      await validarAdmin()
 
-    /*
-     * Verificar ADMIN
-     */
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      redirect('/login')
-    }
-
-    const { data: admin } =
-      await supabase
-        .from('profiles')
-        .select('rol, activo')
-        .eq('id', user.id)
-        .single()
-
-    if (
-      !admin ||
-      !admin.activo ||
-      admin.rol !== 'ADMIN'
-    ) {
-      redirect('/cotizador')
-    }
-
-    /*
-     * Datos formulario
-     */
     const nombre = String(
       formData.get('nombre') ?? ''
+    ).trim()
+
+    const vendedor = String(
+      formData.get('vendedor') ?? ''
     ).trim()
 
     const email = String(
@@ -100,17 +125,19 @@ export default async function AdminUsuariosPage() {
       formData.get('password') ?? ''
     )
 
-    const rol = String(
-      formData.get('rol') ?? ''
-    )
+    const rol =
+      validarRol(
+        String(formData.get('rol') ?? '')
+      )
 
     if (
       !nombre ||
+      !vendedor ||
       !email ||
       !password
     ) {
       throw new Error(
-        'Nombre, email y contraseña son obligatorios.'
+        'Nombre, Vendedor, email y contraseña son obligatorios.'
       )
     }
 
@@ -120,24 +147,6 @@ export default async function AdminUsuariosPage() {
       )
     }
 
-    if (
-      rol !== 'ADMIN' &&
-      rol !== 'VENDEDOR'
-    ) {
-      throw new Error(
-        'Rol inválido.'
-      )
-    }
-
-    /*
-     * Cliente administrativo
-     */
-    const adminClient =
-      createAdminClient()
-
-    /*
-     * Crear usuario en Supabase Auth
-     */
     const {
       data: nuevoUsuario,
       error: errorAuth,
@@ -145,18 +154,15 @@ export default async function AdminUsuariosPage() {
       await adminClient.auth.admin.createUser({
         email,
         password,
-
         email_confirm: true,
-
         user_metadata: {
           nombre,
+          vendedor,
         },
       })
 
     if (errorAuth) {
-      throw new Error(
-        errorAuth.message
-      )
+      throw new Error(errorAuth.message)
     }
 
     if (!nuevoUsuario.user) {
@@ -165,48 +171,34 @@ export default async function AdminUsuariosPage() {
       )
     }
 
-    /*
-     * Crear perfil
-     */
-    const {
-      error: errorPerfil,
-    } = await adminClient
-      .from('profiles')
-      .insert({
-        id:
-          nuevoUsuario.user.id,
-
-        nombre,
-
-        rol,
-
-        activo: true,
-      })
+    const { error: errorPerfil } =
+      await adminClient
+        .from('profiles')
+        .insert({
+          id: nuevoUsuario.user.id,
+          nombre,
+          vendedor,
+          rol,
+          activo: true,
+          debe_cambiar_password: true,
+        })
 
     /*
-     * Si falla profiles,
-     * borramos el usuario de Auth
+     * Si falla profiles, eliminamos Auth
      * para no dejar una cuenta incompleta.
      */
     if (errorPerfil) {
-      await adminClient
-        .auth
-        .admin
-        .deleteUser(
-          nuevoUsuario.user.id
-        )
+      await adminClient.auth.admin.deleteUser(
+        nuevoUsuario.user.id
+      )
 
       throw new Error(
         errorPerfil.message
       )
     }
 
-    revalidatePath(
-      '/admin/usuarios'
-    )
-redirect(
-  '/admin/usuarios'
-)
+    revalidatePath('/admin/usuarios')
+    redirect('/admin/usuarios')
   }
 
   /*
@@ -214,41 +206,15 @@ redirect(
    * ACTUALIZAR USUARIO
    * =====================================================
    */
-
   async function actualizarUsuario(
     formData: FormData
   ) {
     'use server'
 
-    const supabase =
-      await createClient()
-
     const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      redirect('/login')
-    }
-
-    /*
-     * Volvemos a verificar
-     * que sea ADMIN.
-     */
-    const { data: admin } =
-      await supabase
-        .from('profiles')
-        .select('rol, activo')
-        .eq('id', user.id)
-        .single()
-
-    if (
-      !admin ||
-      !admin.activo ||
-      admin.rol !== 'ADMIN'
-    ) {
-      redirect('/cotizador')
-    }
+      user,
+      adminClient,
+    } = await validarAdmin()
 
     const id = String(
       formData.get('id') ?? ''
@@ -258,31 +224,30 @@ redirect(
       formData.get('nombre') ?? ''
     ).trim()
 
-    const rol = String(
-      formData.get('rol') ?? ''
-    )
+    const vendedor = String(
+      formData.get('vendedor') ?? ''
+    ).trim()
+
+    const rol =
+      validarRol(
+        String(formData.get('rol') ?? '')
+      )
 
     const activo =
       formData.get('activo') === 'on'
 
-    if (!id || !nombre) {
-      throw new Error(
-        'Nombre de usuario obligatorio.'
-      )
-    }
-
     if (
-      rol !== 'ADMIN' &&
-      rol !== 'VENDEDOR'
+      !id ||
+      !nombre ||
+      !vendedor
     ) {
       throw new Error(
-        'Rol de usuario inválido.'
+        'Nombre y Vendedor son obligatorios.'
       )
     }
 
     /*
-     * Protección contra perder
-     * el propio acceso ADMIN.
+     * Protección contra perder el propio ADMIN.
      */
     if (
       id === user.id &&
@@ -296,16 +261,16 @@ redirect(
       )
     }
 
-    const {
-      error: errorUpdate,
-    } = await supabase
-      .from('profiles')
-      .update({
-        nombre,
-        rol,
-        activo,
-      })
-      .eq('id', id)
+    const { error: errorUpdate } =
+      await adminClient
+        .from('profiles')
+        .update({
+          nombre,
+          vendedor,
+          rol,
+          activo,
+        })
+        .eq('id', id)
 
     if (errorUpdate) {
       throw new Error(
@@ -313,22 +278,183 @@ redirect(
       )
     }
 
-    revalidatePath(
-      '/admin/usuarios'
+    /*
+     * Mantenemos también los metadatos de Auth
+     * alineados con el perfil.
+     */
+    const { error: errorMetadata } =
+      await adminClient.auth.admin.updateUserById(
+        id,
+        {
+          user_metadata: {
+            nombre,
+            vendedor,
+          },
+        }
+      )
+
+    if (errorMetadata) {
+      throw new Error(
+        errorMetadata.message
+      )
+    }
+
+    revalidatePath('/admin/usuarios')
+    revalidatePath('/cotizador')
+    revalidatePath('/ventas')
+  }
+
+  /*
+   * =====================================================
+   * RESET ADMINISTRATIVO DE CONTRASEÑA
+   * =====================================================
+   *
+   * El ADMIN asigna una contraseña temporal.
+   * El perfil queda marcado para exigir cambio
+   * en el siguiente inicio.
+   */
+  async function resetearPassword(
+    formData: FormData
+  ) {
+    'use server'
+
+    const {
+      adminClient,
+    } = await validarAdmin()
+
+    const id = String(
+      formData.get('id') ?? ''
     )
 
-    revalidatePath(
-      '/cotizador'
+    const passwordTemporal = String(
+      formData.get('password_temporal') ?? ''
     )
+
+    if (!id) {
+      throw new Error(
+        'Usuario inválido.'
+      )
+    }
+
+    if (passwordTemporal.length < 6) {
+      throw new Error(
+        'La contraseña temporal debe tener al menos 6 caracteres.'
+      )
+    }
+
+    const {
+      error: errorPassword,
+    } =
+      await adminClient.auth.admin.updateUserById(
+        id,
+        {
+          password: passwordTemporal,
+        }
+      )
+
+    if (errorPassword) {
+      throw new Error(
+        errorPassword.message
+      )
+    }
+
+    const { error: errorPerfil } =
+      await adminClient
+        .from('profiles')
+        .update({
+          debe_cambiar_password: true,
+        })
+        .eq('id', id)
+
+    if (errorPerfil) {
+      throw new Error(
+        errorPerfil.message
+      )
+    }
+
+    revalidatePath('/admin/usuarios')
+  }
+
+  /*
+   * =====================================================
+   * ELIMINAR USUARIO
+   * =====================================================
+   *
+   * Inactivar = suspensión temporal.
+   * Eliminar = baja definitiva de Auth + profile.
+   */
+  async function eliminarUsuario(
+    formData: FormData
+  ) {
+    'use server'
+
+    const {
+      user,
+      adminClient,
+    } = await validarAdmin()
+
+    const id = String(
+      formData.get('id') ?? ''
+    )
+
+    const confirmar = String(
+      formData.get('confirmar') ?? ''
+    )
+      .trim()
+      .toUpperCase()
+
+    if (!id) {
+      throw new Error(
+        'Usuario inválido.'
+      )
+    }
+
+    if (id === user.id) {
+      throw new Error(
+        'No podés eliminar el usuario administrador con el que estás conectado.'
+      )
+    }
+
+    if (confirmar !== 'ELIMINAR') {
+      throw new Error(
+        'Escribí ELIMINAR para confirmar la baja definitiva.'
+      )
+    }
+
+    /*
+     * Primero eliminamos Auth.
+     * Si profiles tiene ON DELETE CASCADE desaparecerá solo;
+     * el delete posterior es seguro y cubre ambas estructuras.
+     */
+    const { error: errorDeleteAuth } =
+      await adminClient.auth.admin.deleteUser(id)
+
+    if (errorDeleteAuth) {
+      throw new Error(
+        errorDeleteAuth.message
+      )
+    }
+
+    const { error: errorDeleteProfile } =
+      await adminClient
+        .from('profiles')
+        .delete()
+        .eq('id', id)
+
+    if (errorDeleteProfile) {
+      throw new Error(
+        errorDeleteProfile.message
+      )
+    }
+
+    revalidatePath('/admin/usuarios')
   }
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-6 sm:p-8">
-
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
 
         <div className="mb-6">
-
           <h1 className="text-3xl font-bold text-red-600">
             Claro
           </h1>
@@ -336,21 +462,17 @@ redirect(
           <p className="text-gray-500 mt-1">
             Administración del Cotizador
           </p>
-
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-
           <div>
-
             <h2 className="text-2xl font-semibold text-gray-900">
               Usuarios
             </h2>
 
             <p className="text-sm text-gray-500 mt-1">
-              Administrá vendedores, roles y accesos al cotizador.
+              Administrá usuarios, vendedor operativo, roles y accesos.
             </p>
-
           </div>
 
           <a
@@ -359,7 +481,6 @@ redirect(
           >
             Volver al administrador
           </a>
-
         </div>
 
         {/* ==================================================
@@ -370,15 +491,12 @@ redirect(
           action={crearUsuario}
           className="bg-white border border-gray-200 rounded-xl p-5 mb-6"
         >
-
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Nuevo usuario
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_160px] gap-3">
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <div>
-
               <label className="block text-xs text-gray-500 mb-1">
                 Nombre
               </label>
@@ -389,11 +507,23 @@ redirect(
                 required
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
               />
-
             </div>
 
             <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                Vendedor
+              </label>
 
+              <input
+                type="text"
+                name="vendedor"
+                required
+                placeholder="Nomenclatura exacta para Sheets"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+              />
+            </div>
+
+            <div>
               <label className="block text-xs text-gray-500 mb-1">
                 Email
               </label>
@@ -404,11 +534,9 @@ redirect(
                 required
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
               />
-
             </div>
 
             <div>
-
               <label className="block text-xs text-gray-500 mb-1">
                 Contraseña inicial
               </label>
@@ -420,11 +548,9 @@ redirect(
                 required
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
               />
-
             </div>
 
             <div>
-
               <label className="block text-xs text-gray-500 mb-1">
                 Rol
               </label>
@@ -434,68 +560,91 @@ redirect(
                 defaultValue="VENDEDOR"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
               >
-
                 <option value="VENDEDOR">
                   Vendedor
+                </option>
+
+                <option value="SUPERVISOR">
+                  Supervisor
                 </option>
 
                 <option value="ADMIN">
                   Administrador
                 </option>
-
               </select>
-
             </div>
-
           </div>
 
           <div className="flex justify-end mt-4">
-
             <button
               type="submit"
               className="bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2 rounded-lg"
             >
               Crear usuario
             </button>
-
           </div>
-
         </form>
 
         {/* ==================================================
             USUARIOS EXISTENTES
         ================================================== */}
 
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-
+        <div className="space-y-4">
           {usuarios &&
           usuarios.length > 0 ? (
+            usuarios.map((usuario) => {
+              const email =
+                emailPorId.get(usuario.id) ?? ''
 
-            usuarios.map(
-              (usuario, index) => (
-
-                <form
+              return (
+                <div
                   key={usuario.id}
-                  action={
-                    actualizarUsuario
-                  }
-                  className={
-                    index === 0
-                      ? 'p-4'
-                      : 'p-4 border-t border-gray-100'
-                  }
+                  className="bg-white border border-gray-200 rounded-xl p-4"
                 >
+                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-2 mb-4">
+                    <div>
+                      <div className="font-semibold text-gray-900">
+                        {usuario.nombre}
+                      </div>
 
-                  <input
-                    type="hidden"
-                    name="id"
-                    value={usuario.id}
-                  />
+                      <div className="text-sm text-gray-500">
+                        {email || 'Email no disponible'}
+                      </div>
+                    </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px_auto_auto] gap-3 sm:items-end">
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span
+                        className={
+                          usuario.activo
+                            ? 'px-2 py-1 rounded-full bg-green-50 text-green-700'
+                            : 'px-2 py-1 rounded-full bg-gray-100 text-gray-500'
+                        }
+                      >
+                        {usuario.activo
+                          ? 'ACTIVO'
+                          : 'INACTIVO'}
+                      </span>
+
+                      {usuario.debe_cambiar_password && (
+                        <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700">
+                          CAMBIO DE CLAVE PENDIENTE
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* EDITAR / ACTIVAR */}
+                  <form
+                    action={actualizarUsuario}
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1.4fr_160px_auto_auto] gap-3 lg:items-end"
+                  >
+                    <input
+                      type="hidden"
+                      name="id"
+                      value={usuario.id}
+                    />
 
                     <div>
-
                       <label className="block text-xs text-gray-500 mb-1">
                         Nombre
                       </label>
@@ -509,11 +658,25 @@ redirect(
                         required
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                       />
-
                     </div>
 
                     <div>
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Vendedor
+                      </label>
 
+                      <input
+                        type="text"
+                        name="vendedor"
+                        defaultValue={
+                          usuario.vendedor ?? ''
+                        }
+                        required
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                      />
+                    </div>
+
+                    <div>
                       <label className="block text-xs text-gray-500 mb-1">
                         Rol
                       </label>
@@ -525,21 +688,21 @@ redirect(
                         }
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                       >
-
                         <option value="VENDEDOR">
                           Vendedor
+                        </option>
+
+                        <option value="SUPERVISOR">
+                          Supervisor
                         </option>
 
                         <option value="ADMIN">
                           Administrador
                         </option>
-
                       </select>
-
                     </div>
 
-                    <label className="flex items-center gap-2 text-sm text-gray-700 sm:pb-2">
-
+                    <label className="flex items-center gap-2 text-sm text-gray-700 lg:pb-2">
                       <input
                         type="checkbox"
                         name="activo"
@@ -549,7 +712,6 @@ redirect(
                       />
 
                       Activo
-
                     </label>
 
                     <button
@@ -558,35 +720,81 @@ redirect(
                     >
                       Guardar
                     </button>
+                  </form>
 
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
+                    {/* RESET PASSWORD */}
+                    <form
+                      action={resetearPassword}
+                      className="flex flex-col sm:flex-row gap-2"
+                    >
+                      <input
+                        type="hidden"
+                        name="id"
+                        value={usuario.id}
+                      />
+
+                      <input
+                        type="password"
+                        name="password_temporal"
+                        minLength={6}
+                        required
+                        placeholder="Nueva contraseña temporal"
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                      />
+
+                      <button
+                        type="submit"
+                        className="border border-amber-300 text-amber-700 hover:bg-amber-50 font-medium px-4 py-2 rounded-lg"
+                      >
+                        Resetear contraseña
+                      </button>
+                    </form>
+
+                    {/* ELIMINAR */}
+                    {usuario.id !== user.id ? (
+                      <form
+                        action={eliminarUsuario}
+                        className="flex flex-col sm:flex-row gap-2"
+                      >
+                        <input
+                          type="hidden"
+                          name="id"
+                          value={usuario.id}
+                        />
+
+                        <input
+                          type="text"
+                          name="confirmar"
+                          required
+                          placeholder='Escribí ELIMINAR'
+                          className="flex-1 border border-red-200 rounded-lg px-3 py-2 bg-white text-gray-900"
+                        />
+
+                        <button
+                          type="submit"
+                          className="border border-red-300 text-red-700 hover:bg-red-50 font-medium px-4 py-2 rounded-lg"
+                        >
+                          Eliminar usuario
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="text-xs text-gray-400 flex items-center">
+                        Usuario administrador actualmente conectado. No puede eliminarse.
+                      </div>
+                    )}
                   </div>
-
-                  {usuario.id ===
-                    user.id && (
-
-                    <div className="text-xs text-gray-400 mt-2">
-                      Usuario administrador actualmente conectado
-                    </div>
-
-                  )}
-
-                </form>
-
+                </div>
               )
-            )
-
+            })
           ) : (
-
-            <div className="p-8 text-center text-gray-500">
+            <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500">
               No hay usuarios registrados.
             </div>
-
           )}
-
         </div>
 
       </div>
-
     </main>
   )
 }
