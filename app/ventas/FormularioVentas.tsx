@@ -75,7 +75,7 @@ function Input({
         pattern={pattern}
         maxLength={maxLength}
         title={title}
-        className="w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-white text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+        className="w-full min-h-11 border border-green-300 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-white text-gray-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-100"
       />
     </label>
   )
@@ -231,6 +231,35 @@ export default function FormularioVentas({
             )
           )}
         </div>
+
+        <section className="mb-3 rounded-2xl border border-green-300 bg-green-50 p-3 sm:p-4 shadow-sm">
+          <label className="block">
+            <span className="block text-base sm:text-lg font-extrabold text-gray-900 mb-2">
+              ORIGEN DEL DATO <span className="text-green-700">(IMPORTANTE!)</span>
+            </span>
+
+            <select
+              name="origen_dato"
+              required
+              defaultValue=""
+              className="w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-white text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+            >
+              <option value="" disabled>
+                Seleccionar...
+              </option>
+              <option value="VENTA TERRENO">VENTA TERRENO</option>
+              <option value="BASE ITX">BASE ITX</option>
+              <option value="PSR">PSR</option>
+              <option value="LLAMADA IN">LLAMADA IN</option>
+              <option value="BOT DRIVE LC">BOT DRIVE LC</option>
+              <option value="CHATBOT 360">CHATBOT 360</option>
+              <option value="BOT TREBLE">BOT TREBLE</option>
+              <option value="GOOGLE">GOOGLE</option>
+              <option value="BOT BIRCLE">BOT BIRCLE</option>
+              <option value="CLIENTE POTENCIALES QR">CLIENTE POTENCIALES QR</option>
+            </select>
+          </label>
+        </section>
 
         <section className="mb-3 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
@@ -515,13 +544,6 @@ export default function FormularioVentas({
                     />
                   </label>
                 </div>
-
-                <Select
-                  label="Origen del dato"
-                  name="origen_dato"
-                  opciones={origenes}
-                  required
-                />
               </div>
             </div>
           </section>
@@ -570,13 +592,6 @@ export default function FormularioVentas({
                   label="Zona"
                   name="zona"
                   opciones={zonas}
-                />
-
-                <Select
-                  label="Detalle Lead"
-                  name="origen_dato"
-                  opciones={origenes}
-                  required
                 />
 
                 <Select
