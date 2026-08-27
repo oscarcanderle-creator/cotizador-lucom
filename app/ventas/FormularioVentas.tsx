@@ -61,7 +61,7 @@ function Input({
 }) {
   return (
     <label className="block">
-      <span className="block text-xs text-gray-500 mb-1">
+      <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">
         {label}
         {required && ' *'}
       </span>
@@ -75,7 +75,7 @@ function Input({
         pattern={pattern}
         maxLength={maxLength}
         title={title}
-        className="w-full border border-gray-300 rounded-md px-2.5 py-2 text-sm bg-white text-gray-900"
+        className="w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-white text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
       />
     </label>
   )
@@ -96,7 +96,7 @@ function Select({
 }) {
   return (
     <label className="block">
-      <span className="block text-xs text-gray-500 mb-1">
+      <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">
         {label}
         {required && ' *'}
       </span>
@@ -105,7 +105,7 @@ function Select({
         name={name}
         required={required}
         defaultValue={defaultValue}
-        className="w-full border border-gray-300 rounded-md px-2.5 py-2 text-sm bg-white text-gray-900"
+        className="w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-white text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
       >
         <option value="">Seleccionar</option>
 
@@ -161,21 +161,26 @@ export default function FormularioVentas({
   const planes = tipo === 'PORTA' ? planesPorta : planesBaf
 
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900">
+    <main className="min-h-screen bg-gray-100 text-gray-900">
 
-      <header className="bg-white border-b border-gray-200 px-3 sm:px-5 py-2">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-gray-200 px-3 sm:px-5 py-2.5 shadow-sm">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
 
-          <div>
-            <div className="text-2xl font-bold text-red-600">
-              Claro
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <div className="text-xl sm:text-2xl font-black tracking-tight text-red-600">
+                Claro
+              </div>
+              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
+                Ventas
+              </span>
             </div>
-            <div className="text-sm text-gray-500">
-              Carga de Operaciones
+            <div className="text-xs sm:text-sm text-gray-500 truncate">
+              Carga de operaciones
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-sm">
+          <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm">
             <a href="/cotizador" className="text-gray-500 hover:text-red-600">
               Cotizador
             </a>
@@ -187,7 +192,7 @@ export default function FormularioVentas({
             )}
 
             <span className="text-gray-300">·</span>
-            <span className="text-gray-500">{nombreUsuario}</span>
+            <span className="hidden md:inline text-gray-500 max-w-40 truncate">{nombreUsuario}</span>
             <CerrarSesion />
           </div>
 
@@ -196,14 +201,15 @@ export default function FormularioVentas({
 
       <form
         onSubmit={enviar}
-        className="max-w-7xl mx-auto px-3 py-3 sm:px-5 sm:py-4"
+        className="max-w-6xl mx-auto px-2.5 py-3 sm:px-5 sm:py-5 pb-24 sm:pb-6"
       >
 
-        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          AMBIENTE DE PRUEBAS · Esta primera versión guarda únicamente en Supabase. Todavía no escribe en Google Sheets.
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+          <span><strong>AMBIENTE DE PRUEBAS</strong> · Los registros se sincronizan con los Sheets de testing.</span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="grid grid-cols-3 gap-1 rounded-2xl bg-white border border-gray-200 p-1.5 mb-3 shadow-sm">
           {(['PORTA', 'BAF', 'FACTIBILIDAD'] as TipoOperacion[]).map(
             (opcion) => (
               <button
@@ -216,8 +222,8 @@ export default function FormularioVentas({
                 }}
                 className={
                   tipo === opcion
-                    ? 'rounded-lg bg-red-600 text-white font-semibold py-2 text-sm'
-                    : 'rounded-lg bg-white border border-gray-300 text-gray-600 font-semibold py-2 text-sm'
+                    ? 'rounded-xl bg-red-600 text-white font-semibold py-2.5 text-xs sm:text-sm shadow-sm'
+                    : 'rounded-xl bg-transparent text-gray-500 font-semibold py-2.5 text-xs sm:text-sm hover:bg-gray-50'
                 }
               >
                 {opcion}
@@ -226,30 +232,31 @@ export default function FormularioVentas({
           )}
         </div>
 
-        <section className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 mb-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div>
-              <div className="text-xs text-gray-500">Usuario</div>
-              <div className="font-semibold text-sm">{nombreUsuario}</div>
-            </div>
-
-            <div>
-              <div className="text-xs text-gray-500">Vendedor</div>
-              <div className="font-semibold text-sm">{vendedor}</div>
-            </div>
+        <section className="mb-3 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            <span className="text-gray-500">
+              Usuario <strong className="text-gray-800">{nombreUsuario}</strong>
+            </span>
+            <span className="hidden sm:inline text-gray-300">•</span>
+            <span className="text-gray-500 truncate">
+              Vendedor <strong className="text-gray-800">{vendedor}</strong>
+            </span>
           </div>
         </section>
 
         <section className="mb-3">
-          <h2 className="font-semibold mb-2">Cliente</h2>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white">01</span>
+            <h2 className="font-bold text-sm sm:text-base">Cliente</h2>
+          </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl p-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="bg-white border border-gray-200 rounded-2xl p-3 sm:p-4 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
 
               <Input label="Nombre" name="nombre" required />
               <Input label="Apellido" name="apellido" required />
 
-              <div className="grid grid-cols-[120px_1fr] gap-2 sm:col-span-2">
+              <div className="grid grid-cols-[105px_1fr] gap-2.5 sm:col-span-2">
                 <Select
                   label="Documento"
                   name="tipo_documento"
@@ -308,10 +315,13 @@ export default function FormularioVentas({
         </section>
 
         <section className="mb-3">
-          <h2 className="font-semibold mb-2">Domicilio</h2>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white">02</span>
+            <h2 className="font-bold text-sm sm:text-base">Domicilio</h2>
+          </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl p-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="bg-white border border-gray-200 rounded-2xl p-3 sm:p-4 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
 
               {(tipo === 'BAF' || tipo === 'FACTIBILIDAD') && (
                 <Select
@@ -356,13 +366,25 @@ export default function FormularioVentas({
 
         {tipo === 'PORTA' && (
           <section className="mb-3">
-            <h2 className="font-semibold mb-2">
-              Portabilidad / Línea Nueva
-            </h2>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white">03</span>
+              <h2 className="font-bold text-sm sm:text-base">
+                Portabilidad / Línea Nueva
+              </h2>
+            </div>
 
-            <div className="bg-white border border-gray-200 rounded-xl p-3">
+            <div className="bg-white border border-gray-200 rounded-2xl p-3 sm:p-4 shadow-sm">
 
-              <label className="flex items-center gap-2 text-sm mb-3">
+              <label className="mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+                <div>
+                  <div className="text-sm font-semibold text-gray-800">
+                    {esLineaNueva ? 'Línea Nueva' : 'Portabilidad'}
+                  </div>
+                  <div className="text-[11px] text-gray-500">
+                    Activá para cargar una o más líneas nuevas
+                  </div>
+                </div>
+
                 <input
                   type="checkbox"
                   name="es_linea_nueva"
@@ -371,8 +393,8 @@ export default function FormularioVentas({
                     setEsLineaNueva(e.target.checked)
                     setLineasPorta([{ id: 1 }])
                   }}
+                  className="h-5 w-5 accent-red-600"
                 />
-                Línea Nueva (registra LNUEVA)
               </label>
 
               <input
@@ -385,10 +407,10 @@ export default function FormularioVentas({
                 {lineasPorta.map((linea, index) => (
                   <div
                     key={linea.id}
-                    className="border border-gray-200 rounded-lg p-3 bg-gray-50"
+                    className="border border-gray-200 rounded-2xl p-3 bg-gray-50/80"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <div className="text-sm font-semibold text-gray-700">
+                      <div className="text-sm font-bold text-gray-800">
                         {esLineaNueva
                           ? `Línea Nueva ${index + 1}`
                           : `Línea ${index + 1}`}
@@ -402,7 +424,7 @@ export default function FormularioVentas({
                               actuales.filter((item) => item.id !== linea.id)
                             )
                           }
-                          className="text-xs text-red-600 hover:text-red-700"
+                          className="rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
                         >
                           Quitar
                         </button>
@@ -471,7 +493,7 @@ export default function FormularioVentas({
                       },
                     ])
                   }
-                  className="w-full sm:w-auto border border-red-600 text-red-600 rounded-md px-4 py-2 text-sm font-medium hover:bg-red-50"
+                  className="w-full sm:w-auto border border-dashed border-red-300 bg-red-50/50 text-red-600 rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-red-50"
                 >
                   {esLineaNueva
                     ? '+ Agregar Línea Nueva'
@@ -482,14 +504,14 @@ export default function FormularioVentas({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
                 <div className="sm:col-span-2">
                   <label className="block">
-                    <span className="block text-xs text-gray-500 mb-1">
+                    <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">
                       Observaciones
                     </span>
 
                     <textarea
                       name="observaciones"
                       rows={2}
-                      className="w-full border border-gray-300 rounded-md px-2.5 py-2 text-sm bg-white text-gray-900"
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-white text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
                     />
                   </label>
                 </div>
@@ -507,10 +529,13 @@ export default function FormularioVentas({
 
         {tipo === 'BAF' && (
           <section className="mb-3">
-            <h2 className="font-semibold mb-2">Servicio BAF</h2>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white">03</span>
+              <h2 className="font-bold text-sm sm:text-base">Servicio BAF</h2>
+            </div>
 
-            <div className="bg-white border border-gray-200 rounded-xl p-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <div className="bg-white border border-gray-200 rounded-2xl p-3 sm:p-4 shadow-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
 
                 <Select
                   label="Plan"
@@ -570,7 +595,7 @@ export default function FormularioVentas({
 
                 <div className="sm:col-span-2 lg:col-span-4">
                   <label className="block">
-                    <span className="block text-xs text-gray-500 mb-1">
+                    <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">
                       Horario Contacto / Observaciones *
                     </span>
 
@@ -578,7 +603,7 @@ export default function FormularioVentas({
                       name="horario_contacto"
                       required
                       rows={2}
-                      className="w-full border border-gray-300 rounded-md px-2.5 py-2 text-sm bg-white text-gray-900"
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-white text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
                     />
                   </label>
                 </div>
@@ -590,10 +615,13 @@ export default function FormularioVentas({
 
         {tipo === 'FACTIBILIDAD' && (
           <section className="mb-3">
-            <h2 className="font-semibold mb-2">Factibilidad</h2>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white">03</span>
+              <h2 className="font-bold text-sm sm:text-base">Factibilidad</h2>
+            </div>
 
-            <div className="bg-white border border-gray-200 rounded-xl p-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <div className="bg-white border border-gray-200 rounded-2xl p-3 sm:p-4 shadow-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
 
                 <Input
                   label="Línea Claro a consultar"
@@ -611,7 +639,7 @@ export default function FormularioVentas({
 
                 <div className="sm:col-span-2">
                   <label className="block">
-                    <span className="block text-xs text-gray-500 mb-1">
+                    <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">
                       Observaciones
                     </span>
 
@@ -620,7 +648,7 @@ export default function FormularioVentas({
                       rows={2}
                       disabled
                       placeholder="Campo no disponible por el momento"
-                      className="w-full border border-gray-200 rounded-md px-2.5 py-2 text-sm bg-gray-100 text-gray-400 cursor-not-allowed"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-100 text-gray-400 cursor-not-allowed"
                     />
                   </label>
                 </div>
@@ -634,8 +662,8 @@ export default function FormularioVentas({
           <div
             className={
               resultado.ok
-                ? 'mb-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700'
-                : 'mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700'
+                ? 'mb-3 rounded-xl border border-green-200 bg-green-50 px-3 py-3 text-sm font-medium text-green-700 shadow-sm'
+                : 'mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-sm font-medium text-red-700 shadow-sm'
             }
           >
             <div>{resultado.mensaje}</div>
@@ -648,11 +676,11 @@ export default function FormularioVentas({
           </div>
         )}
 
-        <div className="sticky bottom-0 bg-gray-50/95 border-t border-gray-200 py-3 mt-3">
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 p-2.5 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:sticky sm:bg-gray-100/95 sm:px-0 sm:shadow-none sm:mt-3">
           <button
             type="submit"
             disabled={guardando}
-            className="w-full sm:w-auto sm:min-w-52 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg px-6 py-2.5 disabled:opacity-50"
+            className="mx-auto block w-full max-w-6xl sm:w-auto sm:min-w-56 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold rounded-xl px-6 py-3 text-base sm:text-sm shadow-sm disabled:opacity-50"
           >
             {guardando ? 'Guardando...' : `Guardar ${tipo}`}
           </button>
