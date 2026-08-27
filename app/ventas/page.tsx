@@ -95,17 +95,36 @@ function domicilioPortaSheet(formData: FormData) {
 
 
 function googleSheetsClient() {
-  const credentialsPath =
-    process.env.HOME +
-    '/.config/cotizador-lucom/google-service-account.json'
+  const credentialsJson =
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 
-  const credentials = JSON.parse(
-    fs.readFileSync(credentialsPath, 'utf8')
-  )
+  let credentials
+
+  if (credentialsJson) {
+    credentials = JSON.parse(credentialsJson)
+  } else {
+    const home = process.env.HOME
+
+    if (!home) {
+      throw new Error(
+        'Falta configurar GOOGLE_SERVICE_ACCOUNT_JSON'
+      )
+    }
+
+    const credentialsPath =
+      home +
+      '/.config/cotizador-lucom/google-service-account.json'
+
+    credentials = JSON.parse(
+      fs.readFileSync(credentialsPath, 'utf8')
+    )
+  }
 
   const auth = new google.auth.GoogleAuth({
     credentials,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    scopes: [
+      'https://www.googleapis.com/auth/spreadsheets',
+    ],
   })
 
   return google.sheets({
