@@ -179,10 +179,15 @@ export default function FormularioVentas({
               </div>
 
               <div className="min-w-0">
-                <div className="text-lg sm:text-2xl font-black tracking-tight leading-none">
-                  Claro<span className="font-normal"> · </span>Ventas
+                <div className="flex items-baseline gap-1.5 leading-none">
+                  <span className="text-base sm:text-xl font-black tracking-tight">
+                    Claro
+                  </span>
+                  <span className="text-[11px] sm:text-sm font-semibold text-red-100">
+                    Ventas
+                  </span>
                 </div>
-                <div className="mt-1 text-[10px] sm:text-xs text-red-100">
+                <div className="mt-1 text-[9px] sm:text-[11px] text-red-100">
                   Carga de operaciones
                 </div>
               </div>
@@ -190,10 +195,10 @@ export default function FormularioVentas({
 
             {/* Grupo Lucom: centrado real */}
             <div className="absolute left-1/2 -translate-x-1/2 text-center pointer-events-none">
-              <div className="text-xs sm:text-base md:text-lg font-extrabold leading-tight whitespace-nowrap">
+              <div className="text-base sm:text-xl font-black tracking-tight leading-none whitespace-nowrap">
                 GrupoLucom
               </div>
-              <div className="text-[8px] sm:text-[10px] md:text-xs font-medium text-red-100 whitespace-nowrap">
+              <div className="mt-1 text-[8px] sm:text-[10px] font-medium text-red-100 whitespace-nowrap">
                 Agente Oficial Autorizado
               </div>
             </div>
