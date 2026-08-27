@@ -362,7 +362,10 @@ export default function FormularioVentas({
                 label={tipo === 'PORTA' ? 'Contacto' : 'Teléfono'}
                 name="telefono"
                 type="tel"
-                inputMode="tel"
+                inputMode="numeric"
+                pattern="[0-9]{10}"
+                maxLength={10}
+                title="Ingrese exactamente 10 dígitos, sin espacios ni guiones"
                 required
               />
 
@@ -371,7 +374,10 @@ export default function FormularioVentas({
                   label="Contacto alternativo"
                   name="telefono_alternativo"
                   type="tel"
-                  inputMode="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]{10}"
+                  maxLength={10}
+                  title="Ingrese exactamente 10 dígitos, sin espacios ni guiones"
                   required
                 />
               )}
@@ -653,6 +659,9 @@ export default function FormularioVentas({
                   name="linea_convergente"
                   type="tel"
                   inputMode="numeric"
+                  pattern="[0-9]{10}"
+                  maxLength={10}
+                  title="Ingrese exactamente 10 dígitos, sin espacios ni guiones"
                 />
 
                 <div className="sm:col-span-2 lg:col-span-4">

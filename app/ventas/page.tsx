@@ -486,10 +486,49 @@ export default async function VentasPage() {
 
     const nombre = texto(formData, 'nombre')
     const apellido = texto(formData, 'apellido')
-    const telefono = soloDigitos(texto(formData, 'telefono'))
+
+    const telefono = texto(formData, 'telefono')
+    const telefonoAlternativo =
+      texto(formData, 'telefono_alternativo')
+    const lineaConvergente =
+      texto(formData, 'linea_convergente')
 
     if (!nombre || !apellido || !telefono) {
-      return { ok: false, mensaje: 'Nombre, apellido y teléfono son obligatorios.' }
+      return {
+        ok: false,
+        mensaje:
+          'Nombre, apellido y teléfono son obligatorios.',
+      }
+    }
+
+    if (!/^\d{10}$/.test(telefono)) {
+      return {
+        ok: false,
+        mensaje:
+          'El teléfono debe contener exactamente 10 dígitos, sin espacios ni guiones.',
+      }
+    }
+
+    if (
+      telefonoAlternativo &&
+      !/^\d{10}$/.test(telefonoAlternativo)
+    ) {
+      return {
+        ok: false,
+        mensaje:
+          'El contacto alternativo debe contener exactamente 10 dígitos, sin espacios ni guiones.',
+      }
+    }
+
+    if (
+      lineaConvergente &&
+      !/^\d{10}$/.test(lineaConvergente)
+    ) {
+      return {
+        ok: false,
+        mensaje:
+          'La línea convergente debe contener exactamente 10 dígitos, sin espacios ni guiones.',
+      }
     }
 
     const domicilio = texto(formData, 'domicilio')
