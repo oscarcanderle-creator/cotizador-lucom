@@ -45,6 +45,9 @@ function Input({
   required = false,
   inputMode,
   placeholder,
+  pattern,
+  maxLength,
+  title,
 }: {
   label: string
   name: string
@@ -52,6 +55,9 @@ function Input({
   required?: boolean
   inputMode?: 'text' | 'numeric' | 'tel' | 'email'
   placeholder?: string
+  pattern?: string
+  maxLength?: number
+  title?: string
 }) {
   return (
     <label className="block">
@@ -66,6 +72,9 @@ function Input({
         required={required}
         inputMode={inputMode}
         placeholder={placeholder}
+        pattern={pattern}
+        maxLength={maxLength}
+        title={title}
         className="w-full border border-gray-300 rounded-md px-2.5 py-2 text-sm bg-white text-gray-900"
       />
     </label>
