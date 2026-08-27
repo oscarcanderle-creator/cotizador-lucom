@@ -163,37 +163,91 @@ export default function FormularioVentas({
   return (
     <main className="min-h-screen bg-gray-100 text-gray-900">
 
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-gray-200 px-3 sm:px-5 py-2.5 shadow-sm">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 bg-red-600 text-white shadow-md">
+        <div className="max-w-6xl mx-auto px-3 sm:px-5 py-2.5 sm:py-3">
 
-          <div className="min-w-0">
-            <div className="flex items-center gap-2.5">
-              <div className="text-xl sm:text-2xl font-black tracking-tight text-red-600">
-                Claro
+          <div className="flex items-center justify-between gap-3">
+            {/* Marca Claro */}
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <div
+                aria-hidden="true"
+                className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-full border-2 border-white bg-red-700 shadow-inner"
+              >
+                <span className="text-[11px] sm:text-xs font-black tracking-tight text-white">
+                  Claro
+                </span>
               </div>
-              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
-                Ventas
-              </span>
+
+              <div className="min-w-0">
+                <div className="text-lg sm:text-2xl font-black tracking-tight leading-none">
+                  Claro<span className="font-normal"> · </span>Ventas
+                </div>
+                <div className="mt-1 text-[10px] sm:text-xs text-red-100">
+                  Carga de operaciones
+                </div>
+              </div>
             </div>
-            <div className="text-xs sm:text-sm text-gray-500 truncate">
-              Carga de operaciones
+
+            {/* Grupo Lucom: sin logo, solo identidad institucional */}
+            <div className="hidden sm:block text-center px-3">
+              <div className="text-base md:text-lg font-extrabold leading-tight">
+                GrupoLucom
+              </div>
+              <div className="text-[10px] md:text-xs font-medium text-red-100">
+                Agente Oficial Autorizado
+              </div>
+            </div>
+
+            {/* Navegación / usuario */}
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3 text-[11px] sm:text-sm">
+              <a
+                href="/cotizador"
+                className="hidden sm:inline text-red-100 hover:text-white"
+              >
+                Cotizador
+              </a>
+
+              {rol === 'ADMIN' && (
+                <a
+                  href="/admin"
+                  className="hidden sm:inline text-red-100 hover:text-white"
+                >
+                  Admin
+                </a>
+              )}
+
+              <span className="hidden lg:inline max-w-40 truncate text-red-100">
+                {nombreUsuario}
+              </span>
+
+              <div className="[&_button]:border-white/40 [&_button]:text-white [&_button]:hover:bg-white/10">
+                <CerrarSesion />
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm">
-            <a href="/cotizador" className="text-gray-500 hover:text-red-600">
-              Cotizador
-            </a>
+          {/* En celular, GrupoLucom queda en una segunda línea compacta */}
+          <div className="sm:hidden mt-2 flex items-center justify-between border-t border-white/20 pt-2">
+            <div>
+              <div className="text-xs font-extrabold leading-none">
+                GrupoLucom
+              </div>
+              <div className="mt-0.5 text-[9px] text-red-100">
+                Agente Oficial Autorizado
+              </div>
+            </div>
 
-            {rol === 'ADMIN' && (
-              <a href="/admin" className="text-gray-500 hover:text-red-600">
-                Admin
+            <div className="flex items-center gap-3 text-[10px]">
+              <a href="/cotizador" className="text-red-100 hover:text-white">
+                Cotizador
               </a>
-            )}
 
-            <span className="text-gray-300">·</span>
-            <span className="hidden md:inline text-gray-500 max-w-40 truncate">{nombreUsuario}</span>
-            <CerrarSesion />
+              {rol === 'ADMIN' && (
+                <a href="/admin" className="text-red-100 hover:text-white">
+                  Admin
+                </a>
+              )}
+            </div>
           </div>
 
         </div>
