@@ -166,7 +166,7 @@ export default function FormularioVentas({
       <header className="sticky top-0 z-30 bg-red-600 text-white shadow-md">
         <div className="max-w-6xl mx-auto px-3 sm:px-5 py-2.5 sm:py-3">
 
-          <div className="flex items-center justify-between gap-3">
+          <div className="relative flex items-center justify-between gap-3">
             {/* Marca Claro */}
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               <div
@@ -188,12 +188,12 @@ export default function FormularioVentas({
               </div>
             </div>
 
-            {/* Grupo Lucom: sin logo, solo identidad institucional */}
-            <div className="hidden sm:block text-center px-3">
-              <div className="text-base md:text-lg font-extrabold leading-tight">
+            {/* Grupo Lucom: centrado real */}
+            <div className="absolute left-1/2 -translate-x-1/2 text-center pointer-events-none">
+              <div className="text-xs sm:text-base md:text-lg font-extrabold leading-tight whitespace-nowrap">
                 GrupoLucom
               </div>
-              <div className="text-[10px] md:text-xs font-medium text-red-100">
+              <div className="text-[8px] sm:text-[10px] md:text-xs font-medium text-red-100 whitespace-nowrap">
                 Agente Oficial Autorizado
               </div>
             </div>
@@ -226,28 +226,16 @@ export default function FormularioVentas({
             </div>
           </div>
 
-          {/* En celular, GrupoLucom queda en una segunda línea compacta */}
-          <div className="sm:hidden mt-2 flex items-center justify-between border-t border-white/20 pt-2">
-            <div>
-              <div className="text-xs font-extrabold leading-none">
-                GrupoLucom
-              </div>
-              <div className="mt-0.5 text-[9px] text-red-100">
-                Agente Oficial Autorizado
-              </div>
-            </div>
+          <div className="sm:hidden mt-2 flex items-center justify-center gap-4 border-t border-white/20 pt-2 text-[10px]">
+            <a href="/cotizador" className="text-red-100 hover:text-white">
+              Cotizador
+            </a>
 
-            <div className="flex items-center gap-3 text-[10px]">
-              <a href="/cotizador" className="text-red-100 hover:text-white">
-                Cotizador
+            {rol === 'ADMIN' && (
+              <a href="/admin" className="text-red-100 hover:text-white">
+                Admin
               </a>
-
-              {rol === 'ADMIN' && (
-                <a href="/admin" className="text-red-100 hover:text-white">
-                  Admin
-                </a>
-              )}
-            </div>
+            )}
           </div>
 
         </div>
