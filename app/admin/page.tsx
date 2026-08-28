@@ -135,6 +135,20 @@ export default async function AdminPage() {
 
           </div>
 
+          {/* ZONAS BAF */}
+          <a
+            href="/admin/zonas"
+            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+          >
+            <div className="text-lg font-semibold text-gray-900">
+              Zonas BAF
+            </div>
+
+            <div className="text-sm text-gray-500 mt-2">
+              Alta, baja, edición, orden y activación de zonas del formulario BAF.
+            </div>
+          </a>
+
           {/* USUARIOS */}
 
           <a

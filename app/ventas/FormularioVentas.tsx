@@ -349,14 +349,11 @@ export default function FormularioVentas({
                 />
               </div>
 
-              {tipo !== 'FACTIBILIDAD' && (
-                <Input
-                  label="Fecha nacimiento"
-                  name="fecha_nacimiento"
-                  type="date"
-                  required
-                />
-              )}
+              <Input
+                label="Fecha nacimiento"
+                name="fecha_nacimiento"
+                type="date"
+              />
 
               <Input
                 label={tipo === 'PORTA' ? 'Contacto' : 'Teléfono'}
@@ -409,7 +406,11 @@ export default function FormularioVentas({
                 <Select
                   label="Tipo domicilio"
                   name="tipo_domicilio"
-                  opciones={tiposDomicilio}
+                  opciones={[
+                    'Casa (- 7 unidades)',
+                    'Edificio (Acometido o + 7 UF o + 3 Pisos)',
+                    'FWA 5G',
+                  ]}
                   required
                 />
               )}
@@ -620,9 +621,13 @@ export default function FormularioVentas({
                 />
 
                 <Select
-                  label="Modalidad"
+                  label="Servicio BAF"
                   name="modalidad_plan"
-                  opciones={['DNI', 'CUIT', 'BAFE']}
+                  opciones={[
+                    'Masivo',
+                    'Cuit Standard',
+                    'Cuit BAFE',
+                  ]}
                   required
                 />
 
