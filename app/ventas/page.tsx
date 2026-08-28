@@ -501,33 +501,33 @@ export default async function VentasPage() {
       }
     }
 
-    if (!/^\d{10}$/.test(telefono)) {
+    if (!/^(?!0)(?!54)\d{10}$/.test(telefono)) {
       return {
         ok: false,
         mensaje:
-          'El teléfono debe contener exactamente 10 dígitos, sin espacios ni guiones.',
+          'El teléfono debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 54.',
       }
     }
 
     if (
       telefonoAlternativo &&
-      !/^\d{10}$/.test(telefonoAlternativo)
+      !/^(?!0)(?!54)\d{10}$/.test(telefonoAlternativo)
     ) {
       return {
         ok: false,
         mensaje:
-          'El contacto alternativo debe contener exactamente 10 dígitos, sin espacios ni guiones.',
+          'El contacto alternativo debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 54.',
       }
     }
 
     if (
       lineaConvergente &&
-      !/^\d{10}$/.test(lineaConvergente)
+      !/^(?!0)(?!54)\d{10}$/.test(lineaConvergente)
     ) {
       return {
         ok: false,
         mensaje:
-          'La línea convergente debe contener exactamente 10 dígitos, sin espacios ni guiones.',
+          'La línea convergente debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 54.',
       }
     }
 
@@ -649,14 +649,14 @@ export default async function VentasPage() {
           const nims = lineas.map((linea) => linea.nim)
 
           const nimInvalido = nims.find(
-            (nim) => !/^\d{10}$/.test(nim)
+            (nim) => !/^(?!0)(?!54)\d{10}$/.test(nim)
           )
 
           if (nimInvalido) {
             return {
               ok: false,
               mensaje:
-                'Cada NIM debe contener exactamente 10 dígitos, sin espacios ni guiones.',
+                'Cada NIM debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 54.',
             }
           }
 

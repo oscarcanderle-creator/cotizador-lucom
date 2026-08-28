@@ -360,9 +360,9 @@ export default function FormularioVentas({
                 name="telefono"
                 type="tel"
                 inputMode="numeric"
-                pattern="[0-9]{10}"
+                pattern="(?!0)(?!54)[0-9]{10}"
                 maxLength={10}
-                title="Ingrese exactamente 10 dígitos, sin espacios ni guiones"
+                title="Ingrese exactamente 10 dígitos, sin espacios ni guiones. No puede comenzar con 0 ni con 54."
                 required
               />
 
@@ -372,9 +372,9 @@ export default function FormularioVentas({
                   name="telefono_alternativo"
                   type="tel"
                   inputMode="numeric"
-                  pattern="[0-9]{10}"
+                  pattern="(?!0)(?!54)[0-9]{10}"
                   maxLength={10}
-                  title="Ingrese exactamente 10 dígitos, sin espacios ni guiones"
+                  title="Ingrese exactamente 10 dígitos, sin espacios ni guiones. No puede comenzar con 0 ni con 54."
                   required
                 />
               )}
@@ -527,9 +527,9 @@ export default function FormularioVentas({
                           name={`nim_${index}`}
                           type="tel"
                           inputMode="numeric"
-                          pattern="[0-9]{10}"
+                          pattern="(?!0)(?!54)[0-9]{10}"
                           maxLength={10}
-                          title="Ingrese exactamente 10 dígitos, sin espacios ni guiones"
+                          title="Ingrese exactamente 10 dígitos, sin espacios ni guiones. No puede comenzar con 0 ni con 54."
                           required
                         />
                       )}
@@ -664,9 +664,9 @@ export default function FormularioVentas({
                   name="linea_convergente"
                   type="tel"
                   inputMode="numeric"
-                  pattern="[0-9]{10}"
+                  pattern="(?!0)(?!54)[0-9]{10}"
                   maxLength={10}
-                  title="Ingrese exactamente 10 dígitos, sin espacios ni guiones"
+                  title="Ingrese exactamente 10 dígitos, sin espacios ni guiones. No puede comenzar con 0 ni con 54."
                 />
 
                 <div className="sm:col-span-2 lg:col-span-4">
