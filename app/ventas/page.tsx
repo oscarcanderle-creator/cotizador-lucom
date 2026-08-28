@@ -307,7 +307,7 @@ async function agregarPortaTesting(
     `${texto(formData, 'nombre')} ${texto(formData, 'apellido')}`.trim(),
     documentoSheet(tipoDocumento, dni),
     fechaNacimientoSheet(texto(formData, 'fecha_nacimiento')),
-    esLineaNueva ? '00000000' : soloDigitos(texto(formData, 'nim')),
+    esLineaNueva ? '9999999999' : soloDigitos(texto(formData, 'nim')),
     texto(formData, 'email'),
     texto(formData, 'plan'),
     companiaSheet,
@@ -363,7 +363,7 @@ function lineasPortaDesdeFormData(
     if (esLineaNueva) {
       if (plan) {
         lineas.push({
-          nim: '00000000',
+          nim: '9999999999',
           plan,
           companiaActual: '',
           prepagoPospago: '',
@@ -737,7 +737,7 @@ export default async function VentasPage() {
             .from('operaciones_porta')
             .insert({
               operacion_id: idLinea,
-              nim: esLineaNueva ? '00000000' : linea.nim,
+              nim: esLineaNueva ? '9999999999' : linea.nim,
               es_linea_nueva: esLineaNueva,
               gigas_acordados: linea.plan || null,
               compania_actual:

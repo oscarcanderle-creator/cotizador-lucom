@@ -49,6 +49,8 @@ function Input({
   maxLength,
   title,
   telefonoNacional = false,
+  defaultValue,
+  readOnly = false,
 }: {
   label: string
   name: string
@@ -60,6 +62,8 @@ function Input({
   maxLength?: number
   title?: string
   telefonoNacional?: boolean
+  defaultValue?: string
+  readOnly?: boolean
 }) {
   return (
     <label className="block">
@@ -77,6 +81,8 @@ function Input({
         pattern={pattern}
         maxLength={maxLength}
         title={title}
+        defaultValue={defaultValue}
+        readOnly={readOnly}
         onInput={
           telefonoNacional
             ? (e) => {
@@ -538,7 +544,17 @@ export default function FormularioVentas({
                           : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2'
                       }
                     >
-                      {!esLineaNueva && (
+                      {esLineaNueva ? (
+                        <Input
+                          label="NIM"
+                          name={`nim_${index}`}
+                          type="text"
+                          inputMode="numeric"
+                          defaultValue="9999999999"
+                          readOnly
+                          required
+                        />
+                      ) : (
                         <Input
                           label="NIM a portar"
                           name={`nim_${index}`}
