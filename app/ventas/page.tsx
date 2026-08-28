@@ -501,33 +501,33 @@ export default async function VentasPage() {
       }
     }
 
-    if (!/^(?!0)(?!54)\d{10}$/.test(telefono)) {
+    if (!/^[1-46-9]\d{9}$/.test(telefono)) {
       return {
         ok: false,
         mensaje:
-          'El teléfono debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 54.',
+          'El teléfono debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 5.',
       }
     }
 
     if (
       telefonoAlternativo &&
-      !/^(?!0)(?!54)\d{10}$/.test(telefonoAlternativo)
+      !/^[1-46-9]\d{9}$/.test(telefonoAlternativo)
     ) {
       return {
         ok: false,
         mensaje:
-          'El contacto alternativo debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 54.',
+          'El contacto alternativo debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 5.',
       }
     }
 
     if (
       lineaConvergente &&
-      !/^(?!0)(?!54)\d{10}$/.test(lineaConvergente)
+      !/^[1-46-9]\d{9}$/.test(lineaConvergente)
     ) {
       return {
         ok: false,
         mensaje:
-          'La línea convergente debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 54.',
+          'La línea convergente debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 5.',
       }
     }
 
@@ -649,14 +649,14 @@ export default async function VentasPage() {
           const nims = lineas.map((linea) => linea.nim)
 
           const nimInvalido = nims.find(
-            (nim) => !/^(?!0)(?!54)\d{10}$/.test(nim)
+            (nim) => !/^[1-46-9]\d{9}$/.test(nim)
           )
 
           if (nimInvalido) {
             return {
               ok: false,
               mensaje:
-                'Cada NIM debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 54.',
+                'Cada NIM debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 5.',
             }
           }
 

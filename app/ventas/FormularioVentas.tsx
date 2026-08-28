@@ -48,6 +48,7 @@ function Input({
   pattern,
   maxLength,
   title,
+  telefonoNacional = false,
 }: {
   label: string
   name: string
@@ -58,6 +59,7 @@ function Input({
   pattern?: string
   maxLength?: number
   title?: string
+  telefonoNacional?: boolean
 }) {
   return (
     <label className="block">
@@ -75,6 +77,20 @@ function Input({
         pattern={pattern}
         maxLength={maxLength}
         title={title}
+        onInput={
+          telefonoNacional
+            ? (e) => {
+                const input = e.currentTarget
+                let valor = input.value.replace(/\D/g, '').slice(0, 10)
+
+                if (valor.startsWith('0') || valor.startsWith('5')) {
+                  valor = ''
+                }
+
+                input.value = valor
+              }
+            : undefined
+        }
         className="w-full min-h-11 border border-green-300 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-white text-gray-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-100"
       />
     </label>
@@ -360,9 +376,10 @@ export default function FormularioVentas({
                 name="telefono"
                 type="tel"
                 inputMode="numeric"
-                pattern="(?!0)(?!54)[0-9]{10}"
+                pattern="[1-46-9][0-9]{9}"
                 maxLength={10}
-                title="Ingrese exactamente 10 dígitos, sin espacios ni guiones. No puede comenzar con 0 ni con 54."
+                telefonoNacional
+                title="Ingrese exactamente 10 dígitos. Solo números, sin +, espacios ni guiones. No puede comenzar con 0 ni con 5."
                 required
               />
 
@@ -372,9 +389,9 @@ export default function FormularioVentas({
                   name="telefono_alternativo"
                   type="tel"
                   inputMode="numeric"
-                  pattern="(?!0)(?!54)[0-9]{10}"
+                  pattern="[1-46-9][0-9]{9}"
                   maxLength={10}
-                  title="Ingrese exactamente 10 dígitos, sin espacios ni guiones. No puede comenzar con 0 ni con 54."
+                  title="Ingrese exactamente 10 dígitos. Solo números, sin +, espacios ni guiones. No puede comenzar con 0 ni con 5."
                   required
                 />
               )}
@@ -527,9 +544,10 @@ export default function FormularioVentas({
                           name={`nim_${index}`}
                           type="tel"
                           inputMode="numeric"
-                          pattern="(?!0)(?!54)[0-9]{10}"
+                          pattern="[1-46-9][0-9]{9}"
                           maxLength={10}
-                          title="Ingrese exactamente 10 dígitos, sin espacios ni guiones. No puede comenzar con 0 ni con 54."
+                          telefonoNacional
+                          title="Ingrese exactamente 10 dígitos. Solo números, sin +, espacios ni guiones. No puede comenzar con 0 ni con 5."
                           required
                         />
                       )}
@@ -664,9 +682,9 @@ export default function FormularioVentas({
                   name="linea_convergente"
                   type="tel"
                   inputMode="numeric"
-                  pattern="(?!0)(?!54)[0-9]{10}"
+                  pattern="[1-46-9][0-9]{9}"
                   maxLength={10}
-                  title="Ingrese exactamente 10 dígitos, sin espacios ni guiones. No puede comenzar con 0 ni con 54."
+                  title="Ingrese exactamente 10 dígitos. Solo números, sin +, espacios ni guiones. No puede comenzar con 0 ni con 5."
                 />
 
                 <div className="sm:col-span-2 lg:col-span-4">
