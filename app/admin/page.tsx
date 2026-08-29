@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '../../utils/supabase/server'
 
 import CerrarSesion from '../CerrarSesion'
+import AppNav from '../../components/AppNav'
 
 export default async function AdminPage() {
 
@@ -27,7 +28,7 @@ export default async function AdminPage() {
     !profile.activo ||
     profile.rol !== 'ADMIN'
   ) {
-    redirect('/cotizador')
+    redirect('/ventas')
   }
 
   const nombreUsuario =
@@ -51,6 +52,10 @@ export default async function AdminPage() {
           <p className="text-gray-500 mt-1">
             Administración del Cotizador
           </p>
+
+          <div className="mt-5 rounded-xl border border-gray-200 bg-white p-2">
+            <AppNav rol={profile.rol} actual="ADMIN" variante="claro" />
+          </div>
 
           <div className="flex items-center gap-3 mt-4 text-sm">
 
@@ -136,6 +141,7 @@ export default async function AdminPage() {
           </div>
 
           {/* ZONAS BAF */}
+
           <a
             href="/admin/zonas"
             className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
@@ -146,6 +152,51 @@ export default async function AdminPage() {
 
             <div className="text-sm text-gray-500 mt-2">
               Alta, baja, edición, orden y activación de zonas del formulario BAF.
+            </div>
+          </a>
+
+          {/* ESTADOS BAF */}
+
+          <a
+            href="/admin/estados-baf"
+            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+          >
+            <div className="text-lg font-semibold text-gray-900">
+              Estados BAF
+            </div>
+
+            <div className="text-sm text-gray-500 mt-2">
+              Administrá los estados disponibles para la gestión de ventas BAF.
+            </div>
+          </a>
+
+          {/* ESTADOS PORTA */}
+
+          <a
+            href="/admin/estados-porta"
+            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+          >
+            <div className="text-lg font-semibold text-gray-900">
+              Estados PORTA
+            </div>
+
+            <div className="text-sm text-gray-500 mt-2">
+              Administrá los estados de gestión de Portabilidad y Línea Nueva.
+            </div>
+          </a>
+
+          {/* MEDIOS DESPACHO CHIP */}
+
+          <a
+            href="/admin/medios-despacho-chip"
+            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+          >
+            <div className="text-lg font-semibold text-gray-900">
+              Medios despacho CHIP
+            </div>
+
+            <div className="text-sm text-gray-500 mt-2">
+              Administrá los medios utilizados para el despacho de chips.
             </div>
           </a>
 

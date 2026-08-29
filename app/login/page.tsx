@@ -61,7 +61,7 @@ export default function LoginPage() {
       return
     }
 
-    router.push('/cotizador')
+    router.push('/ventas')
     router.refresh()
   }
 

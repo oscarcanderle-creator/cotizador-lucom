@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '../../../utils/supabase/server'
 import { createAdminClient } from '../../../utils/supabase/admin'
 
-type RolUsuario = 'ADMIN' | 'SUPERVISOR' | 'VENDEDOR'
+type RolUsuario = 'ADMIN' | 'SUPERVISOR' | 'VENDEDOR' | 'BBOO'
 
 async function validarAdmin() {
   const supabase = await createClient()
@@ -42,7 +42,8 @@ function validarRol(valor: string): RolUsuario {
   if (
     valor !== 'ADMIN' &&
     valor !== 'SUPERVISOR' &&
-    valor !== 'VENDEDOR'
+    valor !== 'VENDEDOR' &&
+    valor !== 'BBOO'
   ) {
     throw new Error('Rol de usuario inválido.')
   }
@@ -63,7 +64,7 @@ export default async function AdminUsuariosPage() {
   } = await supabase
     .from('profiles')
     .select(
-      'id, nombre, vendedor, rol, activo, debe_cambiar_password, created_at'
+      'id, nombre, vendedor, rol, activo, puede_gestionar_ventas, debe_cambiar_password, created_at'
     )
     .order('nombre')
 
@@ -130,6 +131,9 @@ export default async function AdminUsuariosPage() {
         String(formData.get('rol') ?? '')
       )
 
+    const puedeGestionarVentas =
+      formData.get('puede_gestionar_ventas') === 'on'
+
     if (
       !nombre ||
       !vendedor ||
@@ -158,6 +162,8 @@ export default async function AdminUsuariosPage() {
         user_metadata: {
           nombre,
           vendedor,
+          rol,
+          puede_gestionar_ventas: puedeGestionarVentas,
         },
       })
 
@@ -180,6 +186,7 @@ export default async function AdminUsuariosPage() {
           vendedor,
           rol,
           activo: true,
+          puede_gestionar_ventas: puedeGestionarVentas,
           debe_cambiar_password: true,
         })
 
@@ -236,6 +243,9 @@ export default async function AdminUsuariosPage() {
     const activo =
       formData.get('activo') === 'on'
 
+    const puedeGestionarVentas =
+      formData.get('puede_gestionar_ventas') === 'on'
+
     if (
       !id ||
       !nombre ||
@@ -261,26 +271,10 @@ export default async function AdminUsuariosPage() {
       )
     }
 
-    const { error: errorUpdate } =
-      await adminClient
-        .from('profiles')
-        .update({
-          nombre,
-          vendedor,
-          rol,
-          activo,
-        })
-        .eq('id', id)
-
-    if (errorUpdate) {
-      throw new Error(
-        errorUpdate.message
-      )
-    }
-
     /*
-     * Mantenemos también los metadatos de Auth
-     * alineados con el perfil.
+     * Primero actualizamos Auth.
+     * Incluimos también rol y habilitación de gestión para que
+     * cualquier sincronización existente mantenga los mismos valores.
      */
     const { error: errorMetadata } =
       await adminClient.auth.admin.updateUserById(
@@ -289,6 +283,8 @@ export default async function AdminUsuariosPage() {
           user_metadata: {
             nombre,
             vendedor,
+            rol,
+            puede_gestionar_ventas: puedeGestionarVentas,
           },
         }
       )
@@ -299,9 +295,33 @@ export default async function AdminUsuariosPage() {
       )
     }
 
+    /*
+     * Guardamos profiles al final.
+     * De esta forma public.profiles queda como fuente definitiva
+     * para permisos y configuración de la aplicación.
+     */
+    const { error: errorUpdate } =
+      await adminClient
+        .from('profiles')
+        .update({
+          nombre,
+          vendedor,
+          rol,
+          activo,
+          puede_gestionar_ventas: puedeGestionarVentas,
+        })
+        .eq('id', id)
+
+    if (errorUpdate) {
+      throw new Error(
+        errorUpdate.message
+      )
+    }
+
     revalidatePath('/admin/usuarios')
     revalidatePath('/cotizador')
     revalidatePath('/ventas')
+    redirect('/admin/usuarios')
   }
 
   /*
@@ -571,9 +591,21 @@ export default async function AdminUsuariosPage() {
                 <option value="ADMIN">
                   Administrador
                 </option>
+
+                <option value="BBOO">
+                  BBOO
+                </option>
               </select>
             </div>
           </div>
+
+          <label className="flex items-center gap-2 mt-4 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              name="puede_gestionar_ventas"
+            />
+            Habilitado para gestionar ventas
+          </label>
 
           <div className="flex justify-end mt-4">
             <button
@@ -625,6 +657,12 @@ export default async function AdminUsuariosPage() {
                           : 'INACTIVO'}
                       </span>
 
+                      {usuario.puede_gestionar_ventas && (
+                        <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700">
+                          GESTIONA VENTAS
+                        </span>
+                      )}
+
                       {usuario.debe_cambiar_password && (
                         <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700">
                           CAMBIO DE CLAVE PENDIENTE
@@ -636,7 +674,7 @@ export default async function AdminUsuariosPage() {
                   {/* EDITAR / ACTIVAR */}
                   <form
                     action={actualizarUsuario}
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1.4fr_160px_auto_auto] gap-3 lg:items-end"
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1.4fr_160px_auto_auto_auto] gap-3 lg:items-end"
                   >
                     <input
                       type="hidden"
@@ -699,6 +737,10 @@ export default async function AdminUsuariosPage() {
                         <option value="ADMIN">
                           Administrador
                         </option>
+
+                        <option value="BBOO">
+                          BBOO
+                        </option>
                       </select>
                     </div>
 
@@ -712,6 +754,18 @@ export default async function AdminUsuariosPage() {
                       />
 
                       Activo
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm text-gray-700 lg:pb-2">
+                      <input
+                        type="checkbox"
+                        name="puede_gestionar_ventas"
+                        defaultChecked={
+                          usuario.puede_gestionar_ventas
+                        }
+                      />
+
+                      Gestiona ventas
                     </label>
 
                     <button

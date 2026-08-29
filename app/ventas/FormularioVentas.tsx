@@ -3,6 +3,7 @@
 import { FormEvent, useState, useTransition } from 'react'
 
 import CerrarSesion from '../CerrarSesion'
+import AppNav from '../../components/AppNav'
 
 type TipoOperacion = 'PORTA' | 'BAF' | 'FACTIBILIDAD'
 
@@ -225,24 +226,8 @@ export default function FormularioVentas({
               </div>
             </div>
 
-            {/* Navegación / usuario */}
+            {/* Usuario / sesión */}
             <div className="flex shrink-0 items-center gap-2 sm:gap-3 text-[11px] sm:text-sm">
-              <a
-                href="/cotizador"
-                className="hidden sm:inline text-red-100 hover:text-white"
-              >
-                Cotizador
-              </a>
-
-              {rol === 'ADMIN' && (
-                <a
-                  href="/admin"
-                  className="hidden sm:inline text-red-100 hover:text-white"
-                >
-                  Admin
-                </a>
-              )}
-
               <span className="hidden lg:inline max-w-40 truncate text-red-100">
                 {nombreUsuario}
               </span>
@@ -253,16 +238,8 @@ export default function FormularioVentas({
             </div>
           </div>
 
-          <div className="sm:hidden mt-2 flex items-center justify-center gap-4 border-t border-white/20 pt-2 text-[10px]">
-            <a href="/cotizador" className="text-red-100 hover:text-white">
-              Cotizador
-            </a>
-
-            {rol === 'ADMIN' && (
-              <a href="/admin" className="text-red-100 hover:text-white">
-                Admin
-              </a>
-            )}
+          <div className="mt-2 border-t border-white/20 pt-2">
+            <AppNav rol={rol} actual="VENTAS" variante="rojo" />
           </div>
 
         </div>
