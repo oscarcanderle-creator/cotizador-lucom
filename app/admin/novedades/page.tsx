@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '../../../utils/supabase/server'
+import AppHeader from '../../../components/AppHeader'
 
 export default async function AdminNovedadesPage() {
   const supabase = await createClient()
@@ -15,7 +16,7 @@ export default async function AdminNovedadesPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('rol, activo')
+    .select('nombre, rol, activo')
     .eq('id', user.id)
     .single()
 
@@ -113,18 +114,14 @@ export default async function AdminNovedadesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-5xl mx-auto">
+    <main className="min-h-screen bg-gray-50">
+      <AppHeader
+        rol={profile.rol}
+        usuario={profile.nombre?.trim() || user.email || 'Administrador'}
+        actual="ADMIN"
+      />
 
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-red-600">
-            Claro
-          </h1>
-
-          <p className="text-gray-500 mt-1">
-            Administración del Cotizador
-          </p>
-        </div>
+      <div className="max-w-5xl mx-auto p-8">
 
         <div className="flex items-center justify-between mb-6">
 

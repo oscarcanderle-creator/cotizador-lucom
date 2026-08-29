@@ -2,8 +2,7 @@ import { redirect } from 'next/navigation'
 
 import { createClient } from '../../utils/supabase/server'
 
-import CerrarSesion from '../CerrarSesion'
-import AppNav from '../../components/AppNav'
+import AppHeader from '../../components/AppHeader'
 
 export default async function AdminPage() {
 
@@ -37,41 +36,14 @@ export default async function AdminPage() {
     'Administrador'
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-6 sm:p-8">
+    <main className="min-h-screen bg-gray-50">
+      <AppHeader
+        rol={profile.rol}
+        usuario={nombreUsuario}
+        actual="ADMIN"
+      />
 
-      <div className="max-w-6xl mx-auto">
-
-        {/* CABECERA */}
-
-        <div className="mb-8">
-
-          <h1 className="text-3xl font-bold text-red-600">
-            Claro
-          </h1>
-
-          <p className="text-gray-500 mt-1">
-            Administración del Cotizador
-          </p>
-
-          <div className="mt-5 rounded-xl border border-gray-200 bg-white p-2">
-            <AppNav rol={profile.rol} actual="ADMIN" variante="claro" />
-          </div>
-
-          <div className="flex items-center gap-3 mt-4 text-sm">
-
-            <span className="text-gray-500">
-              Usuario: {nombreUsuario}
-            </span>
-
-            <span className="text-gray-300">
-              ·
-            </span>
-
-            <CerrarSesion />
-
-          </div>
-
-        </div>
+      <div className="max-w-6xl mx-auto px-4 py-6 sm:p-8">
 
         {/* TARJETAS */}
 

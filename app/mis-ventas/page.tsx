@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '../../utils/supabase/server'
-import AppNav from '../../components/AppNav'
+import AppHeader from '../../components/AppHeader'
 
 type SearchParams = Promise<{
   q?: string
@@ -176,15 +176,14 @@ export default async function MisVentasPage({
   })
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 sm:p-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4">
-          <AppNav
-            rol={profile.rol}
-            actual="MIS_VENTAS"
-            variante="claro"
-          />
-        </div>
+    <main className="min-h-screen bg-gray-50">
+      <AppHeader
+        rol={profile.rol}
+        usuario={profile.nombre?.trim() || user.email || 'Usuario'}
+        actual="MIS_VENTAS"
+      />
+      <div className="mx-auto max-w-7xl p-4 sm:p-8">
+
 
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">

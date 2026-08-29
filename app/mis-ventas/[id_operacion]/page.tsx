@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '../../../utils/supabase/server'
-import AppNav from '../../../components/AppNav'
+import AppHeader from '../../../components/AppHeader'
 
 type Params = Promise<{
   id_operacion: string
@@ -681,15 +681,13 @@ export default async function DetalleVentaPage({
   )
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 sm:p-8">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4">
-          <AppNav
-            rol={profile.rol}
-            actual="MIS_VENTAS"
-            variante="claro"
-          />
-        </div>
+    <main className="min-h-screen bg-gray-50">
+      <AppHeader
+        rol={profile.rol}
+        usuario={profile.nombre?.trim() || user.email || 'Usuario'}
+        actual="MIS_VENTAS"
+      />
+      <div className="mx-auto max-w-6xl p-4 sm:p-8">
 
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>

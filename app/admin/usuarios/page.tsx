@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 
 import { createClient } from '../../../utils/supabase/server'
 import { createAdminClient } from '../../../utils/supabase/admin'
+import AppHeader from '../../../components/AppHeader'
 
 type RolUsuario = 'ADMIN' | 'SUPERVISOR' | 'VENDEDOR' | 'BBOO'
 
@@ -19,7 +20,7 @@ async function validarAdmin() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('rol, activo')
+    .select('nombre, rol, activo')
     .eq('id', user.id)
     .single()
 
@@ -34,6 +35,7 @@ async function validarAdmin() {
   return {
     supabase,
     user,
+    profile,
     adminClient: createAdminClient(),
   }
 }
@@ -55,6 +57,7 @@ export default async function AdminUsuariosPage() {
   const {
     supabase,
     user,
+    profile,
     adminClient,
   } = await validarAdmin()
 
@@ -471,18 +474,13 @@ export default async function AdminUsuariosPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-6 sm:p-8">
-      <div className="max-w-6xl mx-auto">
-
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-red-600">
-            Claro
-          </h1>
-
-          <p className="text-gray-500 mt-1">
-            Administración del Cotizador
-          </p>
-        </div>
+    <main className="min-h-screen bg-gray-50">
+      <AppHeader
+        rol={profile.rol}
+        usuario={profile.nombre?.trim() || user.email || 'Administrador'}
+        actual="ADMIN"
+      />
+      <div className="max-w-6xl mx-auto px-4 py-6 sm:p-8">
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
           <div>

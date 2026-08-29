@@ -15,7 +15,7 @@ import {
 
 import { toPng } from 'html-to-image'
 import jsPDF from 'jspdf'
-import CerrarSesion from '../CerrarSesion'
+import AppHeader from '../../components/AppHeader'
 
 type Producto = {
   id: number
@@ -42,6 +42,7 @@ type Props = {
   promocionesFlash: PromocionFlash[]
   novedades: NovedadPropuesta[]
   usuario: string
+  rol: string
 }
 
 type PortabilidadUI = {
@@ -105,6 +106,7 @@ export default function Cotizador({
   promocionesFlash,
   novedades,
   usuario,
+  rol,
 }: Props) {
   const propuestaRef = useRef<HTMLDivElement>(null)
   const [exportando, setExportando] = useState(false)
@@ -776,41 +778,12 @@ async function compartirPropuesta() {
   return (
     <main className="min-h-screen bg-gray-50 text-gray-900 overflow-x-hidden">
 
-      {/* CABECERA */}
-
-      <header className="bg-white border-b border-gray-200 px-3 sm:px-5 py-2">
-
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-4">
-
-          <div>
-
-            <div className="text-2xl font-bold text-red-600">
-              Claro
-            </div>
-
-            <div className="text-sm text-gray-500">
-              Cotizador Comercial
-            </div>
-
-          </div>
-
-<div className="flex items-center gap-3 text-sm">
-
-  <span className="text-gray-500">
-    {usuario}
-  </span>
-
-  <span className="text-gray-300">
-    ·
-  </span>
-
-  <CerrarSesion />
-
-</div>
-
-        </div>
-
-      </header>
+      {/* CABECERA COMÚN */}
+      <AppHeader
+        rol={rol}
+        usuario={usuario}
+        actual="COTIZADOR"
+      />
 
       <div className="max-w-7xl mx-auto px-3 py-3 sm:px-5 sm:py-4 grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-4 lg:gap-5">
 

@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 
 import { createClient } from '../../../utils/supabase/server'
 import { createAdminClient } from '../../../utils/supabase/admin'
+import AppHeader from '../../../components/AppHeader'
 
 async function validarAdmin() {
   const supabase = await createClient()
@@ -17,7 +18,7 @@ async function validarAdmin() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('rol, activo')
+    .select('nombre, rol, activo')
     .eq('id', user.id)
     .single()
 
@@ -29,11 +30,15 @@ async function validarAdmin() {
     redirect('/cotizador')
   }
 
-  return createAdminClient()
+  return {
+    admin: createAdminClient(),
+    user,
+    profile,
+  }
 }
 
 export default async function AdminZonasPage() {
-  const admin = await validarAdmin()
+  const { admin, user, profile } = await validarAdmin()
 
   const {
     data: zonas,
@@ -51,7 +56,7 @@ export default async function AdminZonasPage() {
   async function crearZona(formData: FormData) {
     'use server'
 
-    const admin = await validarAdmin()
+    const { admin } = await validarAdmin()
 
     const nombre = String(
       formData.get('nombre') ?? ''
@@ -89,7 +94,7 @@ export default async function AdminZonasPage() {
   async function actualizarZona(formData: FormData) {
     'use server'
 
-    const admin = await validarAdmin()
+    const { admin } = await validarAdmin()
 
     const id = Number(
       formData.get('id')
@@ -138,7 +143,7 @@ export default async function AdminZonasPage() {
   async function eliminarZona(formData: FormData) {
     'use server'
 
-    const admin = await validarAdmin()
+    const { admin } = await validarAdmin()
 
     const id = Number(
       formData.get('id')
@@ -176,8 +181,13 @@ export default async function AdminZonasPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-6 sm:p-8">
-      <div className="max-w-5xl mx-auto">
+    <main className="min-h-screen bg-gray-50">
+      <AppHeader
+        rol={profile.rol}
+        usuario={profile.nombre?.trim() || user.email || 'Administrador'}
+        actual="ADMIN"
+      />
+      <div className="max-w-5xl mx-auto px-4 py-6 sm:p-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-red-600">

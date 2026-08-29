@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '../../../../utils/supabase/server'
-import AppNav from '../../../../components/AppNav'
+import AppHeader from '../../../../components/AppHeader'
 
 type Params = Promise<{
   id_operacion: string
@@ -57,77 +57,45 @@ function Campo({
 }
 
 
-async function guardarResponsable(formData: FormData) {
+async function guardarAsignacionesSuper(formData: FormData) {
   'use server'
 
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const idOperacion = String(formData.get('id_operacion') ?? '').trim()
-  const responsableId = String(formData.get('responsable_id') ?? '').trim()
-  const tipo = String(formData.get('tipo') ?? '').trim()
+  const { data: actor } = await supabase
+    .from('profiles')
+    .select('rol, activo')
+    .eq('id', user.id)
+    .maybeSingle()
 
-  if (!idOperacion || !['BAF', 'PORTA'].includes(tipo)) {
+  if (!actor?.activo || !['ADMIN', 'SUPERVISOR'].includes(actor.rol)) {
+    throw new Error('No tiene permisos para modificar esta operación.')
+  }
+
+  const idOperacion = String(formData.get('id_operacion') ?? '').trim()
+  const vendedorId = String(formData.get('vendedor_id') ?? '').trim()
+  const responsableId = String(formData.get('responsable_id') ?? '').trim()
+
+  if (!idOperacion || !vendedorId) {
     throw new Error('Datos de operación inválidos.')
   }
 
-  const { data: operacion } = await supabase
-    .from('operaciones')
-    .select('id_operacion, usuario_id')
-    .eq('id_operacion', idOperacion)
-    .eq('usuario_id', user.id)
-    .maybeSingle()
-
-  if (!operacion) {
-    throw new Error('No se encontró la operación o no pertenece al usuario.')
-  }
-
-  let responsableFinal: string | null = null
-
-  if (responsableId) {
-    const { data: responsable } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', responsableId)
-      .eq('activo', true)
-      .eq('puede_gestionar_ventas', true)
-      .maybeSingle()
-
-    if (!responsable) {
-      throw new Error('El responsable seleccionado no está habilitado para gestionar ventas.')
-    }
-
-    responsableFinal = responsable.id
-  }
-
-  const tabla = tipo === 'BAF' ? 'gestion_baf' : 'gestion_porta'
-
-  const { error } = await supabase
-    .from(tabla)
-    .upsert(
-      {
-        operacion_id: idOperacion,
-        responsable_id: responsableFinal,
-        updated_by: user.id,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'operacion_id',
-      }
-    )
+  const { error } = await supabase.rpc('super_reasignar_venta', {
+    p_operacion_id: idOperacion,
+    p_vendedor_id: vendedorId,
+    p_responsable_id: responsableId || null,
+  })
 
   if (error) {
-    throw new Error(`No se pudo guardar el responsable: ${error.message}`)
+    throw new Error(`No se pudieron guardar las asignaciones: ${error.message}`)
   }
 
-  revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/super')
   revalidatePath('/mis-ventas')
-  redirect(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  redirect(`/super/ventas/${encodeURIComponent(idOperacion)}`)
 }
 
 
@@ -494,6 +462,16 @@ export default async function SuperDetalleVentaPage({
   if (!profile?.activo) redirect('/login')
   if (!['ADMIN', 'SUPERVISOR'].includes(profile.rol)) redirect('/ventas')
 
+  const { data: vendedores, error: vendedoresError } = await supabase
+    .from('profiles')
+    .select('id, nombre, vendedor, rol')
+    .eq('activo', true)
+    .order('nombre', { ascending: true })
+
+  if (vendedoresError) {
+    throw new Error(`No se pudieron cargar los vendedores: ${vendedoresError.message}`)
+  }
+
   const { data: responsables, error: responsablesError } = await supabase
     .from('profiles')
     .select('id, nombre, vendedor, rol')
@@ -656,6 +634,32 @@ export default async function SuperDetalleVentaPage({
 
   if (!operacion) notFound()
 
+  // Historial general de cambios de la operación.
+  // En SUPER se muestra únicamente en modo lectura.
+  const { data: historial, error: historialError } = await supabase
+    .from('historial_operacion')
+    .select(`
+      id,
+      fecha_hora,
+      tipo_accion,
+      campo,
+      etiqueta,
+      valor_anterior,
+      valor_nuevo,
+      rol_actor,
+      observacion,
+      usuario:profiles (
+        nombre,
+        vendedor
+      )
+    `)
+    .eq('operacion_id', id)
+    .order('fecha_hora', { ascending: false })
+
+  if (historialError) {
+    throw new Error(`No se pudo cargar el historial de la operación: ${historialError.message}`)
+  }
+
   const op: any = operacion
   const cliente = op.cliente
   const domicilio = op.domicilio
@@ -680,16 +684,18 @@ export default async function SuperDetalleVentaPage({
     (responsable: any) => responsable.id === responsableActualId
   )
 
+  const vendedoresDisponibles = (vendedores ?? []).filter((vendedor: any) =>
+    String(vendedor.vendedor ?? vendedor.nombre ?? '').trim()
+  )
+
   return (
-    <main className="min-h-screen bg-gray-50 p-4 sm:p-8">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4">
-          <AppNav
-            rol={profile.rol}
-            actual="SUPER"
-            variante="claro"
-          />
-        </div>
+    <main className="min-h-screen bg-gray-50">
+      <AppHeader
+        rol={profile.rol}
+        usuario={profile.nombre?.trim() || user.email || 'Usuario'}
+        actual="SUPER"
+      />
+      <div className="mx-auto max-w-6xl p-4 sm:p-8">
 
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -718,16 +724,74 @@ export default async function SuperDetalleVentaPage({
 
         <div className="space-y-5">
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">
-              Operación
-            </h2>
+            <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Operación</h2>
+              <span className="text-xs font-medium text-amber-700">
+                SUPER · Vendedor y Responsable editables
+              </span>
+            </div>
 
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div className="mb-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Campo label="Fecha / Hora" value={fechaArgentina(op.fecha_hora)} />
-              <Campo label="Vendedor" value={op.vendedor} />
               <Campo label="Origen del dato" value={op.origen_dato} />
               <Campo label="Grupo operación" value={op.grupo_operacion} />
+              <Campo label="Tipo" value={tipoVisible} />
             </div>
+
+            <form action={guardarAsignacionesSuper} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <input type="hidden" name="id_operacion" value={op.id_operacion} />
+              <input type="hidden" name="tipo" value={op.tipo} />
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-semibold text-gray-800">Vendedor</span>
+                  <select
+                    name="vendedor_id"
+                    defaultValue={op.usuario_id ?? ''}
+                    required
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                  >
+                    <option value="" disabled>Seleccionar vendedor</option>
+                    {vendedoresDisponibles.map((vendedor: any) => (
+                      <option key={vendedor.id} value={vendedor.id}>
+                        {vendedor.vendedor || vendedor.nombre}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs text-gray-500">
+                    Actual: {mostrar(op.vendedor)}
+                  </span>
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-semibold text-gray-800">Responsable</span>
+                  <select
+                    name="responsable_id"
+                    defaultValue={responsableActualId ?? ''}
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                  >
+                    <option value="">Sin asignar</option>
+                    {(responsables ?? []).map((responsable: any) => (
+                      <option key={responsable.id} value={responsable.id}>
+                        {responsable.vendedor || responsable.nombre}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs text-gray-500">
+                    Actual: {responsableActual?.vendedor || responsableActual?.nombre || 'Sin asignar'}
+                  </span>
+                </label>
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="submit"
+                  className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+                >
+                  Guardar asignaciones
+                </button>
+              </div>
+            </form>
           </section>
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
@@ -909,6 +973,87 @@ export default async function SuperDetalleVentaPage({
               </div>
             ) : (
               <div className="text-sm text-gray-500">Esta venta todavía no tiene datos de gestión.</div>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-gray-200 bg-white p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Historial de cambios
+              </h2>
+              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600">
+                Solo lectura
+              </span>
+            </div>
+
+            {(historial ?? []).length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
+                Esta operación todavía no tiene cambios registrados en el historial.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(historial ?? []).map((item: any) => {
+                  const usuarioHistorial =
+                    item.usuario?.vendedor ||
+                    item.usuario?.nombre ||
+                    'Usuario no disponible'
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+                    >
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">
+                            {item.etiqueta || item.campo || 'Modificación'}
+                          </div>
+                          <div className="mt-1 text-xs text-gray-500">
+                            {usuarioHistorial}
+                            {item.rol_actor ? ` · ${item.rol_actor}` : ''}
+                            {item.tipo_accion ? ` · ${item.tipo_accion}` : ''}
+                          </div>
+                        </div>
+
+                        <div className="text-xs font-medium text-gray-500">
+                          {fechaArgentina(item.fecha_hora)}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                            Valor anterior
+                          </div>
+                          <div className="mt-1 break-words text-sm text-gray-700">
+                            {mostrar(item.valor_anterior)}
+                          </div>
+                        </div>
+
+                        <div className="hidden text-center text-gray-400 sm:block">
+                          →
+                        </div>
+
+                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                            Valor nuevo
+                          </div>
+                          <div className="mt-1 break-words text-sm font-medium text-gray-900">
+                            {mostrar(item.valor_nuevo)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {item.observacion ? (
+                        <div className="mt-3 text-sm text-gray-600">
+                          <span className="font-medium">Observación:</span>{' '}
+                          {item.observacion}
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </section>
 

@@ -138,6 +138,7 @@ export default async function CotizadorPage() {
       }
       novedades={novedades ?? []}
       usuario={vendedor}
+      rol={profile.rol}
     />
   )
 }

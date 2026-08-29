@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '../../../utils/supabase/server'
+import AppHeader from '../../../components/AppHeader'
 
 function unidadRegla(
   codigo: string,
@@ -37,7 +38,7 @@ export default async function AdminReglasPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('rol, activo')
+    .select('nombre, rol, activo')
     .eq('id', user.id)
     .single()
 
@@ -132,21 +133,14 @@ export default async function AdminReglasPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-6 sm:p-8">
+    <main className="min-h-screen bg-gray-50">
+      <AppHeader
+        rol={profile.rol}
+        usuario={profile.nombre?.trim() || user.email || 'Administrador'}
+        actual="ADMIN"
+      />
 
-      <div className="max-w-5xl mx-auto">
-
-        <div className="mb-6">
-
-          <h1 className="text-3xl font-bold text-red-600">
-            Claro
-          </h1>
-
-          <p className="text-gray-500 mt-1">
-            Administración del Cotizador
-          </p>
-
-        </div>
+      <div className="max-w-5xl mx-auto px-4 py-6 sm:p-8">
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
 
