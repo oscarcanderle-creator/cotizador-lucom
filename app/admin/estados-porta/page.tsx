@@ -117,36 +117,6 @@ export default async function Page() {
     redirect('/admin/estados-porta')
   }
 
-  async function eliminarEstado(formData: FormData) {
-    'use server'
-
-    const { admin } = await validarAdmin()
-
-    const id = Number(formData.get('id'))
-    const confirmar = String(formData.get('confirmar') ?? '')
-      .trim()
-      .toUpperCase()
-
-    if (!Number.isFinite(id)) {
-      throw new Error('Estado PORTA inválido.')
-    }
-
-    if (confirmar !== 'ELIMINAR') {
-      throw new Error('Escribí ELIMINAR para confirmar.')
-    }
-
-    const { error } = await admin
-      .from('estados_porta')
-      .delete()
-      .eq('id', id)
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    revalidatePath('/admin/estados-porta')
-    redirect('/admin/estados-porta')
-  }
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -295,26 +265,6 @@ export default async function Page() {
                 </button>
               </form>
 
-              <form
-                action={eliminarEstado}
-                className="mt-3 pt-3 border-t border-gray-100 flex flex-col sm:flex-row gap-2 sm:justify-end"
-              >
-                <input type="hidden" name="id" value={estado.id} />
-
-                <input
-                  type="text"
-                  name="confirmar"
-                  placeholder="Escribí ELIMINAR"
-                  className="border border-red-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
-                />
-
-                <button
-                  type="submit"
-                  className="border border-red-300 text-red-700 hover:bg-red-50 font-medium px-4 py-2 rounded-lg"
-                >
-                  Eliminar estado porta
-                </button>
-              </form>
             </div>
           ))}
 

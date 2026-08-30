@@ -498,9 +498,29 @@ export default async function SuperDetalleVentaPage({
   const responsableActualId =
     esBaf ? gestionBaf?.responsable_id : gestionPorta?.responsable_id
 
-  const responsableActual = (responsables ?? []).find(
+  let responsableActual: any = (responsables ?? []).find(
     (responsable: any) => responsable.id === responsableActualId
   )
+
+  // Si el Responsable actualmente asignado quedó inactivo o perdió
+  // puede_gestionar_ventas, ya no aparece entre los Responsables disponibles
+  // para nuevas asignaciones. Lo recuperamos únicamente para conservar y
+  // mostrar correctamente la asignación histórica actual.
+  if (responsableActualId && !responsableActual) {
+    const { data: responsableHistorico, error: responsableHistoricoError } = await supabase
+      .from('profiles')
+      .select('id, nombre, vendedor, rol, activo, puede_gestionar_ventas')
+      .eq('id', responsableActualId)
+      .maybeSingle()
+
+    if (responsableHistoricoError) {
+      throw new Error(
+        `No se pudo cargar el Responsable actual: ${responsableHistoricoError.message}`
+      )
+    }
+
+    responsableActual = responsableHistorico
+  }
 
   const vendedoresDisponibles = (vendedores ?? []).filter((vendedor: any) =>
     String(vendedor.vendedor ?? vendedor.nombre ?? '').trim()
