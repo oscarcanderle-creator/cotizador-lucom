@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '../../../../utils/supabase/server'
 import AppHeader from '../../../../components/AppHeader'
+import AsignacionesSuperForm from './AsignacionesSuperForm'
 
 type Params = Promise<{
   id_operacion: string
@@ -77,6 +78,7 @@ async function guardarAsignacionesSuper(formData: FormData) {
   const idOperacion = String(formData.get('id_operacion') ?? '').trim()
   const vendedorId = String(formData.get('vendedor_id') ?? '').trim()
   const responsableId = String(formData.get('responsable_id') ?? '').trim()
+  const motivoVendedor = String(formData.get('motivo_vendedor') ?? '').trim()
 
   if (!idOperacion || !vendedorId) {
     throw new Error('Datos de operación inválidos.')
@@ -86,6 +88,7 @@ async function guardarAsignacionesSuper(formData: FormData) {
     p_operacion_id: idOperacion,
     p_vendedor_id: vendedorId,
     p_responsable_id: responsableId || null,
+    p_motivo_vendedor: motivoVendedor || null,
   })
 
   if (error) {
@@ -117,26 +120,7 @@ async function guardarGestionBaf(formData: FormData) {
     throw new Error('Operación inválida.')
   }
 
-  const { data: operacion } = await supabase
-    .from('operaciones')
-    .select('id_operacion, tipo, usuario_id, origen_dato')
-    .eq('id_operacion', idOperacion)
-    .eq('usuario_id', user.id)
-    .eq('tipo', 'BAF')
-    .maybeSingle()
-
-  if (!operacion) {
-    throw new Error('No se encontró la operación BAF o no pertenece al usuario.')
-  }
-
-  const { data: gestionActual } = await supabase
-    .from('gestion_baf')
-    .select('estado_baf_id')
-    .eq('operacion_id', idOperacion)
-    .maybeSingle()
-
-  let estadoNuevoId: number | null = null
-  let estadoNuevoNombre: string | null = null
+  let estadoBafId: number | null = null
 
   if (estadoBafIdRaw) {
     const estadoId = Number(estadoBafIdRaw)
@@ -145,95 +129,36 @@ async function guardarGestionBaf(formData: FormData) {
       throw new Error('Estado BAF inválido.')
     }
 
-    const { data: estado } = await supabase
-      .from('estados_baf')
-      .select('id, nombre')
-      .eq('id', estadoId)
-      .eq('activo', true)
-      .maybeSingle()
-
-    if (!estado) {
-      throw new Error('El Estado BAF seleccionado no está disponible.')
-    }
-
-    estadoNuevoId = estado.id
-    estadoNuevoNombre = estado.nombre
+    estadoBafId = estadoId
   }
-
-  let estadoAnteriorNombre: string | null = null
-
-  if (gestionActual?.estado_baf_id) {
-    const { data: estadoAnterior } = await supabase
-      .from('estados_baf')
-      .select('nombre')
-      .eq('id', gestionActual.estado_baf_id)
-      .maybeSingle()
-
-    estadoAnteriorNombre = estadoAnterior?.nombre ?? null
-  }
-
-  const ahora = new Date().toISOString()
 
   const texto = (nombre: string) => {
     const valor = String(formData.get(nombre) ?? '').trim()
     return valor || null
   }
 
-  const { error: gestionError } = await supabase
-    .from('gestion_baf')
-    .upsert(
-      {
-        operacion_id: idOperacion,
-        estado_baf_id: estadoNuevoId,
-        fecha_gestion: ahora,
-        prospector: texto('prospector'),
-        detalle_lead: operacion.origen_dato || null,
-        cia_celular: texto('cia_celular'),
-        sds: texto('sds'),
-        orden_trabajo: texto('orden_trabajo'),
-        linea_fija: texto('linea_fija'),
-        fecha_instalacion: texto('fecha_instalacion'),
-        ciclo_cuenta: texto('ciclo_cuenta'),
-        motivo_estado: texto('motivo_estado'),
-        updated_by: user.id,
-        updated_at: ahora,
-      },
-      {
-        onConflict: 'operacion_id',
-      }
-    )
+  const { error } = await supabase.rpc('super_guardar_gestion_baf', {
+    p_operacion_id: idOperacion,
+    p_estado_baf_id: estadoBafId,
+    p_prospector: texto('prospector'),
+    p_cia_celular: texto('cia_celular'),
+    p_sds: texto('sds'),
+    p_orden_trabajo: texto('orden_trabajo'),
+    p_linea_fija: texto('linea_fija'),
+    p_fecha_instalacion: texto('fecha_instalacion'),
+    p_ciclo_cuenta: texto('ciclo_cuenta'),
+    p_motivo_estado: texto('motivo_estado'),
+  })
 
-  if (gestionError) {
-    throw new Error(`No se pudo guardar la gestión BAF: ${gestionError.message}`)
+  if (error) {
+    throw new Error(`No se pudo guardar la gestión BAF: ${error.message}`)
   }
 
-  const cambioEstado =
-    gestionActual?.estado_baf_id !== estadoNuevoId &&
-    estadoNuevoNombre !== null
-
-  if (cambioEstado) {
-    const { error: historialError } = await supabase
-      .from('historial_estados_operacion')
-      .insert({
-        operacion_id: idOperacion,
-        tipo: 'BAF',
-        estado_anterior: estadoAnteriorNombre,
-        estado_nuevo: estadoNuevoNombre,
-        usuario_id: user.id,
-        fecha_hora: ahora,
-        observacion: texto('motivo_estado'),
-      })
-
-    if (historialError) {
-      throw new Error(
-        `La gestión BAF se guardó, pero no se pudo registrar el historial: ${historialError.message}`
-      )
-    }
-  }
-
-  revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/super')
   revalidatePath('/mis-ventas')
-  redirect(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  redirect(`/super/ventas/${encodeURIComponent(idOperacion)}`)
 }
 
 
@@ -257,105 +182,23 @@ async function guardarGestionPorta(formData: FormData) {
     throw new Error('Operación inválida.')
   }
 
-  const { data: operacion } = await supabase
-    .from('operaciones')
-    .select('id_operacion, tipo, usuario_id')
-    .eq('id_operacion', idOperacion)
-    .eq('usuario_id', user.id)
-    .eq('tipo', 'PORTA')
-    .maybeSingle()
-
-  if (!operacion) {
-    throw new Error('No se encontró la operación PORTA/Línea Nueva o no pertenece al usuario.')
-  }
-
-  const { data: gestionActual } = await supabase
-    .from('gestion_porta')
-    .select('estado_porta_id, fecha_carga_stl, fecha_porta')
-    .eq('operacion_id', idOperacion)
-    .maybeSingle()
-
-  let estadoNuevoId: number | null = null
-  let estadoNuevoNombre: string | null = null
-  let estadoNuevoCodigo: string | null = null
-
+  let estadoPortaId: number | null = null
   if (estadoPortaIdRaw) {
-    const estadoId = Number(estadoPortaIdRaw)
-
-    if (!Number.isInteger(estadoId)) {
+    const valor = Number(estadoPortaIdRaw)
+    if (!Number.isInteger(valor)) {
       throw new Error('Estado PORTA inválido.')
     }
-
-    const { data: estado } = await supabase
-      .from('estados_porta')
-      .select('id, codigo, nombre')
-      .eq('id', estadoId)
-      .eq('activo', true)
-      .maybeSingle()
-
-    if (!estado) {
-      throw new Error('El Estado PORTA seleccionado no está disponible.')
-    }
-
-    estadoNuevoId = estado.id
-    estadoNuevoNombre = estado.nombre
-    estadoNuevoCodigo = estado.codigo
-  }
-
-  let estadoAnteriorNombre: string | null = null
-
-  if (gestionActual?.estado_porta_id) {
-    const { data: estadoAnterior } = await supabase
-      .from('estados_porta')
-      .select('nombre')
-      .eq('id', gestionActual.estado_porta_id)
-      .maybeSingle()
-
-    estadoAnteriorNombre = estadoAnterior?.nombre ?? null
-  }
-
-  let bbooId: string | null = null
-
-  if (bbooIdRaw) {
-    const { data: bboo } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', bbooIdRaw)
-      .eq('activo', true)
-      .eq('rol', 'BBOO')
-      .maybeSingle()
-
-    if (!bboo) {
-      throw new Error('El usuario BBOO seleccionado no está disponible.')
-    }
-
-    bbooId = bboo.id
+    estadoPortaId = valor
   }
 
   let medioDespachoId: number | null = null
-
   if (medioDespachoIdRaw) {
-    const medioId = Number(medioDespachoIdRaw)
-
-    if (!Number.isInteger(medioId)) {
+    const valor = Number(medioDespachoIdRaw)
+    if (!Number.isInteger(valor)) {
       throw new Error('Medio de despacho CHIP inválido.')
     }
-
-    const { data: medio } = await supabase
-      .from('medios_despacho_chip')
-      .select('id')
-      .eq('id', medioId)
-      .eq('activo', true)
-      .maybeSingle()
-
-    if (!medio) {
-      throw new Error('El Medio de despacho CHIP seleccionado no está disponible.')
-    }
-
-    medioDespachoId = medio.id
+    medioDespachoId = valor
   }
-
-  const ahora = new Date().toISOString()
 
   const texto = (nombre: string) => {
     const valor = String(formData.get(nombre) ?? '').trim()
@@ -369,75 +212,31 @@ async function guardarGestionPorta(formData: FormData) {
     return null
   }
 
-  let fechaCargaStl = gestionActual?.fecha_carga_stl ?? null
-  let fechaPorta = gestionActual?.fecha_porta ?? null
+  const { error } = await supabase.rpc('super_guardar_gestion_porta', {
+    p_operacion_id: idOperacion,
+    p_estado_porta_id: estadoPortaId,
+    p_bboo_id: bbooIdRaw || null,
+    p_sim: texto('sim'),
+    p_plan_cargado: texto('plan_cargado'),
+    p_sds: texto('sds'),
+    p_spn: texto('spn'),
+    p_pin_lnva_nro: texto('pin_lnva_nro'),
+    p_documentacion_dni: booleano('documentacion_dni'),
+    p_medio_despacho_chip_id: medioDespachoId,
+    p_tiene_baf: booleano('tiene_baf'),
+    p_zona_baf: booleano('zona_baf'),
+    p_observaciones_gestion: texto('observaciones_gestion'),
+  })
 
-  if (!fechaCargaStl && estadoNuevoCodigo === 'CARGADO_STL') {
-    fechaCargaStl = ahora
+  if (error) {
+    throw new Error(`No se pudo guardar la gestión PORTA/Línea Nueva: ${error.message}`)
   }
 
-  if (!fechaPorta && estadoNuevoCodigo === 'ACTIVA_NRO_PORTADO') {
-    fechaPorta = ahora
-  }
-
-  const { error: gestionError } = await supabase
-    .from('gestion_porta')
-    .upsert(
-      {
-        operacion_id: idOperacion,
-        bboo_id: bbooId,
-        fecha_carga_stl: fechaCargaStl,
-        sim: texto('sim'),
-        plan_cargado: texto('plan_cargado'),
-        sds: texto('sds'),
-        spn: texto('spn'),
-        pin_lnva_nro: texto('pin_lnva_nro'),
-        documentacion_dni: booleano('documentacion_dni'),
-        medio_despacho_chip_id: medioDespachoId,
-        fecha_porta: fechaPorta,
-        tiene_baf: booleano('tiene_baf'),
-        zona_baf: booleano('zona_baf'),
-        observaciones_gestion: texto('observaciones_gestion'),
-        estado_porta_id: estadoNuevoId,
-        updated_by: user.id,
-        updated_at: ahora,
-      },
-      {
-        onConflict: 'operacion_id',
-      }
-    )
-
-  if (gestionError) {
-    throw new Error(`No se pudo guardar la gestión PORTA/Línea Nueva: ${gestionError.message}`)
-  }
-
-  const cambioEstado =
-    gestionActual?.estado_porta_id !== estadoNuevoId &&
-    estadoNuevoNombre !== null
-
-  if (cambioEstado) {
-    const { error: historialError } = await supabase
-      .from('historial_estados_operacion')
-      .insert({
-        operacion_id: idOperacion,
-        tipo: 'PORTA',
-        estado_anterior: estadoAnteriorNombre,
-        estado_nuevo: estadoNuevoNombre,
-        usuario_id: user.id,
-        fecha_hora: ahora,
-        observacion: texto('observaciones_gestion'),
-      })
-
-    if (historialError) {
-      throw new Error(
-        `La gestión PORTA/Línea Nueva se guardó, pero no se pudo registrar el historial: ${historialError.message}`
-      )
-    }
-  }
-
-  revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/super')
   revalidatePath('/mis-ventas')
-  redirect(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  redirect(`/super/ventas/${encodeURIComponent(idOperacion)}`)
 }
 
 export default async function SuperDetalleVentaPage({
@@ -668,7 +467,26 @@ export default async function SuperDetalleVentaPage({
   const gestionBaf = op.gestion_baf
   const gestionPorta = op.gestion_porta
 
-  const esBaf = op.tipo === 'BAF'
+  let bbooActualFueraDeLista: any = null
+
+  if (
+    gestionPorta?.bboo_id &&
+    !(usuariosBboo ?? []).some((bboo: any) => bboo.id === gestionPorta.bboo_id)
+  ) {
+    const { data: bbooActual, error: bbooActualError } = await supabase
+      .from('profiles')
+      .select('id, nombre, vendedor, rol, activo')
+      .eq('id', gestionPorta.bboo_id)
+      .maybeSingle()
+
+    if (bbooActualError) {
+      throw new Error(`No se pudo cargar el BBOO actual: ${bbooActualError.message}`)
+    }
+
+    bbooActualFueraDeLista = bbooActual
+  }
+
+  const esBaf = op.tipo === 'BAF' 
   const esPorta = op.tipo === 'PORTA'
   const tipoVisible =
     esPorta && porta?.es_linea_nueva
@@ -695,8 +513,8 @@ export default async function SuperDetalleVentaPage({
         usuario={profile.nombre?.trim() || user.email || 'Usuario'}
         actual="SUPER"
       />
-      <div className="mx-auto max-w-6xl p-4 sm:p-8">
 
+      <div className="mx-auto max-w-6xl p-4 sm:p-8">
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="mb-2">
@@ -738,60 +556,27 @@ export default async function SuperDetalleVentaPage({
               <Campo label="Tipo" value={tipoVisible} />
             </div>
 
-            <form action={guardarAsignacionesSuper} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <input type="hidden" name="id_operacion" value={op.id_operacion} />
-              <input type="hidden" name="tipo" value={op.tipo} />
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-sm font-semibold text-gray-800">Vendedor</span>
-                  <select
-                    name="vendedor_id"
-                    defaultValue={op.usuario_id ?? ''}
-                    required
-                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                  >
-                    <option value="" disabled>Seleccionar vendedor</option>
-                    {vendedoresDisponibles.map((vendedor: any) => (
-                      <option key={vendedor.id} value={vendedor.id}>
-                        {vendedor.vendedor || vendedor.nombre}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="mt-1 block text-xs text-gray-500">
-                    Actual: {mostrar(op.vendedor)}
-                  </span>
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-semibold text-gray-800">Responsable</span>
-                  <select
-                    name="responsable_id"
-                    defaultValue={responsableActualId ?? ''}
-                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                  >
-                    <option value="">Sin asignar</option>
-                    {(responsables ?? []).map((responsable: any) => (
-                      <option key={responsable.id} value={responsable.id}>
-                        {responsable.vendedor || responsable.nombre}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="mt-1 block text-xs text-gray-500">
-                    Actual: {responsableActual?.vendedor || responsableActual?.nombre || 'Sin asignar'}
-                  </span>
-                </label>
-              </div>
-
-              <div className="mt-4 flex justify-end">
-                <button
-                  type="submit"
-                  className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
-                >
-                  Guardar asignaciones
-                </button>
-              </div>
-            </form>
+            <AsignacionesSuperForm
+              action={guardarAsignacionesSuper}
+              idOperacion={op.id_operacion}
+              tipo={op.tipo}
+              vendedorActualId={op.usuario_id ?? ''}
+              vendedorActualNombre={mostrar(op.vendedor)}
+              responsableActualId={responsableActualId ?? ''}
+              responsableActualNombre={
+                responsableActual?.vendedor ||
+                responsableActual?.nombre ||
+                'Sin asignar'
+              }
+              vendedores={vendedoresDisponibles.map((vendedor: any) => ({
+                id: vendedor.id,
+                nombre: vendedor.vendedor || vendedor.nombre,
+              }))}
+              responsables={(responsables ?? []).map((responsable: any) => ({
+                id: responsable.id,
+                nombre: responsable.vendedor || responsable.nombre,
+              }))}
+            />
           </section>
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
@@ -908,8 +693,8 @@ export default async function SuperDetalleVentaPage({
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-semibold text-gray-900">Gestión</h2>
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-                Vista Supervisor · solo lectura
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                Supervisor · editable
               </span>
             </div>
 
@@ -922,55 +707,396 @@ export default async function SuperDetalleVentaPage({
                   responsableActual?.nombre ||
                   (responsableActualId ? 'Usuario no disponible' : 'Sin asignar')}
               </div>
+              <div className="mt-1 text-xs text-gray-500">
+                El Responsable se modifica desde Asignaciones.
+              </div>
             </div>
 
             {esBaf ? (
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <Campo label="Estado BAF" value={gestionBaf?.estados_baf?.nombre || 'Sin gestión'} />
-                <Campo label="Fecha Gestión" value={fechaArgentina(gestionBaf?.fecha_gestion)} />
-                <Campo label="Prospector" value={gestionBaf?.prospector} />
-                <Campo label="Detalle Lead" value={op.origen_dato} />
-                <Campo label="CIA Celular" value={gestionBaf?.cia_celular} />
-                <Campo label="SDS" value={gestionBaf?.sds} />
-                <Campo label="Orden Trabajo" value={gestionBaf?.orden_trabajo} />
-                <Campo label="Línea Fija" value={gestionBaf?.linea_fija} />
-                <Campo label="Fecha Instalación" value={gestionBaf?.fecha_instalacion} ancho />
-                <Campo label="Ciclo Cuenta" value={gestionBaf?.ciclo_cuenta} />
-                <Campo label="Motivo Estado" value={gestionBaf?.motivo_estado} ancho />
-              </div>
+              <form action={guardarGestionBaf}>
+                <input type="hidden" name="id_operacion" value={op.id_operacion} />
+
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">Estado BAF</span>
+                    <select
+                      name="estado_baf_id"
+                      defaultValue={gestionBaf?.estado_baf_id ? String(gestionBaf.estado_baf_id) : ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      <option value="">Sin estado</option>
+                      {gestionBaf?.estado_baf_id &&
+                        !(estadosBaf ?? []).some((estado: any) => estado.id === gestionBaf.estado_baf_id) ? (
+                          <option value={String(gestionBaf.estado_baf_id)}>
+                            {gestionBaf?.estados_baf?.nombre || 'Estado actual'} (inactivo)
+                          </option>
+                        ) : null}
+                      {(estadosBaf ?? []).map((estado: any) => (
+                        <option key={estado.id} value={String(estado.id)}>
+                          {estado.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                      Fecha Gestión
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-gray-800">
+                      {fechaArgentina(gestionBaf?.fecha_gestion)}
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      Se actualiza automáticamente cuando existe un cambio real.
+                    </div>
+                  </div>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">Prospector</span>
+                    <input
+                      type="text"
+                      name="prospector"
+                      defaultValue={gestionBaf?.prospector ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                      Detalle Lead
+                    </div>
+                    <div className="mt-1 break-words text-sm text-gray-800">
+                      {mostrar(op.origen_dato)}
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">Solo lectura</div>
+                  </div>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">CIA Celular</span>
+                    <input
+                      type="text"
+                      name="cia_celular"
+                      defaultValue={gestionBaf?.cia_celular ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">SDS</span>
+                    <input
+                      type="text"
+                      name="sds"
+                      defaultValue={gestionBaf?.sds ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">Orden Trabajo</span>
+                    <input
+                      type="text"
+                      name="orden_trabajo"
+                      defaultValue={gestionBaf?.orden_trabajo ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">Línea Fija</span>
+                    <input
+                      type="text"
+                      name="linea_fija"
+                      defaultValue={gestionBaf?.linea_fija ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <label className="block sm:col-span-2">
+                    <span className="text-sm font-semibold text-gray-800">Fecha Instalación</span>
+                    <input
+                      type="text"
+                      name="fecha_instalacion"
+                      defaultValue={gestionBaf?.fecha_instalacion ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">Ciclo Cuenta</span>
+                    <input
+                      type="text"
+                      name="ciclo_cuenta"
+                      defaultValue={gestionBaf?.ciclo_cuenta ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <label className="block sm:col-span-2">
+                    <span className="text-sm font-semibold text-gray-800">Motivo Estado</span>
+                    <textarea
+                      name="motivo_estado"
+                      rows={3}
+                      defaultValue={gestionBaf?.motivo_estado ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
+                  <div className="text-xs text-gray-500">
+                    Solo se registran en el historial los campos que realmente cambian.
+                  </div>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+                  >
+                    Guardar gestión BAF
+                  </button>
+                </div>
+              </form>
             ) : esPorta ? (
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <Campo label="Estado" value={gestionPorta?.estados_porta?.nombre || 'Sin gestión'} />
-                <Campo
-                  label="BBOO"
-                  value={
-                    (usuariosBboo ?? []).find((bboo: any) => bboo.id === gestionPorta?.bboo_id)
-                      ?.vendedor ||
-                    (usuariosBboo ?? []).find((bboo: any) => bboo.id === gestionPorta?.bboo_id)
-                      ?.nombre ||
-                    'Sin asignar'
-                  }
-                />
-                <Campo label="Fecha Carga STL" value={fechaArgentina(gestionPorta?.fecha_carga_stl)} />
-                <Campo label="Fecha PORTA" value={fechaArgentina(gestionPorta?.fecha_porta)} />
-                <Campo label="SIM" value={gestionPorta?.sim} />
-                <Campo label="PLAN" value={gestionPorta?.plan_cargado} />
-                <Campo label="SDS" value={gestionPorta?.sds} />
-                <Campo label="SPN" value={gestionPorta?.spn} />
-                <Campo label="PIN / LNVA NRO" value={gestionPorta?.pin_lnva_nro} />
-                <Campo label="Documentación DNI" value={gestionPorta?.documentacion_dni} />
-                <Campo
-                  label="Medio de despacho CHIP"
-                  value={gestionPorta?.medios_despacho_chip?.nombre}
-                />
-                <Campo label="Tiene BAF" value={gestionPorta?.tiene_baf} />
-                <Campo label="Zona BAF" value={gestionPorta?.zona_baf} />
-                <Campo
-                  label="Observaciones gestión"
-                  value={gestionPorta?.observaciones_gestion}
-                  ancho
-                />
-              </div>
+              <form action={guardarGestionPorta}>
+                <input type="hidden" name="id_operacion" value={op.id_operacion} />
+
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">Estado</span>
+                    <select
+                      name="estado_porta_id"
+                      defaultValue={
+                        gestionPorta?.estado_porta_id
+                          ? String(gestionPorta.estado_porta_id)
+                          : ''
+                      }
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      <option value="">Sin estado</option>
+                      {gestionPorta?.estado_porta_id &&
+                      !(estadosPorta ?? []).some(
+                        (estado: any) => estado.id === gestionPorta.estado_porta_id
+                      ) ? (
+                        <option value={String(gestionPorta.estado_porta_id)}>
+                          {gestionPorta?.estados_porta?.nombre || 'Estado actual'} (inactivo)
+                        </option>
+                      ) : null}
+                      {(estadosPorta ?? []).map((estado: any) => (
+                        <option key={estado.id} value={String(estado.id)}>
+                          {estado.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">BBOO</span>
+                    <select
+                      name="bboo_id"
+                      defaultValue={gestionPorta?.bboo_id ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      <option value="">Sin asignar</option>
+                      {bbooActualFueraDeLista ? (
+                        <option value={bbooActualFueraDeLista.id}>
+                          {bbooActualFueraDeLista.vendedor ||
+                            bbooActualFueraDeLista.nombre ||
+                            'BBOO actual'}{' '}
+                          (inactivo)
+                        </option>
+                      ) : null}
+                      {(usuariosBboo ?? []).map((bboo: any) => (
+                        <option key={bboo.id} value={bboo.id}>
+                          {bboo.vendedor || bboo.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                      Fecha Carga STL
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-gray-800">
+                      {fechaArgentina(gestionPorta?.fecha_carga_stl)}
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      Se registra automáticamente al pasar a Cargado STL.
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                      Fecha PORTA
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-gray-800">
+                      {fechaArgentina(gestionPorta?.fecha_porta)}
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      Se registra automáticamente al pasar a Cargado STL.
+                    </div>
+                  </div>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">SIM</span>
+                    <input
+                      type="text"
+                      name="sim"
+                      defaultValue={gestionPorta?.sim ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">PLAN</span>
+                    <input
+                      type="text"
+                      name="plan_cargado"
+                      defaultValue={gestionPorta?.plan_cargado ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">SDS</span>
+                    <input
+                      type="text"
+                      name="sds"
+                      defaultValue={gestionPorta?.sds ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">SPN</span>
+                    <input
+                      type="text"
+                      name="spn"
+                      defaultValue={gestionPorta?.spn ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">PIN / LNVA NRO</span>
+                    <input
+                      type="text"
+                      name="pin_lnva_nro"
+                      defaultValue={gestionPorta?.pin_lnva_nro ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">Documentación DNI</span>
+                    <select
+                      name="documentacion_dni"
+                      defaultValue={
+                        gestionPorta?.documentacion_dni === true
+                          ? 'SI'
+                          : gestionPorta?.documentacion_dni === false
+                            ? 'NO'
+                            : ''
+                      }
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      <option value="">Sin informar</option>
+                      <option value="SI">Sí</option>
+                      <option value="NO">No</option>
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">
+                      Medio de despacho CHIP
+                    </span>
+                    <select
+                      name="medio_despacho_chip_id"
+                      defaultValue={
+                        gestionPorta?.medio_despacho_chip_id
+                          ? String(gestionPorta.medio_despacho_chip_id)
+                          : ''
+                      }
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      <option value="">Sin asignar</option>
+                      {gestionPorta?.medio_despacho_chip_id &&
+                      !(mediosDespacho ?? []).some(
+                        (medio: any) => medio.id === gestionPorta.medio_despacho_chip_id
+                      ) ? (
+                        <option value={String(gestionPorta.medio_despacho_chip_id)}>
+                          {gestionPorta?.medios_despacho_chip?.nombre || 'Medio actual'} (inactivo)
+                        </option>
+                      ) : null}
+                      {(mediosDespacho ?? []).map((medio: any) => (
+                        <option key={medio.id} value={String(medio.id)}>
+                          {medio.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">Tiene BAF</span>
+                    <select
+                      name="tiene_baf"
+                      defaultValue={
+                        gestionPorta?.tiene_baf === true
+                          ? 'SI'
+                          : gestionPorta?.tiene_baf === false
+                            ? 'NO'
+                            : ''
+                      }
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      <option value="">Sin informar</option>
+                      <option value="SI">Sí</option>
+                      <option value="NO">No</option>
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-sm font-semibold text-gray-800">Zona BAF</span>
+                    <select
+                      name="zona_baf"
+                      defaultValue={
+                        gestionPorta?.zona_baf === true
+                          ? 'SI'
+                          : gestionPorta?.zona_baf === false
+                            ? 'NO'
+                            : ''
+                      }
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      <option value="">Sin informar</option>
+                      <option value="SI">Sí</option>
+                      <option value="NO">No</option>
+                    </select>
+                  </label>
+
+                  <label className="block sm:col-span-2">
+                    <span className="text-sm font-semibold text-gray-800">
+                      Observaciones gestión
+                    </span>
+                    <textarea
+                      name="observaciones_gestion"
+                      rows={4}
+                      defaultValue={gestionPorta?.observaciones_gestion ?? ''}
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
+                  <div className="text-xs text-gray-500">
+                    Solo se registran en el historial los campos que realmente cambian.
+                  </div>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+                  >
+                    Guardar gestión {porta?.es_linea_nueva ? 'Línea Nueva' : 'PORTA'}
+                  </button>
+                </div>
+              </form>
             ) : (
               <div className="text-sm text-gray-500">Esta venta todavía no tiene datos de gestión.</div>
             )}
