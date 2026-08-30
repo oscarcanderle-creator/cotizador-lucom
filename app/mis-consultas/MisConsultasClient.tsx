@@ -109,6 +109,7 @@ const ETIQUETAS_PEDIDO: Record<string, string> = {
 
 export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }: Props) {
   const supabase = useMemo(() => createClient(), [])
+  const esAdmin = rol === 'ADMIN'
 
   const [tipoRegistro, setTipoRegistro] = useState<TipoRegistro>('CONSULTA')
   const [vistaListado, setVistaListado] = useState<VistaListado>('CONSULTAS')
@@ -277,7 +278,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     setConsultas((cPropias.data || []) as unknown as Consulta[])
     setPedidos((pPropios.data || []) as unknown as Pedido[])
 
-    if (puedeGestionarVentas) {
+    if (puedeGestionarVentas || esAdmin) {
       const [cTodas, pTodos] = await Promise.all([
         supabase
           .from('consultas')
@@ -348,6 +349,14 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
       setConsultasGestion((cTodas.data || []) as unknown as Consulta[])
       setPedidosGestion((pTodos.data || []) as unknown as Pedido[])
 
+      // ADMIN debe poder ver todos los registros aunque no tenga
+      // puede_gestionar_ventas. Esto amplía solo la visibilidad del listado
+      // principal; la sección operativa de gestión sigue dependiendo del permiso.
+      if (esAdmin) {
+        setConsultas((cTodas.data || []) as unknown as Consulta[])
+        setPedidos((pTodos.data || []) as unknown as Pedido[])
+      }
+
       // Si había un formulario de gestión abierto, refrescamos sus datos
       // sin cerrarlo.
       if (gestionAbierta?.tipo === 'CONSULTAS') {
@@ -369,14 +378,14 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     }
 
     setCargando(false)
-  }, [supabase, userId, puedeGestionarVentas, gestionAbierta])
+  }, [supabase, userId, puedeGestionarVentas, esAdmin, gestionAbierta])
 
   useEffect(() => {
     void cargarDatos()
     // La carga inicial debe ejecutarse al montar/cambiar de usuario.
     // gestionAbierta se refresca manualmente después de guardar o tomar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, puedeGestionarVentas])
+  }, [userId, puedeGestionarVentas, esAdmin])
 
   function limpiarConsulta() {
     setTipoConsultaId('')
@@ -728,7 +737,9 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Mis Consultas</h1>
           <p className="mt-1 text-gray-500">
-            Registrá una nueva Consulta o Pedido y consultá los que ingresaste.{puedeGestionarVentas ? ' También podés gestionar los ingresos del equipo.' : ''}
+            {esAdmin
+              ? 'Registrá una nueva Consulta o Pedido y consultá todos los registros ingresados.'
+              : <>Registrá una nueva Consulta o Pedido y consultá los que ingresaste.{puedeGestionarVentas ? ' También podés gestionar los ingresos del equipo.' : ''}</>}
           </p>
         </div>
 
@@ -1925,7 +1936,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
       )}
 
       <section className="mt-8">
-        <h2 className="mb-4 text-xl font-bold text-gray-900">Mis registros</h2>
+        <h2 className="mb-4 text-xl font-bold text-gray-900">{esAdmin ? 'Todos los registros' : 'Mis registros'}</h2>
         <div className="mb-4 flex gap-2">
           <button
             type="button"
@@ -1947,7 +1958,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
           <div className="rounded-xl border bg-white p-6 text-gray-500">Cargando...</div>
         ) : vistaListado === 'CONSULTAS' ? (
           <div className="space-y-3">
-            {consultas.length === 0 && <Vacio texto="Todavía no ingresaste Consultas." />}
+            {consultas.length === 0 && <Vacio texto={esAdmin ? "No hay Consultas registradas." : "Todavía no ingresaste Consultas."} />}
             {consultas.map((x) => (
               <article key={x.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
@@ -1975,7 +1986,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
           </div>
         ) : (
           <div className="space-y-3">
-            {pedidos.length === 0 && <Vacio texto="Todavía no ingresaste Pedidos." />}
+            {pedidos.length === 0 && <Vacio texto={esAdmin ? "No hay Pedidos registrados." : "Todavía no ingresaste Pedidos."} />}
             {pedidos.map((x) => (
               <article key={x.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
