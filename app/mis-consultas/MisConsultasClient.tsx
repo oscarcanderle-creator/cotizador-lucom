@@ -484,35 +484,28 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
 
     setGuardando(true)
 
-    const datosPedido = esRellamado
-      ? {
-          vendedor_id: userId,
-          tipo_pedido_id: Number(tipoPedidoId),
-          dni: normalizar(dniPedido),
-          telefono: telefonoPedido,
-          observaciones_vendedor: normalizar(observacionesPedido),
-        }
-      : {
-          vendedor_id: userId,
-          tipo_pedido_id: Number(tipoPedidoId),
-          telefono: telefonoPedido,
-          domicilio: normalizar(domicilioPedido),
-          tipo_domicilio: normalizar(tipoDomicilioPedido),
-          nombre_edificio: normalizar(nombreEdificio),
-          cant_unidades_f: normalizar(cantUnidades),
-          cant_pisos: normalizar(cantPisos),
-          cant_torres: normalizar(cantTorres),
-          administrador: normalizar(administrador),
-          telefono_adm: normalizar(telefonoAdm),
-          correo_adm: normalizar(correoAdm),
-          encargado: normalizar(encargado),
-          telefono_enc: normalizar(telefonoEnc),
-          correo_enc: normalizar(correoEnc),
-          observaciones_vendedor: normalizar(observacionesPedido),
-          permisos_acceso: normalizar(permisosAcceso),
-          planos: normalizar(planos),
-          cant_preventas: normalizar(cantPreventas),
-        }
+    const datosPedido = {
+      vendedor_id: userId,
+      tipo_pedido_id: Number(tipoPedidoId),
+      dni: esRellamado ? normalizar(dniPedido) : null,
+      telefono: telefonoPedido,
+      domicilio: esRellamado ? null : normalizar(domicilioPedido),
+      tipo_domicilio: esRellamado ? null : normalizar(tipoDomicilioPedido),
+      nombre_edificio: esRellamado ? null : normalizar(nombreEdificio),
+      cant_unidades_f: esRellamado ? null : normalizar(cantUnidades),
+      cant_pisos: esRellamado ? null : normalizar(cantPisos),
+      cant_torres: esRellamado ? null : normalizar(cantTorres),
+      administrador: esRellamado ? null : normalizar(administrador),
+      telefono_adm: esRellamado ? null : normalizar(telefonoAdm),
+      correo_adm: esRellamado ? null : normalizar(correoAdm),
+      encargado: esRellamado ? null : normalizar(encargado),
+      telefono_enc: esRellamado ? null : normalizar(telefonoEnc),
+      correo_enc: esRellamado ? null : normalizar(correoEnc),
+      observaciones_vendedor: normalizar(observacionesPedido),
+      permisos_acceso: esRellamado ? null : normalizar(permisosAcceso),
+      planos: esRellamado ? null : normalizar(planos),
+      cant_preventas: esRellamado ? null : normalizar(cantPreventas),
+    }
 
     const { error: insertError } = await supabase
       .from('pedidos')
