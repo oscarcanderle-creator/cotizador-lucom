@@ -202,7 +202,7 @@ export default function FormularioVentas({
         </div>
 
         <div className="grid grid-cols-3 gap-1 rounded-2xl bg-white border border-gray-200 p-1.5 mb-3 shadow-sm">
-          {(['PORTA', 'BAF', 'FACTIBILIDAD'] as TipoOperacion[]).map(
+           {(['PORTA', 'BAF'] as TipoOperacion[]).map(
             (opcion) => (
               <button
                 key={opcion}
