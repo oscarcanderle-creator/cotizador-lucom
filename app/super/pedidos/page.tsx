@@ -1,0 +1,112 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '../../../utils/supabase/server'
+import { createAdminClient } from '../../../utils/supabase/admin'
+import AppHeader from '../../../components/AppHeader'
+
+type SearchParams = Promise<{ q?: string; tipo?: string; vendedor?: string; responsable?: string; estado?: string }>
+
+function fechaArgentina(fecha: string | null) {
+  if (!fecha) return '-'
+  return new Intl.DateTimeFormat('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  }).format(new Date(fecha))
+}
+
+export default async function SuperPedidosPage({ searchParams }: { searchParams: SearchParams }) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: profile } = await supabase.from('profiles').select('nombre,rol,activo').eq('id', user.id).single()
+  if (!profile?.activo) redirect('/login')
+  if (!['ADMIN', 'SUPERVISOR'].includes(profile.rol)) redirect('/ventas')
+
+  // SUPER y ADMIN ya fueron validados arriba. Para esta vista global de solo lectura
+  // usamos el cliente administrativo del servidor y evitamos que RLS recorte el listado.
+  const dataClient = createAdminClient()
+
+  const params = await searchParams
+  const q = String(params?.q ?? '').trim().toLowerCase()
+  const filtroTipo = String(params?.tipo ?? '').trim()
+  const filtroVendedor = String(params?.vendedor ?? '').trim()
+  const filtroResponsable = String(params?.responsable ?? '').trim()
+  const filtroEstado = String(params?.estado ?? '').trim()
+
+  const [
+    { data: pedidos, error: pedidosError },
+    { data: tipos, error: tiposError },
+    { data: estados, error: estadosError },
+    { data: perfiles, error: perfilesError },
+  ] = await Promise.all([
+    dataClient.from('pedidos').select(`
+      id, codigo, marca_temporal, tipo_pedido_id, vendedor_id, responsable_id,
+      dni, telefono, domicilio, observaciones_vendedor, observaciones_gestion,
+      estado_pedido_id, fecha_ok, wo
+    `).order('marca_temporal', { ascending: false }),
+    dataClient.from('tipos_pedido').select('id,codigo,nombre').order('orden').order('nombre'),
+    dataClient.from('estados_pedido').select('id,codigo,nombre,tipo_estado,activo').order('orden').order('nombre'),
+    dataClient.from('profiles').select('id,nombre,vendedor').order('nombre'),
+  ])
+  if (pedidosError) throw new Error(`No se pudieron cargar los Pedidos: ${pedidosError.message}`)
+  if (tiposError) throw new Error(`No se pudieron cargar los Tipos de Pedido: ${tiposError.message}`)
+  if (estadosError) throw new Error(`No se pudieron cargar los Estados de Pedido: ${estadosError.message}`)
+  if (perfilesError) throw new Error(`No se pudieron cargar los usuarios: ${perfilesError.message}`)
+
+  const tipoMap = new Map((tipos ?? []).map((x:any)=>[String(x.id),x]))
+  const estadoMap = new Map((estados ?? []).map((x:any)=>[String(x.id),x]))
+  const perfilMap = new Map((perfiles ?? []).map((x:any)=>[String(x.id),x]))
+  const nombrePerfil = (id:string|null) => {
+    if (!id) return 'Sin responsable'
+    const p:any = perfilMap.get(String(id))
+    return p?.vendedor || p?.nombre || 'Usuario no disponible'
+  }
+  const estadoTexto = (p:any) => p.estado_pedido_id ? ((estadoMap.get(String(p.estado_pedido_id)) as any)?.nombre || 'Estado no disponible') : 'Sin estado'
+
+  const vendedores = Array.from(new Set((pedidos ?? []).map((p:any)=>nombrePerfil(p.vendedor_id)))).sort((a,b)=>a.localeCompare(b,'es'))
+  const responsables = Array.from(new Set((pedidos ?? []).map((p:any)=>nombrePerfil(p.responsable_id)))).sort((a,b)=>a.localeCompare(b,'es'))
+  const estadosFiltro = Array.from(new Set((pedidos ?? []).map((p:any)=>estadoTexto(p)))).sort((a,b)=>a.localeCompare(b,'es'))
+
+  const filas = (pedidos ?? []).filter((p:any)=>{
+    const tipo:any = tipoMap.get(String(p.tipo_pedido_id))
+    const vendedor=nombrePerfil(p.vendedor_id), responsable=nombrePerfil(p.responsable_id), estado=estadoTexto(p)
+    if (filtroTipo && String(p.tipo_pedido_id)!==filtroTipo) return false
+    if (filtroVendedor && vendedor!==filtroVendedor) return false
+    if (filtroResponsable && responsable!==filtroResponsable) return false
+    if (filtroEstado && estado!==filtroEstado) return false
+    if (!q) return true
+    return [p.id,p.codigo,p.dni,p.telefono,p.domicilio,p.wo,p.observaciones_vendedor,p.observaciones_gestion,tipo?.nombre,vendedor,responsable,estado].filter(Boolean).join(' ').toLowerCase().includes(q)
+  })
+
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <AppHeader rol={profile.rol} usuario={profile.nombre?.trim() || user.email || 'Usuario'} actual="SUPER" />
+      <div className="mx-auto max-w-7xl p-4 sm:p-8">
+        <div className="mb-6"><h1 className="text-2xl font-bold text-gray-900">Super / Pedidos</h1><p className="mt-1 text-sm text-gray-500">Supervisión global de Pedidos. Esta pantalla es de control y lectura.</p></div>
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <a href="/super" className="rounded-2xl border border-gray-200 bg-white p-4 hover:border-red-300"><div className="text-sm font-semibold text-gray-900">Ventas</div><div className="mt-1 text-xs text-gray-500">BAF, PORTA y Línea Nueva</div></a>
+          <a href="/super/consultas" className="rounded-2xl border border-gray-200 bg-white p-4 hover:border-red-300"><div className="text-sm font-semibold text-gray-900">Consultas</div><div className="mt-1 text-xs text-gray-500">Deuda y Cobertura</div></a>
+          <a href="/super/pedidos" className="rounded-2xl border border-red-200 bg-red-50 p-4"><div className="text-sm font-semibold text-red-700">Pedidos</div><div className="mt-1 text-xs text-gray-500">Pedidos y Rellamados</div></a>
+        </div>
+
+        <form method="get" className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 bg-white p-4 md:grid-cols-2 xl:grid-cols-6">
+          <div className="md:col-span-2 xl:col-span-2"><label className="mb-1 block text-xs font-medium text-gray-500">Buscar</label><input name="q" defaultValue={params?.q ?? ''} placeholder="Código, DNI, teléfono, domicilio, WO..." className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900" /></div>
+          <div><label className="mb-1 block text-xs font-medium text-gray-500">Tipo</label><select name="tipo" defaultValue={filtroTipo} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"><option value="">Todos</option>{(tipos ?? []).map((t:any)=><option key={t.id} value={String(t.id)}>{t.nombre}</option>)}</select></div>
+          <div><label className="mb-1 block text-xs font-medium text-gray-500">Vendedor</label><select name="vendedor" defaultValue={filtroVendedor} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"><option value="">Todos</option>{vendedores.map(v=><option key={v} value={v}>{v}</option>)}</select></div>
+          <div><label className="mb-1 block text-xs font-medium text-gray-500">Responsable</label><select name="responsable" defaultValue={filtroResponsable} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"><option value="">Todos</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}</select></div>
+          <div><label className="mb-1 block text-xs font-medium text-gray-500">Estado</label><select name="estado" defaultValue={filtroEstado} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"><option value="">Todos</option>{estadosFiltro.map(e=><option key={e} value={e}>{e}</option>)}</select></div>
+          <div className="flex items-end gap-2 md:col-span-2 xl:col-span-6"><button className="rounded-lg bg-red-600 px-5 py-2 font-semibold text-white hover:bg-red-700">Filtrar</button><a href="/super/pedidos" className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50">Limpiar</a></div>
+        </form>
+
+        <div className="mb-3 text-sm text-gray-500">{filas.length} {filas.length===1?'pedido':'pedidos'}</div>
+        <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white md:block"><div className="overflow-x-auto"><table className="w-full text-left text-sm">
+          <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Código</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">DNI</th><th className="px-4 py-3">Teléfono</th><th className="px-4 py-3">Vendedor</th><th className="px-4 py-3">Responsable</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3 text-right">Acción</th></tr></thead>
+          <tbody className="divide-y divide-gray-100">{filas.map((p:any)=>{const tipo:any=tipoMap.get(String(p.tipo_pedido_id)); return <tr key={p.id} className="hover:bg-gray-50"><td className="whitespace-nowrap px-4 py-3 text-gray-600">{fechaArgentina(p.marca_temporal)}</td><td className="px-4 py-3 font-medium text-gray-900">{p.codigo || `#${p.id}`}</td><td className="px-4 py-3">{tipo?.nombre || '-'}</td><td className="px-4 py-3 text-gray-600">{p.dni || '-'}</td><td className="px-4 py-3 text-gray-600">{p.telefono || '-'}</td><td className="px-4 py-3 text-gray-600">{nombrePerfil(p.vendedor_id)}</td><td className="px-4 py-3 text-gray-600">{nombrePerfil(p.responsable_id)}</td><td className="px-4 py-3 text-gray-600">{estadoTexto(p)}</td><td className="px-4 py-3 text-right"><a href={`/super/pedidos/${p.id}`} className="font-medium text-red-600 hover:text-red-700">Ver detalle</a></td></tr>})}{filas.length===0&&<tr><td colSpan={9} className="px-4 py-10 text-center text-gray-500">No se encontraron Pedidos.</td></tr>}</tbody>
+        </table></div></div>
+
+        <div className="space-y-3 md:hidden">{filas.map((p:any)=>{const tipo:any=tipoMap.get(String(p.tipo_pedido_id)); return <div key={p.id} className="rounded-2xl border border-gray-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-gray-900">{p.codigo || `Pedido #${p.id}`}</div><div className="mt-1 text-xs text-gray-500">{fechaArgentina(p.marca_temporal)}</div></div><span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">{tipo?.nombre || 'Pedido'}</span></div><div className="mt-4 space-y-2 text-sm text-gray-700"><div><b>DNI:</b> {p.dni || '-'}</div><div><b>Teléfono:</b> {p.telefono || '-'}</div><div><b>Vendedor:</b> {nombrePerfil(p.vendedor_id)}</div><div><b>Responsable:</b> {nombrePerfil(p.responsable_id)}</div><div><b>Estado:</b> {estadoTexto(p)}</div></div><div className="mt-4 border-t border-gray-100 pt-3 text-right"><a href={`/super/pedidos/${p.id}`} className="text-sm font-semibold text-red-600">Ver detalle</a></div></div>})}</div>
+      </div>
+    </main>
+  )
+}

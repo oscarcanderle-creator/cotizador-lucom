@@ -240,6 +240,30 @@ export default async function SuperVentasPage({
           </p>
         </div>
 
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <a
+            href="/super"
+            className="rounded-2xl border border-red-200 bg-red-50 p-4 transition hover:border-red-300"
+          >
+            <div className="text-sm font-semibold text-red-700">Ventas</div>
+            <div className="mt-1 text-xs text-gray-500">BAF, PORTA y Línea Nueva</div>
+          </a>
+          <a
+            href="/super/consultas"
+            className="rounded-2xl border border-gray-200 bg-white p-4 transition hover:border-red-300"
+          >
+            <div className="text-sm font-semibold text-gray-900">Consultas</div>
+            <div className="mt-1 text-xs text-gray-500">Deuda y Cobertura</div>
+          </a>
+          <a
+            href="/super/pedidos"
+            className="rounded-2xl border border-gray-200 bg-white p-4 transition hover:border-red-300"
+          >
+            <div className="text-sm font-semibold text-gray-900">Pedidos</div>
+            <div className="mt-1 text-xs text-gray-500">Acometida, Proyecto, Ampliación y Rellamado</div>
+          </a>
+        </div>
+
         <form method="get" className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 bg-white p-4 md:grid-cols-2 xl:grid-cols-6">
           <div className="md:col-span-2 xl:col-span-2">
             <label className="mb-1 block text-xs font-medium text-gray-500">Buscar</label>
