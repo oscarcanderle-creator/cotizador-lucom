@@ -99,6 +99,36 @@ export default async function AdminUsuariosPage() {
   )
 
   /*
+   * Para los usuarios inactivos consultamos si tienen actividad
+   * operativa o histórica. La misma validación se repite dentro
+   * de la Server Action antes de eliminar, para no depender de la UI.
+   */
+  const actividadPorId = new Map<string, boolean>()
+
+  await Promise.all(
+    (usuarios ?? [])
+      .filter((usuario) => !usuario.activo)
+      .map(async (usuario) => {
+        const {
+          data: tieneActividad,
+          error: errorActividad,
+        } = await adminClient.rpc(
+          'usuario_tiene_actividad',
+          { p_usuario_id: usuario.id }
+        )
+
+        if (errorActividad) {
+          throw new Error(errorActividad.message)
+        }
+
+        actividadPorId.set(
+          usuario.id,
+          Boolean(tieneActividad)
+        )
+      })
+  )
+
+  /*
    * =====================================================
    * CREAR USUARIO
    * =====================================================
@@ -405,6 +435,9 @@ export default async function AdminUsuariosPage() {
    *
    * Inactivar = suspensión temporal.
    * Eliminar = baja definitiva de Auth + profile.
+   *
+   * Solo puede eliminarse un usuario INACTIVO y sin
+   * ninguna actividad operativa o histórica asociada.
    */
   async function eliminarUsuario(
     formData: FormData
@@ -445,9 +478,64 @@ export default async function AdminUsuariosPage() {
     }
 
     /*
-     * Primero eliminamos Auth.
-     * Si profiles tiene ON DELETE CASCADE desaparecerá solo;
-     * el delete posterior es seguro y cubre ambas estructuras.
+     * Validación obligatoria del estado actual del perfil.
+     * No confiamos en el estado que mostró previamente la pantalla.
+     */
+    const {
+      data: usuarioObjetivo,
+      error: errorUsuarioObjetivo,
+    } = await adminClient
+      .from('profiles')
+      .select('id, activo')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (errorUsuarioObjetivo) {
+      throw new Error(
+        errorUsuarioObjetivo.message
+      )
+    }
+
+    if (!usuarioObjetivo) {
+      throw new Error(
+        'El usuario ya no existe.'
+      )
+    }
+
+    if (usuarioObjetivo.activo) {
+      throw new Error(
+        'Solo se pueden eliminar definitivamente usuarios inactivos.'
+      )
+    }
+
+    /*
+     * La función de base de datos contempla todas las referencias
+     * operativas e históricas definidas para profiles.id, incluso
+     * aquellas cuyo FK usaría SET NULL.
+     */
+    const {
+      data: tieneActividad,
+      error: errorActividad,
+    } = await adminClient.rpc(
+      'usuario_tiene_actividad',
+      { p_usuario_id: id }
+    )
+
+    if (errorActividad) {
+      throw new Error(
+        errorActividad.message
+      )
+    }
+
+    if (tieneActividad) {
+      throw new Error(
+        'Este usuario tiene actividad o historial asociado y no puede eliminarse. Debe permanecer inactivo.'
+      )
+    }
+
+    /*
+     * Recién después de superar todas las validaciones eliminamos
+     * la cuenta de Auth y luego aseguramos la baja de profiles.
      */
     const { error: errorDeleteAuth } =
       await adminClient.auth.admin.deleteUser(id)
@@ -471,6 +559,7 @@ export default async function AdminUsuariosPage() {
     }
 
     revalidatePath('/admin/usuarios')
+    redirect('/admin/usuarios')
   }
 
   return (
@@ -804,7 +893,19 @@ export default async function AdminUsuariosPage() {
                     </form>
 
                     {/* ELIMINAR */}
-                    {usuario.id !== user.id ? (
+                    {usuario.id === user.id ? (
+                      <div className="text-xs text-gray-400 flex items-center">
+                        Usuario administrador actualmente conectado. No puede eliminarse.
+                      </div>
+                    ) : usuario.activo ? (
+                      <div className="text-xs text-gray-400 flex items-center">
+                        Para eliminarlo definitivamente, primero debe quedar INACTIVO.
+                      </div>
+                    ) : actividadPorId.get(usuario.id) ? (
+                      <div className="text-xs text-amber-700 flex items-center">
+                        Tiene actividad o historial asociado. Debe conservarse INACTIVO.
+                      </div>
+                    ) : (
                       <form
                         action={eliminarUsuario}
                         className="flex flex-col sm:flex-row gap-2"
@@ -830,10 +931,6 @@ export default async function AdminUsuariosPage() {
                           Eliminar usuario
                         </button>
                       </form>
-                    ) : (
-                      <div className="text-xs text-gray-400 flex items-center">
-                        Usuario administrador actualmente conectado. No puede eliminarse.
-                      </div>
                     )}
                   </div>
                 </div>
