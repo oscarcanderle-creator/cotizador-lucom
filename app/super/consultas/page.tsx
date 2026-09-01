@@ -63,7 +63,7 @@ export default async function SuperConsultasPage({
       .select(`
         id, marca_temporal, tipo_consulta_id, vendedor_id, responsable_id,
         cliente, dni, telefono, domicilio, localidad, observaciones,
-        estado_consulta_id, estado_deuda_id, estado_cobertura_id, fecha_estado
+        estado_consulta_id, estado_deuda_id, estado_cobertura_id, fecha_estado, fecha_gestion
       `)
       .order('marca_temporal', { ascending: false }),
     dataClient
@@ -132,10 +132,9 @@ export default async function SuperConsultasPage({
     if (filtroEstado && estado !== filtroEstado) return false
     if (!q) return true
 
-    return [
-      c.id, c.cliente, c.dni, c.telefono, c.domicilio, c.localidad,
-      c.observaciones, tipo?.nombre, vendedor, responsable, estado,
-    ].filter(Boolean).join(' ').toLowerCase().includes(q)
+    return [c.id, c.dni, c.telefono]
+      .filter((valor) => valor !== null && valor !== undefined)
+      .some((valor) => String(valor).toLowerCase().includes(q))
   })
 
   return (
@@ -172,7 +171,7 @@ export default async function SuperConsultasPage({
         <form method="get" className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 bg-white p-4 md:grid-cols-2 xl:grid-cols-6">
           <div className="md:col-span-2 xl:col-span-2">
             <label className="mb-1 block text-xs font-medium text-gray-500">Buscar</label>
-            <input name="q" defaultValue={params?.q ?? ''} placeholder="Cliente, DNI, teléfono, domicilio..." className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900" />
+            <input name="q" defaultValue={params?.q ?? ''} placeholder="ID, DNI o teléfono..." className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-500">Tipo</label>
@@ -215,7 +214,7 @@ export default async function SuperConsultasPage({
             <table className="w-full text-left text-sm">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
-                  <th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Tipo</th>
+                  <th className="px-4 py-3">ID</th><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Fecha Gestión</th><th className="px-4 py-3">Tipo</th>
                   <th className="px-4 py-3">Cliente</th><th className="px-4 py-3">DNI</th>
                   <th className="px-4 py-3">Teléfono</th><th className="px-4 py-3">Vendedor</th>
                   <th className="px-4 py-3">Responsable</th><th className="px-4 py-3">Estado</th>
@@ -227,7 +226,7 @@ export default async function SuperConsultasPage({
                   const tipo: any = tipoMap.get(String(c.tipo_consulta_id))
                   return (
                     <tr key={c.id} className="hover:bg-gray-50">
-                      <td className="whitespace-nowrap px-4 py-3 text-gray-600">{fechaArgentina(c.marca_temporal)}</td>
+                      <td className="px-4 py-3 font-semibold text-gray-900">#{c.id}</td><td className="whitespace-nowrap px-4 py-3 text-gray-600">{fechaArgentina(c.marca_temporal)}</td><td className="whitespace-nowrap px-4 py-3 text-gray-600">{fechaArgentina(c.fecha_gestion)}</td>
                       <td className="px-4 py-3">{tipo?.nombre || '-'}</td>
                       <td className="px-4 py-3 font-medium text-gray-900">{c.cliente || '-'}</td>
                       <td className="px-4 py-3 text-gray-600">{c.dni || '-'}</td>
@@ -239,7 +238,7 @@ export default async function SuperConsultasPage({
                     </tr>
                   )
                 })}
-                {filas.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-500">No se encontraron Consultas.</td></tr>}
+                {filas.length === 0 && <tr><td colSpan={11} className="px-4 py-10 text-center text-gray-500">No se encontraron Consultas.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -251,11 +250,11 @@ export default async function SuperConsultasPage({
             return (
               <div key={c.id} className="rounded-2xl border border-gray-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div><div className="font-semibold text-gray-900">{c.cliente || '-'}</div><div className="mt-1 text-xs text-gray-500">{fechaArgentina(c.marca_temporal)}</div></div>
+                  <div><div className="font-semibold text-gray-900">Consulta #{c.id} · {c.cliente || '-'}</div><div className="mt-1 text-xs text-gray-500">{fechaArgentina(c.marca_temporal)}</div></div>
                   <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">{tipo?.nombre || 'Consulta'}</span>
                 </div>
                 <div className="mt-4 space-y-2 text-sm text-gray-700">
-                  <div><b>DNI:</b> {c.dni || '-'}</div><div><b>Teléfono:</b> {c.telefono || '-'}</div>
+                  <div><b>ID:</b> #{c.id}</div><div><b>Fecha Gestión:</b> {fechaArgentina(c.fecha_gestion)}</div><div><b>DNI:</b> {c.dni || '-'}</div><div><b>Teléfono:</b> {c.telefono || '-'}</div>
                   <div><b>Vendedor:</b> {nombrePerfil(c.vendedor_id)}</div><div><b>Responsable:</b> {nombrePerfil(c.responsable_id)}</div>
                   <div><b>Estado:</b> {estadoTexto(c)}</div>
                 </div>

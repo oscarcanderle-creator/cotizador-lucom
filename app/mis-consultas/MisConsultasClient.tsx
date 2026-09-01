@@ -42,6 +42,7 @@ type Consulta = {
   estado_deuda_id: number | null
   estado_cobertura_id: number | null
   fecha_estado: string | null
+  fecha_gestion: string | null
   tipos_consulta: { nombre: string; codigo: string } | null
 }
 
@@ -77,6 +78,12 @@ type Pedido = {
   estado_pedido_id: number | null
   tipos_pedido: { nombre: string; codigo: string } | null
   estados_pedido: { id: number; nombre: string; tipo_estado: string } | null
+}
+
+type Perfil = {
+  id: string
+  nombre: string | null
+  vendedor: string | null
 }
 
 type Props = {
@@ -123,6 +130,8 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [consultasGestion, setConsultasGestion] = useState<Consulta[]>([])
   const [pedidosGestion, setPedidosGestion] = useState<Pedido[]>([])
+  const [perfiles, setPerfiles] = useState<Perfil[]>([])
+  const [busqueda, setBusqueda] = useState('')
   const [vistaGestion, setVistaGestion] = useState<VistaListado>('CONSULTAS')
   const [filtroGestion, setFiltroGestion] = useState<FiltroGestion>('PENDIENTES')
   const [tomandoId, setTomandoId] = useState<number | null>(null)
@@ -198,7 +207,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     setCargando(true)
     setError('')
 
-    const [tc, tp, ec, ep, cPropias, pPropios] = await Promise.all([
+    const [tc, tp, ec, ep, cPropias, pPropios, perfilesRes] = await Promise.all([
       supabase
         .from('tipos_consulta')
         .select('id,codigo,nombre')
@@ -236,6 +245,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
           estado_deuda_id,
           estado_cobertura_id,
           fecha_estado,
+          fecha_gestion,
           tipos_consulta(nombre,codigo)
         `)
         .eq('vendedor_id', userId)
@@ -277,10 +287,14 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
         `)
         .eq('vendedor_id', userId)
         .order('marca_temporal', { ascending: false }),
+      supabase
+        .from('profiles')
+        .select('id,nombre,vendedor')
+        .order('nombre', { ascending: true }),
     ])
 
     // Cargamos los catálogos de forma independiente de los listados.
-    const errorCatalogo = tc.error || tp.error || ec.error || ep.error
+    const errorCatalogo = tc.error || tp.error || ec.error || ep.error || perfilesRes.error
     if (errorCatalogo) {
       setError(errorCatalogo.message)
       setCargando(false)
@@ -291,6 +305,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     setTiposPedido(tp.data || [])
     setEstadosConsulta((ec.data || []) as EstadoCatalogo[])
     setEstadosPedido((ep.data || []) as EstadoCatalogo[])
+    setPerfiles((perfilesRes.data || []) as Perfil[])
 
     const errorPropios = cPropias.error || pPropios.error
     if (errorPropios) {
@@ -323,6 +338,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
             estado_deuda_id,
             estado_cobertura_id,
             fecha_estado,
+            fecha_gestion,
             tipos_consulta(nombre,codigo)
           `)
           .order('marca_temporal', { ascending: false }),
@@ -649,30 +665,50 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
 
     setGuardandoGestion(true)
 
-    const { error: rpcError } = await supabase.rpc('gestionar_consulta_completa', {
-      p_consulta_id: consultaEdit.id,
-      p_cliente: normalizar(consultaEdit.cliente || ''),
-      p_dni: normalizar(consultaEdit.dni || ''),
-      p_telefono: consultaEdit.telefono,
-      p_tipo_domicilio: normalizar(consultaEdit.tipo_domicilio || ''),
-      p_domicilio: normalizar(consultaEdit.domicilio || ''),
-      p_entrecalles: normalizar(consultaEdit.entrecalles || ''),
-      p_localidad: normalizar(consultaEdit.localidad || ''),
-      p_observaciones: normalizar(consultaEdit.observaciones || ''),
-      p_estado_deuda_id: consultaEdit.estado_deuda_id,
-      p_estado_cobertura_id: consultaEdit.estado_cobertura_id,
-    })
+    try {
+      const response = await fetch('/api/gestion/consulta', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          consulta_id: consultaEdit.id,
+          cliente: normalizar(consultaEdit.cliente || ''),
+          dni: normalizar(consultaEdit.dni || ''),
+          telefono: consultaEdit.telefono,
+          tipo_domicilio: normalizar(consultaEdit.tipo_domicilio || ''),
+          domicilio: normalizar(consultaEdit.domicilio || ''),
+          entrecalles: normalizar(consultaEdit.entrecalles || ''),
+          localidad: normalizar(consultaEdit.localidad || ''),
+          observaciones: normalizar(consultaEdit.observaciones || ''),
+          estado_deuda_id: consultaEdit.estado_deuda_id,
+          estado_cobertura_id: consultaEdit.estado_cobertura_id,
+        }),
+      })
 
-    setGuardandoGestion(false)
+      const resultado = await response.json().catch(() => null)
 
-    if (rpcError) {
-      setError(rpcError.message)
-      return
+      if (!response.ok) {
+        setError(resultado?.error || 'No se pudo guardar la gestión de la Consulta.')
+        return
+      }
+
+      const aviso = resultado?.aviso ? ` ${resultado.aviso}` : ''
+
+      setMensaje(
+        `Gestión de Consulta #${consultaEdit.id} guardada correctamente.${aviso}`
+      )
+      cerrarGestion()
+      await cargarDatos()
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo guardar la gestión de la Consulta.'
+      )
+    } finally {
+      setGuardandoGestion(false)
     }
-
-    setMensaje(`Gestión de Consulta #${consultaEdit.id} guardada correctamente.`)
-    cerrarGestion()
-    await cargarDatos()
   }
 
   async function guardarGestionPedido(e: React.FormEvent) {
@@ -737,13 +773,49 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     await cargarDatos()
   }
 
+  const nombrePerfil = (id: string | null) => {
+    if (!id) return 'Sin responsable'
+    const perfil = perfiles.find((p) => p.id === id)
+    return perfil?.vendedor || perfil?.nombre || 'Usuario no disponible'
+  }
+
+  const fechaGestionArgentina = (fecha: string | null) => {
+    if (!fecha) return '-'
+    return new Intl.DateTimeFormat('es-AR', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).format(new Date(fecha))
+  }
+
+  const coincideBusqueda = (id: number, dniValor: string | null, telefonoValor: string) => {
+    const q = busqueda.trim().toLowerCase()
+    if (!q) return true
+    return [String(id), dniValor || '', telefonoValor || '']
+      .some((valor) => valor.toLowerCase().includes(q))
+  }
+
+  const consultasFiltradas = consultas.filter((x) =>
+    coincideBusqueda(x.id, x.dni, x.telefono)
+  )
+
+  const pedidosFiltrados = pedidos.filter((x) =>
+    coincideBusqueda(x.id, x.dni, x.telefono)
+  )
+
   const consultasGestionFiltradas = consultasGestion.filter((x) => {
+    if (!coincideBusqueda(x.id, x.dni, x.telefono)) return false
     if (filtroGestion === 'PENDIENTES') return !x.responsable_id
     if (filtroGestion === 'MIAS') return x.responsable_id === userId
     return true
   })
 
   const pedidosGestionFiltrados = pedidosGestion.filter((x) => {
+    if (!coincideBusqueda(x.id, x.dni, x.telefono)) return false
     if (filtroGestion === 'PENDIENTES') return !x.responsable_id
     if (filtroGestion === 'MIAS') return x.responsable_id === userId
     return true
@@ -1130,6 +1202,30 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
             >
               Pedidos
             </button>
+          </div>
+
+          <div className="mt-5">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Buscar por ID, DNI o Teléfono
+            </label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="search"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Ej.: 25, 30123456 o 351..."
+                className={inputClass}
+              />
+              {busqueda && (
+                <button
+                  type="button"
+                  onClick={() => setBusqueda('')}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
@@ -1867,6 +1963,12 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
 
                     <div className="mt-4 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
                       <div>
+                        <b>Vendedor:</b> {nombrePerfil(x.vendedor_id)}
+                      </div>
+                      <div>
+                        <b>Fecha Gestión:</b> {fechaGestionArgentina(x.fecha_gestion)}
+                      </div>
+                      <div>
                         <b>Cliente:</b> {x.cliente || '-'}
                       </div>
                       <div>
@@ -1945,6 +2047,9 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                     </div>
 
                     <div className="mt-4 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
+                      <div><b>ID:</b> #{x.id}</div>
+                      <div><b>Vendedor:</b> {nombrePerfil(x.vendedor_id)}</div>
+                      <div><b>Fecha Gestión:</b> {fechaGestionArgentina(x.fecha_gestion)}</div>
                       {x.dni && (
                         <div>
                           <b>DNI:</b> {x.dni}
@@ -2010,12 +2115,36 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
           </button>
         </div>
 
+        <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Buscar por ID, DNI o Teléfono
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Ej.: 25, 30123456 o 351..."
+              className={inputClass}
+            />
+            {busqueda && (
+              <button
+                type="button"
+                onClick={() => setBusqueda('')}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+        </div>
+
         {cargando ? (
           <div className="rounded-xl border bg-white p-6 text-gray-500">Cargando...</div>
         ) : vistaListado === 'CONSULTAS' ? (
           <div className="space-y-3">
-            {consultas.length === 0 && <Vacio texto={esAdmin ? "No hay Consultas registradas." : "Todavía no ingresaste Consultas."} />}
-            {consultas.map((x) => (
+            {consultasFiltradas.length === 0 && <Vacio texto={busqueda ? "No se encontraron Consultas para la búsqueda." : (esAdmin ? "No hay Consultas registradas." : "Todavía no ingresaste Consultas.")} />}
+            {consultasFiltradas.map((x) => (
               <article key={x.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
                   <div>
@@ -2030,6 +2159,9 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                 </div>
 
                 <div className="mt-4 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
+                  <div><b>ID:</b> #{x.id}</div>
+                  <div><b>Vendedor:</b> {nombrePerfil(x.vendedor_id)}</div>
+                  <div><b>Fecha Gestión:</b> {fechaGestionArgentina(x.fecha_gestion)}</div>
                   <div><b>Cliente:</b> {x.cliente || '-'}</div>
                   <div><b>DNI:</b> {x.dni || '-'}</div>
                   <div><b>Teléfono:</b> {x.telefono}</div>
@@ -2042,8 +2174,8 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
           </div>
         ) : (
           <div className="space-y-3">
-            {pedidos.length === 0 && <Vacio texto={esAdmin ? "No hay Pedidos registrados." : "Todavía no ingresaste Pedidos."} />}
-            {pedidos.map((x) => (
+            {pedidosFiltrados.length === 0 && <Vacio texto={busqueda ? "No se encontraron Pedidos para la búsqueda." : (esAdmin ? "No hay Pedidos registrados." : "Todavía no ingresaste Pedidos.")} />}
+            {pedidosFiltrados.map((x) => (
               <article key={x.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
                   <div>
@@ -2058,6 +2190,9 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                 </div>
 
                 <div className="mt-4 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
+                  <div><b>ID:</b> #{x.id}</div>
+                  <div><b>Vendedor:</b> {nombrePerfil(x.vendedor_id)}</div>
+                  <div><b>Fecha Gestión:</b> {fechaGestionArgentina(x.fecha_gestion)}</div>
                   {x.dni && <div><b>DNI:</b> {x.dni}</div>}
                   <div><b>Teléfono:</b> {x.telefono}</div>
                   <div><b>Domicilio:</b> {x.domicilio || '-'}</div>
