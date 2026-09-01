@@ -260,9 +260,11 @@ export default async function AdminUsuariosPage() {
       formData.get('id') ?? ''
     )
 
-    const nombre = String(
-      formData.get('nombre') ?? ''
-    ).trim()
+    const email = String(
+      formData.get('email') ?? ''
+    )
+      .trim()
+      .toLowerCase()
 
     const vendedor = String(
       formData.get('vendedor') ?? ''
@@ -281,12 +283,39 @@ export default async function AdminUsuariosPage() {
 
     if (
       !id ||
-      !nombre ||
+      !email ||
       !vendedor
     ) {
       throw new Error(
-        'Nombre y Vendedor son obligatorios.'
+        'Email y Vendedor son obligatorios.'
       )
+    }
+
+    /*
+     * El nombre es permanente: se recupera desde profiles y nunca
+     * se toma como dato editable del formulario.
+     */
+    const {
+      data: usuarioActual,
+      error: errorUsuarioActual,
+    } = await adminClient
+      .from('profiles')
+      .select('id, nombre')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (errorUsuarioActual) {
+      throw new Error(errorUsuarioActual.message)
+    }
+
+    if (!usuarioActual) {
+      throw new Error('El usuario ya no existe.')
+    }
+
+    const nombre = String(usuarioActual.nombre ?? '').trim()
+
+    if (!nombre) {
+      throw new Error('El usuario no tiene un Nombre válido en profiles.')
     }
 
     /*
@@ -313,6 +342,8 @@ export default async function AdminUsuariosPage() {
       await adminClient.auth.admin.updateUserById(
         id,
         {
+          email,
+          email_confirm: true,
           user_metadata: {
             nombre,
             vendedor,
@@ -578,7 +609,7 @@ export default async function AdminUsuariosPage() {
             </h2>
 
             <p className="text-sm text-gray-500 mt-1">
-              Administrá usuarios, vendedor operativo, roles y accesos.
+              Administrá usuarios, email de acceso, vendedor operativo, roles y accesos.
             </p>
           </div>
 
@@ -761,7 +792,7 @@ export default async function AdminUsuariosPage() {
                   {/* EDITAR / ACTIVAR */}
                   <form
                     action={actualizarUsuario}
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1.4fr_160px_auto_auto_auto] gap-3 lg:items-end"
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1.4fr_1.4fr_160px_auto_auto_auto] gap-3 lg:items-end"
                   >
                     <input
                       type="hidden"
@@ -776,11 +807,24 @@ export default async function AdminUsuariosPage() {
 
                       <input
                         type="text"
-                        name="nombre"
-                        defaultValue={
-                          usuario.nombre ?? ''
-                        }
+                        value={usuario.nombre ?? ''}
+                        readOnly
+                        aria-readonly="true"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-100 text-gray-600 cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Email / acceso
+                      </label>
+
+                      <input
+                        type="email"
+                        name="email"
+                        defaultValue={email}
                         required
+                        autoComplete="off"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                       />
                     </div>
