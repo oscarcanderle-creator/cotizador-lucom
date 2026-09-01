@@ -22,6 +22,7 @@ type EstadoCatalogo = {
   tipo_estado: 'GESTIONADO' | 'NO_GESTIONADO'
   activo: boolean
   ambito: 'DEUDA' | 'COBERTURA' | null
+  tipo_pedido_id?: number | null
 }
 
 type Consulta = {
@@ -71,6 +72,7 @@ type Pedido = {
   wo: string | null
   observaciones_gestion: string | null
   fecha_ok: string | null
+  fecha_gestion: string | null
   responsable_id: string | null
   estado_pedido_id: number | null
   tipos_pedido: { nombre: string; codigo: string } | null
@@ -171,6 +173,27 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
   const validarTelefonoOpcional = (valor: string) => !valor || validarTelefono(valor)
   const normalizar = (valor: string) => valor.trim() || null
 
+  const estadoCorrespondeAPedido = (estado: EstadoCatalogo, pedido: Pedido) => {
+    const coincidePorTipoId =
+      estado.tipo_pedido_id != null &&
+      pedido.tipo_pedido_id != null &&
+      Number(estado.tipo_pedido_id) === Number(pedido.tipo_pedido_id)
+
+    const prefijoPorTipo: Record<string, string> = {
+      ACOMETIDA: 'ACOM_',
+      PROYECTO: 'PROY_',
+      AMPLIACION: 'AMPL_',
+      RELLAMADO_VENTA_GESTION: 'REL_',
+    }
+
+    const codigoTipo = pedido.tipos_pedido?.codigo || ''
+    const prefijoEsperado = prefijoPorTipo[codigoTipo] || ''
+    const coincidePorCodigo =
+      !!prefijoEsperado && estado.codigo.startsWith(prefijoEsperado)
+
+    return coincidePorTipoId || coincidePorCodigo
+  }
+
   const cargarDatos = useCallback(async () => {
     setCargando(true)
     setError('')
@@ -192,7 +215,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
         .order('orden'),
       supabase
         .from('estados_pedido')
-        .select('id,codigo,nombre,tipo_estado,activo')
+        .select('id,codigo,nombre,tipo_estado,activo,tipo_pedido_id')
         .order('orden'),
       supabase
         .from('consultas')
@@ -246,6 +269,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
           wo,
           observaciones_gestion,
           fecha_ok,
+          fecha_gestion,
           responsable_id,
           estado_pedido_id,
           tipos_pedido(nombre,codigo),
@@ -331,6 +355,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
             wo,
             observaciones_gestion,
             fecha_ok,
+            fecha_gestion,
             responsable_id,
             estado_pedido_id,
             tipos_pedido(nombre,codigo),
@@ -526,6 +551,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     setError('')
     setMensaje('')
     setVistaGestion('CONSULTAS')
+    setVistaListado('CONSULTAS')
     setGestionAbierta({ tipo: 'CONSULTAS', id: x.id })
 
     const consultaPreparada: Consulta = {
@@ -547,6 +573,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     setError('')
     setMensaje('')
     setVistaGestion('PEDIDOS')
+    setVistaListado('PEDIDOS')
     setGestionAbierta({ tipo: 'PEDIDOS', id: x.id })
     setPedidoEdit({ ...x })
     setConsultaEdit(null)
@@ -644,6 +671,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     }
 
     setMensaje(`Gestión de Consulta #${consultaEdit.id} guardada correctamente.`)
+    cerrarGestion()
     await cargarDatos()
   }
 
@@ -705,6 +733,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     }
 
     setMensaje(`Gestión del Pedido ${pedidoEdit.codigo || `#${pedidoEdit.id}`} guardada correctamente.`)
+    cerrarGestion()
     await cargarDatos()
   }
 
@@ -1083,6 +1112,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
               type="button"
               onClick={() => {
                 setVistaGestion('CONSULTAS')
+                setVistaListado('CONSULTAS')
                 cerrarGestion()
               }}
               className={`rounded-lg px-4 py-2 text-sm font-semibold ${vistaGestion === 'CONSULTAS' ? 'bg-gray-900 text-white' : 'border bg-white text-gray-700'}`}
@@ -1093,6 +1123,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
               type="button"
               onClick={() => {
                 setVistaGestion('PEDIDOS')
+                setVistaListado('PEDIDOS')
                 cerrarGestion()
               }}
               className={`rounded-lg px-4 py-2 text-sm font-semibold ${vistaGestion === 'PEDIDOS' ? 'bg-gray-900 text-white' : 'border bg-white text-gray-700'}`}
@@ -1673,29 +1704,58 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                     <h4 className="mb-4 font-semibold text-gray-900">Datos de gestión</h4>
 
                     <div className="grid gap-4 md:grid-cols-2">
-                      <Campo label="WO">
-                        <input
-                          value={pedidoEdit.wo || ''}
-                          onChange={(e) =>
-                            setPedidoEdit({ ...pedidoEdit, wo: e.target.value })
-                          }
-                          className={inputClass}
-                        />
-                      </Campo>
+                      {pedidoEdit.tipos_pedido?.codigo === 'RELLAMADO_VENTA_GESTION' ? (
+                        <Campo label="Fecha Gestión">
+                          <input
+                            type="text"
+                            value={
+                              pedidoEdit.fecha_gestion
+                                ? new Intl.DateTimeFormat('es-AR', {
+                                    timeZone: 'America/Argentina/Buenos_Aires',
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                    hour12: false,
+                                  }).format(new Date(pedidoEdit.fecha_gestion))
+                                : 'Sin gestión'
+                            }
+                            readOnly
+                            className={`${inputClass} bg-gray-50`}
+                          />
+                        </Campo>
+                      ) : (
+                        <>
+                          <Campo label="WO">
+                            <input
+                              value={pedidoEdit.wo || ''}
+                              onChange={(e) =>
+                                setPedidoEdit({
+                                  ...pedidoEdit,
+                                  wo: e.target.value,
+                                })
+                              }
+                              className={inputClass}
+                            />
+                          </Campo>
 
-                      <Campo label="Fecha OK">
-                        <input
-                          type="date"
-                          value={pedidoEdit.fecha_ok || ''}
-                          onChange={(e) =>
-                            setPedidoEdit({
-                              ...pedidoEdit,
-                              fecha_ok: e.target.value || null,
-                            })
-                          }
-                          className={inputClass}
-                        />
-                      </Campo>
+                          <Campo label="Fecha OK">
+                            <input
+                              type="date"
+                              value={pedidoEdit.fecha_ok || ''}
+                              onChange={(e) =>
+                                setPedidoEdit({
+                                  ...pedidoEdit,
+                                  fecha_ok: e.target.value || null,
+                                })
+                              }
+                              className={inputClass}
+                            />
+                          </Campo>
+                        </>
+                      )}
                     </div>
 
                     <div className="mt-4">
@@ -1733,7 +1793,8 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                         {estadosPedido
                           .filter(
                             (estado) =>
-                              estado.activo || estado.id === pedidoEdit.estado_pedido_id
+                              estadoCorrespondeAPedido(estado, pedidoEdit) &&
+                              (estado.activo || estado.id === pedidoEdit.estado_pedido_id)
                           )
                           .map((estado) => (
                             <option key={estado.id} value={estado.id}>
@@ -1744,9 +1805,11 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                       </select>
                     </Campo>
 
-                    {estadosPedido.length === 0 && (
+                    {estadosPedido.filter((estado) =>
+                      estadoCorrespondeAPedido(estado, pedidoEdit)
+                    ).length === 0 && (
                       <p className="mt-2 text-xs text-amber-700">
-                        Todavía no hay Estados de Pedido configurados en el catálogo.
+                        No hay Estados configurados para este Tipo de Pedido.
                       </p>
                     )}
                   </div>
