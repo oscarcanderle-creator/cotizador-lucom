@@ -199,32 +199,32 @@ export default async function GestionVentasPage({ searchParams }: { searchParams
 
         <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white md:block">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full table-fixed text-left text-sm">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
-                  <th className="px-4 py-3">Fecha</th>
-                  <th className="px-4 py-3">Vendedor</th>
-                  <th className="px-4 py-3">Tipo</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3">Responsable</th>
-                  <th className="px-4 py-3">Cliente</th>
-                  <th className="px-4 py-3">Producto / Plan</th>
-                  <th className="px-4 py-3">Últ. gestión</th>
-                  <th className="px-4 py-3 text-right">Acción</th>
+                  <th className="w-[118px] px-3 py-3">Fecha</th>
+                  <th className="w-[145px] px-3 py-3">Vendedor</th>
+                  <th className="w-[72px] px-3 py-3">Tipo</th>
+                  <th className="w-[145px] px-3 py-3">Estado</th>
+                  <th className="w-[145px] px-3 py-3">Responsable</th>
+                  <th className="w-[160px] px-3 py-3">Cliente</th>
+                  <th className="w-[165px] px-3 py-3">Producto / Plan</th>
+                  <th className="w-[118px] px-3 py-3">Últ. gestión</th>
+                  <th className="sticky right-0 z-20 w-[92px] border-l border-gray-200 bg-gray-50 px-3 py-3 text-right shadow-[-6px_0_10px_-8px_rgba(0,0,0,0.35)]">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {ventas.map((operacion: any) => (
-                  <tr key={operacion.id_operacion} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-4 py-3 text-gray-600">{fechaArgentina(operacion.fecha_hora)}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{operacion.vendedor || '-'}</td>
-                    <td className="px-4 py-3"><span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">{tipoVisible(operacion)}</span></td>
-                    <td className="px-4 py-3"><span className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700">{estadoVisible(operacion)}</span></td>
-                    <td className="px-4 py-3 text-gray-700">{nombreResponsable(operacion)}</td>
-                    <td className="px-4 py-3 text-gray-600">{nombreCliente(operacion.cliente)}</td>
-                    <td className="px-4 py-3 text-gray-600">{productoVisible(operacion)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-gray-600">{fechaArgentina(fechaUltimaGestion(operacion))}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                  <tr key={operacion.id_operacion} className="group hover:bg-gray-50">
+                    <td className="whitespace-nowrap px-3 py-3 text-xs text-gray-600">{fechaArgentina(operacion.fecha_hora)}</td>
+                    <td className="truncate px-3 py-3 font-bold text-gray-900" title={operacion.vendedor || '-'}>{operacion.vendedor || '-'}</td>
+                    <td className="px-3 py-3"><span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">{tipoVisible(operacion)}</span></td>
+                    <td className="px-3 py-3"><div className="truncate" title={estadoVisible(operacion)}><span className="rounded-full border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700">{estadoVisible(operacion)}</span></div></td>
+                    <td className="truncate px-3 py-3 text-gray-700" title={nombreResponsable(operacion)}>{nombreResponsable(operacion)}</td>
+                    <td className="truncate px-3 py-3 text-gray-600" title={nombreCliente(operacion.cliente)}>{nombreCliente(operacion.cliente)}</td>
+                    <td className="truncate px-3 py-3 text-gray-600" title={productoVisible(operacion)}>{productoVisible(operacion)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-xs text-gray-600">{fechaArgentina(fechaUltimaGestion(operacion))}</td>
+                    <td className="sticky right-0 z-10 whitespace-nowrap border-l border-gray-200 bg-white px-3 py-3 text-right shadow-[-6px_0_10px_-8px_rgba(0,0,0,0.35)] group-hover:bg-gray-50">
                       <a href={`/gestion-ventas/${encodeURIComponent(operacion.id_operacion)}`} className="font-semibold text-red-600 hover:text-red-700">Gestionar</a>
                     </td>
                   </tr>
