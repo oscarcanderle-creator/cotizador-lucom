@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { createClient } from '../../../utils/supabase/server'
 import AppHeader from '../../../components/AppHeader'
 
@@ -149,26 +150,7 @@ async function guardarGestionBaf(formData: FormData) {
     throw new Error('Operación inválida.')
   }
 
-  const { data: operacion } = await supabase
-    .from('operaciones')
-    .select('id_operacion, tipo, usuario_id, origen_dato')
-    .eq('id_operacion', idOperacion)
-    .eq('usuario_id', user.id)
-    .eq('tipo', 'BAF')
-    .maybeSingle()
-
-  if (!operacion) {
-    throw new Error('No se encontró la operación BAF o no pertenece al usuario.')
-  }
-
-  const { data: gestionActual } = await supabase
-    .from('gestion_baf')
-    .select('estado_baf_id')
-    .eq('operacion_id', idOperacion)
-    .maybeSingle()
-
-  let estadoNuevoId: number | null = null
-  let estadoNuevoNombre: string | null = null
+  let estadoBafId: number | null = null
 
   if (estadoBafIdRaw) {
     const estadoId = Number(estadoBafIdRaw)
@@ -177,94 +159,66 @@ async function guardarGestionBaf(formData: FormData) {
       throw new Error('Estado BAF inválido.')
     }
 
-    const { data: estado } = await supabase
-      .from('estados_baf')
-      .select('id, nombre')
-      .eq('id', estadoId)
-      .eq('activo', true)
-      .maybeSingle()
-
-    if (!estado) {
-      throw new Error('El Estado BAF seleccionado no está disponible.')
-    }
-
-    estadoNuevoId = estado.id
-    estadoNuevoNombre = estado.nombre
+    estadoBafId = estadoId
   }
-
-  let estadoAnteriorNombre: string | null = null
-
-  if (gestionActual?.estado_baf_id) {
-    const { data: estadoAnterior } = await supabase
-      .from('estados_baf')
-      .select('nombre')
-      .eq('id', gestionActual.estado_baf_id)
-      .maybeSingle()
-
-    estadoAnteriorNombre = estadoAnterior?.nombre ?? null
-  }
-
-  const ahora = new Date().toISOString()
 
   const texto = (nombre: string) => {
     const valor = String(formData.get(nombre) ?? '').trim()
     return valor || null
   }
 
-  const { error: gestionError } = await supabase
-    .from('gestion_baf')
-    .upsert(
-      {
-        operacion_id: idOperacion,
-        estado_baf_id: estadoNuevoId,
-        fecha_gestion: ahora,
-        prospector: texto('prospector'),
-        detalle_lead: operacion.origen_dato || null,
-        cia_celular: texto('cia_celular'),
-        sds: texto('sds'),
-        orden_trabajo: texto('orden_trabajo'),
-        linea_fija: texto('linea_fija'),
-        fecha_instalacion: texto('fecha_instalacion'),
-        ciclo_cuenta: texto('ciclo_cuenta'),
-        motivo_estado: texto('motivo_estado'),
-        updated_by: user.id,
-        updated_at: ahora,
-      },
-      {
-        onConflict: 'operacion_id',
-      }
-    )
+  const requestHeaders = await headers()
+  const host =
+    requestHeaders.get('x-forwarded-host') ||
+    requestHeaders.get('host')
 
-  if (gestionError) {
-    throw new Error(`No se pudo guardar la gestión BAF: ${gestionError.message}`)
+  if (!host) {
+    throw new Error('No se pudo determinar el host de la aplicación.')
   }
 
-  const cambioEstado =
-    gestionActual?.estado_baf_id !== estadoNuevoId &&
-    estadoNuevoNombre !== null
+  const protocol =
+    requestHeaders.get('x-forwarded-proto') ||
+    (host.includes('localhost') || host.startsWith('127.0.0.1')
+      ? 'http'
+      : 'https')
 
-  if (cambioEstado) {
-    const { error: historialError } = await supabase
-      .from('historial_estados_operacion')
-      .insert({
-        operacion_id: idOperacion,
-        tipo: 'BAF',
-        estado_anterior: estadoAnteriorNombre,
-        estado_nuevo: estadoNuevoNombre,
-        usuario_id: user.id,
-        fecha_hora: ahora,
-        observacion: texto('motivo_estado'),
-      })
+  const cookie = requestHeaders.get('cookie') || ''
 
-    if (historialError) {
-      throw new Error(
-        `La gestión BAF se guardó, pero no se pudo registrar el historial: ${historialError.message}`
-      )
-    }
+  const response = await fetch(`${protocol}://${host}/api/gestion/venta`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: cookie,
+    },
+    body: JSON.stringify({
+      tipo: 'BAF',
+      operacion_id: idOperacion,
+      estado_baf_id: estadoBafId,
+      prospector: texto('prospector'),
+      cia_celular: texto('cia_celular'),
+      sds: texto('sds'),
+      orden_trabajo: texto('orden_trabajo'),
+      linea_fija: texto('linea_fija'),
+      fecha_instalacion: texto('fecha_instalacion'),
+      ciclo_cuenta: texto('ciclo_cuenta'),
+      motivo_estado: texto('motivo_estado'),
+    }),
+    cache: 'no-store',
+  })
+
+  const resultado = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw new Error(
+      resultado?.error ||
+        `No se pudo guardar la gestión BAF. Código HTTP ${response.status}.`
+    )
   }
 
   revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
   revalidatePath('/mis-ventas')
+  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/super')
   redirect(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
 }
 
@@ -283,111 +237,37 @@ async function guardarGestionPorta(formData: FormData) {
   const idOperacion = String(formData.get('id_operacion') ?? '').trim()
   const estadoPortaIdRaw = String(formData.get('estado_porta_id') ?? '').trim()
   const bbooIdRaw = String(formData.get('bboo_id') ?? '').trim()
-  const medioDespachoIdRaw = String(formData.get('medio_despacho_chip_id') ?? '').trim()
+  const medioDespachoIdRaw = String(
+    formData.get('medio_despacho_chip_id') ?? ''
+  ).trim()
 
   if (!idOperacion) {
     throw new Error('Operación inválida.')
   }
 
-  const { data: operacion } = await supabase
-    .from('operaciones')
-    .select('id_operacion, tipo, usuario_id')
-    .eq('id_operacion', idOperacion)
-    .eq('usuario_id', user.id)
-    .eq('tipo', 'PORTA')
-    .maybeSingle()
-
-  if (!operacion) {
-    throw new Error('No se encontró la operación PORTA/Línea Nueva o no pertenece al usuario.')
-  }
-
-  const { data: gestionActual } = await supabase
-    .from('gestion_porta')
-    .select('estado_porta_id, fecha_carga_stl, fecha_porta')
-    .eq('operacion_id', idOperacion)
-    .maybeSingle()
-
-  let estadoNuevoId: number | null = null
-  let estadoNuevoNombre: string | null = null
-  let estadoNuevoCodigo: string | null = null
+  let estadoPortaId: number | null = null
 
   if (estadoPortaIdRaw) {
-    const estadoId = Number(estadoPortaIdRaw)
+    const valor = Number(estadoPortaIdRaw)
 
-    if (!Number.isInteger(estadoId)) {
+    if (!Number.isInteger(valor)) {
       throw new Error('Estado PORTA inválido.')
     }
 
-    const { data: estado } = await supabase
-      .from('estados_porta')
-      .select('id, codigo, nombre')
-      .eq('id', estadoId)
-      .eq('activo', true)
-      .maybeSingle()
-
-    if (!estado) {
-      throw new Error('El Estado PORTA seleccionado no está disponible.')
-    }
-
-    estadoNuevoId = estado.id
-    estadoNuevoNombre = estado.nombre
-    estadoNuevoCodigo = estado.codigo
-  }
-
-  let estadoAnteriorNombre: string | null = null
-
-  if (gestionActual?.estado_porta_id) {
-    const { data: estadoAnterior } = await supabase
-      .from('estados_porta')
-      .select('nombre')
-      .eq('id', gestionActual.estado_porta_id)
-      .maybeSingle()
-
-    estadoAnteriorNombre = estadoAnterior?.nombre ?? null
-  }
-
-  let bbooId: string | null = null
-
-  if (bbooIdRaw) {
-    const { data: bboo } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', bbooIdRaw)
-      .eq('activo', true)
-      .eq('rol', 'BBOO')
-      .maybeSingle()
-
-    if (!bboo) {
-      throw new Error('El usuario BBOO seleccionado no está disponible.')
-    }
-
-    bbooId = bboo.id
+    estadoPortaId = valor
   }
 
   let medioDespachoId: number | null = null
 
   if (medioDespachoIdRaw) {
-    const medioId = Number(medioDespachoIdRaw)
+    const valor = Number(medioDespachoIdRaw)
 
-    if (!Number.isInteger(medioId)) {
+    if (!Number.isInteger(valor)) {
       throw new Error('Medio de despacho CHIP inválido.')
     }
 
-    const { data: medio } = await supabase
-      .from('medios_despacho_chip')
-      .select('id')
-      .eq('id', medioId)
-      .eq('activo', true)
-      .maybeSingle()
-
-    if (!medio) {
-      throw new Error('El Medio de despacho CHIP seleccionado no está disponible.')
-    }
-
-    medioDespachoId = medio.id
+    medioDespachoId = valor
   }
-
-  const ahora = new Date().toISOString()
 
   const texto = (nombre: string) => {
     const valor = String(formData.get(nombre) ?? '').trim()
@@ -396,79 +276,68 @@ async function guardarGestionPorta(formData: FormData) {
 
   const booleano = (nombre: string) => {
     const valor = String(formData.get(nombre) ?? '').trim()
+
     if (valor === 'SI') return true
     if (valor === 'NO') return false
+
     return null
   }
 
-  let fechaCargaStl = gestionActual?.fecha_carga_stl ?? null
-  let fechaPorta = gestionActual?.fecha_porta ?? null
+  const requestHeaders = await headers()
+  const host =
+    requestHeaders.get('x-forwarded-host') ||
+    requestHeaders.get('host')
 
-  if (!fechaCargaStl && estadoNuevoCodigo === 'CARGADO_STL') {
-    fechaCargaStl = ahora
+  if (!host) {
+    throw new Error('No se pudo determinar el host de la aplicación.')
   }
 
-  if (!fechaPorta && estadoNuevoCodigo === 'ACTIVA_NRO_PORTADO') {
-    fechaPorta = ahora
-  }
+  const protocol =
+    requestHeaders.get('x-forwarded-proto') ||
+    (host.includes('localhost') || host.startsWith('127.0.0.1')
+      ? 'http'
+      : 'https')
 
-  const { error: gestionError } = await supabase
-    .from('gestion_porta')
-    .upsert(
-      {
-        operacion_id: idOperacion,
-        bboo_id: bbooId,
-        fecha_carga_stl: fechaCargaStl,
-        sim: texto('sim'),
-        plan_cargado: texto('plan_cargado'),
-        sds: texto('sds'),
-        spn: texto('spn'),
-        pin_lnva_nro: texto('pin_lnva_nro'),
-        documentacion_dni: booleano('documentacion_dni'),
-        medio_despacho_chip_id: medioDespachoId,
-        fecha_porta: fechaPorta,
-        tiene_baf: booleano('tiene_baf'),
-        zona_baf: booleano('zona_baf'),
-        observaciones_gestion: texto('observaciones_gestion'),
-        estado_porta_id: estadoNuevoId,
-        updated_by: user.id,
-        updated_at: ahora,
-      },
-      {
-        onConflict: 'operacion_id',
-      }
+  const cookie = requestHeaders.get('cookie') || ''
+
+  const response = await fetch(`${protocol}://${host}/api/gestion/venta`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: cookie,
+    },
+    body: JSON.stringify({
+      tipo: 'PORTA',
+      operacion_id: idOperacion,
+      estado_porta_id: estadoPortaId,
+      bboo_id: bbooIdRaw || null,
+      sim: texto('sim'),
+      plan_cargado: texto('plan_cargado'),
+      sds: texto('sds'),
+      spn: texto('spn'),
+      pin_lnva_nro: texto('pin_lnva_nro'),
+      documentacion_dni: booleano('documentacion_dni'),
+      medio_despacho_chip_id: medioDespachoId,
+      tiene_baf: booleano('tiene_baf'),
+      zona_baf: booleano('zona_baf'),
+      observaciones_gestion: texto('observaciones_gestion'),
+    }),
+    cache: 'no-store',
+  })
+
+  const resultado = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw new Error(
+      resultado?.error ||
+        `No se pudo guardar la gestión PORTA/Línea Nueva. Código HTTP ${response.status}.`
     )
-
-  if (gestionError) {
-    throw new Error(`No se pudo guardar la gestión PORTA/Línea Nueva: ${gestionError.message}`)
-  }
-
-  const cambioEstado =
-    gestionActual?.estado_porta_id !== estadoNuevoId &&
-    estadoNuevoNombre !== null
-
-  if (cambioEstado) {
-    const { error: historialError } = await supabase
-      .from('historial_estados_operacion')
-      .insert({
-        operacion_id: idOperacion,
-        tipo: 'PORTA',
-        estado_anterior: estadoAnteriorNombre,
-        estado_nuevo: estadoNuevoNombre,
-        usuario_id: user.id,
-        fecha_hora: ahora,
-        observacion: texto('observaciones_gestion'),
-      })
-
-    if (historialError) {
-      throw new Error(
-        `La gestión PORTA/Línea Nueva se guardó, pero no se pudo registrar el historial: ${historialError.message}`
-      )
-    }
   }
 
   revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
   revalidatePath('/mis-ventas')
+  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/super')
   redirect(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
 }
 
@@ -686,6 +555,7 @@ export default async function DetalleVentaPage({
         rol={profile.rol}
         usuario={profile.nombre?.trim() || user.email || 'Usuario'}
         actual="MIS_VENTAS"
+        puedeGestionarVentas={profile.puede_gestionar_ventas === true}
       />
       <div className="mx-auto max-w-6xl p-4 sm:p-8">
 

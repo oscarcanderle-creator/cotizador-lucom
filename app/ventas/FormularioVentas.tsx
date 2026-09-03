@@ -20,6 +20,7 @@ type Props = {
   nombreUsuario: string
   vendedor: string
   rol: string
+  puedeGestionarVentas: boolean
   planesPorta: string[]
   planesBaf: string[]
   origenes: string[]
@@ -145,6 +146,7 @@ export default function FormularioVentas({
   nombreUsuario,
   vendedor,
   rol,
+  puedeGestionarVentas,
   planesPorta,
   planesBaf,
   origenes,
@@ -189,6 +191,7 @@ export default function FormularioVentas({
         rol={rol}
         usuario={nombreUsuario}
         actual="VENTAS"
+        puedeGestionarVentas={puedeGestionarVentas}
       />
 
       <form
@@ -201,9 +204,12 @@ export default function FormularioVentas({
           <span><strong>AMBIENTE DE PRUEBAS</strong> · Los registros se sincronizan con los Sheets de testing.</span>
         </div>
 
-        <div className="grid grid-cols-3 gap-1 rounded-2xl bg-white border border-gray-200 p-1.5 mb-3 shadow-sm">
-           {(['PORTA', 'BAF'] as TipoOperacion[]).map(
-            (opcion) => (
+        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-white border border-gray-200 p-2 mb-3 shadow-sm">
+          {(['BAF', 'PORTA'] as TipoOperacion[]).map((opcion) => {
+            const seleccionado = tipo === opcion
+            const esBaf = opcion === 'BAF'
+
+            return (
               <button
                 key={opcion}
                 type="button"
@@ -212,16 +218,24 @@ export default function FormularioVentas({
                   setResultado(null)
                   setEsLineaNueva(false)
                 }}
-                className={
-                  tipo === opcion
-                    ? 'rounded-xl bg-red-600 text-white font-semibold py-2.5 text-xs sm:text-sm shadow-sm'
-                    : 'rounded-xl bg-transparent text-gray-500 font-semibold py-2.5 text-xs sm:text-sm hover:bg-gray-50'
-                }
+                className={[
+                  'min-h-16 rounded-2xl px-4 py-3 text-sm sm:text-base font-extrabold transition-all duration-150',
+                  'border-4 shadow-sm active:scale-[0.99]',
+                  esBaf
+                    ? 'bg-yellow-300 text-red-700 hover:bg-yellow-200'
+                    : 'bg-red-600 text-white hover:bg-red-700',
+                  seleccionado
+                    ? esBaf
+                      ? 'border-red-600 ring-2 ring-red-100 shadow-md'
+                      : 'border-yellow-300 ring-2 ring-yellow-100 shadow-md'
+                    : 'border-transparent opacity-90 hover:opacity-100',
+                ].join(' ')}
+                aria-pressed={seleccionado}
               >
-                {opcion}
+                {esBaf ? 'Internet Fija BAF' : 'Portabilidad y LN'}
               </button>
             )
-          )}
+          })}
         </div>
 
         <section className="mb-3 rounded-2xl border border-green-300 bg-green-50 p-3 sm:p-4 shadow-sm">

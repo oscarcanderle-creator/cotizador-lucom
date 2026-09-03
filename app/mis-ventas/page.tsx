@@ -88,7 +88,7 @@ export default async function MisVentasPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('nombre, rol, activo')
+    .select('nombre, rol, activo, puede_gestionar_ventas')
     .eq('id', user.id)
     .single()
 
@@ -181,6 +181,7 @@ export default async function MisVentasPage({
         rol={profile.rol}
         usuario={profile.nombre?.trim() || user.email || 'Usuario'}
         actual="MIS_VENTAS"
+        puedeGestionarVentas={profile.puede_gestionar_ventas === true}
       />
       <div className="mx-auto max-w-7xl p-4 sm:p-8">
 

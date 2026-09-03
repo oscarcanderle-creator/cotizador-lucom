@@ -84,7 +84,7 @@ export async function enviarEmailGmail({
   const email = [
     `From: Lucom - Notificaciones <${REMITENTE}>`,
     `To: ${destinatario}`,
-    `Subject: ${asunto}`,
+    `Subject: =?UTF-8?B?${Buffer.from(asunto, 'utf8').toString('base64')}?=`,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset="UTF-8"',
     'Content-Transfer-Encoding: 8bit',

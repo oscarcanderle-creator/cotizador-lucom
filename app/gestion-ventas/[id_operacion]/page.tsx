@@ -1,9 +1,8 @@
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
-import { createClient } from '../../../../utils/supabase/server'
-import AppHeader from '../../../../components/AppHeader'
-import AsignacionesSuperForm from './AsignacionesSuperForm'
+import { createClient } from '../../../utils/supabase/server'
+import AppHeader from '../../../components/AppHeader'
 
 type Params = Promise<{
   id_operacion: string
@@ -59,60 +58,62 @@ function Campo({
 }
 
 
-async function guardarAsignacionesSuper(formData: FormData) {
+async function guardarResponsable(formData: FormData) {
   'use server'
 
+  const tTotal = Date.now()
+  console.log('[guardarResponsable] INICIO')
+
+  const tClient = Date.now()
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  console.log(`[guardarResponsable] createClient: ${Date.now() - tClient} ms`)
+
+  const tAuth = Date.now()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  console.log(`[guardarResponsable] auth.getUser: ${Date.now() - tAuth} ms`)
+
   if (!user) redirect('/login')
 
-  const { data: actor } = await supabase
-    .from('profiles')
-    .select('rol, activo')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (!actor?.activo || !['ADMIN', 'SUPERVISOR'].includes(actor.rol)) {
-    throw new Error('No tiene permisos para modificar esta operación.')
-  }
-
   const idOperacion = String(formData.get('id_operacion') ?? '').trim()
-  const vendedorId = String(formData.get('vendedor_id') ?? '').trim()
   const responsableId = String(formData.get('responsable_id') ?? '').trim()
-  const motivoVendedor = String(formData.get('motivo_vendedor') ?? '').trim()
+  const tipo = String(formData.get('tipo') ?? '').trim()
 
-  if (!idOperacion || !vendedorId) {
+  if (!idOperacion || !['BAF', 'PORTA'].includes(tipo)) {
     throw new Error('Datos de operación inválidos.')
   }
 
-  const { error } = await supabase.rpc('super_reasignar_venta', {
+  const tRpc = Date.now()
+  const { error } = await supabase.rpc('gestor_asignar_responsable_venta', {
     p_operacion_id: idOperacion,
-    p_vendedor_id: vendedorId,
     p_responsable_id: responsableId || null,
-    p_motivo_vendedor: motivoVendedor || null,
   })
+  console.log(`[guardarResponsable] RPC gestor_asignar_responsable_venta: ${Date.now() - tRpc} ms`)
 
   if (error) {
-    throw new Error(`No se pudieron guardar las asignaciones: ${error.message}`)
+    console.error('[guardarResponsable] RPC ERROR:', error)
+    throw new Error(`No se pudo guardar el responsable: ${error.message}`)
   }
 
+  const tRevalidate = Date.now()
+  revalidatePath(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/gestion-ventas')
   revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
   revalidatePath('/super')
-  revalidatePath('/mis-ventas')
-  redirect(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  console.log(`[guardarResponsable] revalidatePath total: ${Date.now() - tRevalidate} ms`)
+
+  console.log(`[guardarResponsable] TOTAL antes de redirect: ${Date.now() - tTotal} ms`)
+  console.log('[guardarResponsable] FIN -> redirect')
+
+  redirect(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
 }
 
 
 async function guardarGestionBaf(formData: FormData) {
   'use server'
 
-  const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) redirect('/login')
 
   const idOperacion = String(formData.get('id_operacion') ?? '').trim()
   const estadoBafIdRaw = String(formData.get('estado_baf_id') ?? '').trim()
@@ -186,24 +187,18 @@ async function guardarGestionBaf(formData: FormData) {
     )
   }
 
+  revalidatePath(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/gestion-ventas')
   revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
   revalidatePath('/super')
-  revalidatePath('/mis-ventas')
-  revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
-  redirect(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  redirect(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
 }
 
 
 async function guardarGestionPorta(formData: FormData) {
   'use server'
 
-  const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) redirect('/login')
 
   const idOperacion = String(formData.get('id_operacion') ?? '').trim()
   const estadoPortaIdRaw = String(formData.get('estado_porta_id') ?? '').trim()
@@ -305,14 +300,14 @@ async function guardarGestionPorta(formData: FormData) {
     )
   }
 
+  revalidatePath(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/gestion-ventas')
   revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
   revalidatePath('/super')
-  revalidatePath('/mis-ventas')
-  revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
-  redirect(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  redirect(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
 }
 
-export default async function SuperDetalleVentaPage({
+export default async function DetalleVentaPage({
   params,
 }: {
   params: Params
@@ -332,17 +327,12 @@ export default async function SuperDetalleVentaPage({
     .single()
 
   if (!profile?.activo) redirect('/login')
-  if (!['ADMIN', 'SUPERVISOR'].includes(profile.rol)) redirect('/ventas')
 
-  const { data: vendedores, error: vendedoresError } = await supabase
-    .from('profiles')
-    .select('id, nombre, vendedor, rol')
-    .eq('activo', true)
-    .order('nombre', { ascending: true })
+  const esVendedorGestor =
+    profile.rol === 'VENDEDOR' &&
+    profile.puede_gestionar_ventas === true
 
-  if (vendedoresError) {
-    throw new Error(`No se pudieron cargar los vendedores: ${vendedoresError.message}`)
-  }
+  if (!esVendedorGestor) redirect('/ventas')
 
   const { data: responsables, error: responsablesError } = await supabase
     .from('profiles')
@@ -506,32 +496,6 @@ export default async function SuperDetalleVentaPage({
 
   if (!operacion) notFound()
 
-  // Historial general de cambios de la operación.
-  // En SUPER se muestra únicamente en modo lectura.
-  const { data: historial, error: historialError } = await supabase
-    .from('historial_operacion')
-    .select(`
-      id,
-      fecha_hora,
-      tipo_accion,
-      campo,
-      etiqueta,
-      valor_anterior,
-      valor_nuevo,
-      rol_actor,
-      observacion,
-      usuario:profiles (
-        nombre,
-        vendedor
-      )
-    `)
-    .eq('operacion_id', id)
-    .order('fecha_hora', { ascending: false })
-
-  if (historialError) {
-    throw new Error(`No se pudo cargar el historial de la operación: ${historialError.message}`)
-  }
-
   const op: any = operacion
   const cliente = op.cliente
   const domicilio = op.domicilio
@@ -540,26 +504,7 @@ export default async function SuperDetalleVentaPage({
   const gestionBaf = op.gestion_baf
   const gestionPorta = op.gestion_porta
 
-  let bbooActualFueraDeLista: any = null
-
-  if (
-    gestionPorta?.bboo_id &&
-    !(usuariosBboo ?? []).some((bboo: any) => bboo.id === gestionPorta.bboo_id)
-  ) {
-    const { data: bbooActual, error: bbooActualError } = await supabase
-      .from('profiles')
-      .select('id, nombre, vendedor, rol, activo')
-      .eq('id', gestionPorta.bboo_id)
-      .maybeSingle()
-
-    if (bbooActualError) {
-      throw new Error(`No se pudo cargar el BBOO actual: ${bbooActualError.message}`)
-    }
-
-    bbooActualFueraDeLista = bbooActual
-  }
-
-  const esBaf = op.tipo === 'BAF' 
+  const esBaf = op.tipo === 'BAF'
   const esPorta = op.tipo === 'PORTA'
   const tipoVisible =
     esPorta && porta?.es_linea_nueva
@@ -571,32 +516,8 @@ export default async function SuperDetalleVentaPage({
   const responsableActualId =
     esBaf ? gestionBaf?.responsable_id : gestionPorta?.responsable_id
 
-  let responsableActual: any = (responsables ?? []).find(
+  const responsableActual = (responsables ?? []).find(
     (responsable: any) => responsable.id === responsableActualId
-  )
-
-  // Si el Responsable actualmente asignado quedó inactivo o perdió
-  // puede_gestionar_ventas, ya no aparece entre los Responsables disponibles
-  // para nuevas asignaciones. Lo recuperamos únicamente para conservar y
-  // mostrar correctamente la asignación histórica actual.
-  if (responsableActualId && !responsableActual) {
-    const { data: responsableHistorico, error: responsableHistoricoError } = await supabase
-      .from('profiles')
-      .select('id, nombre, vendedor, rol, activo, puede_gestionar_ventas')
-      .eq('id', responsableActualId)
-      .maybeSingle()
-
-    if (responsableHistoricoError) {
-      throw new Error(
-        `No se pudo cargar el Responsable actual: ${responsableHistoricoError.message}`
-      )
-    }
-
-    responsableActual = responsableHistorico
-  }
-
-  const vendedoresDisponibles = (vendedores ?? []).filter((vendedor: any) =>
-    String(vendedor.vendedor ?? vendedor.nombre ?? '').trim()
   )
 
   return (
@@ -604,10 +525,11 @@ export default async function SuperDetalleVentaPage({
       <AppHeader
         rol={profile.rol}
         usuario={profile.nombre?.trim() || user.email || 'Usuario'}
-        actual="SUPER"
+        actual="GESTION_VENTAS"
+        puedeGestionarVentas={profile.puede_gestionar_ventas === true}
       />
-
       <div className="mx-auto max-w-6xl p-4 sm:p-8">
+
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="mb-2">
@@ -626,50 +548,25 @@ export default async function SuperDetalleVentaPage({
           </div>
 
           <a
-            href="/super"
+            href="/gestion-ventas"
             className="text-sm font-medium text-gray-600 hover:text-gray-900"
           >
-            Volver a Super / Ventas
+            Volver a Gestión de Ventas
           </a>
         </div>
 
         <div className="space-y-5">
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
-            <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Operación</h2>
-              <span className="text-xs font-medium text-amber-700">
-                SUPER · Vendedor y Responsable editables
-              </span>
-            </div>
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">
+              Operación
+            </h2>
 
-            <div className="mb-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Campo label="Fecha / Hora" value={fechaArgentina(op.fecha_hora)} />
+              <Campo label="Vendedor" value={op.vendedor} />
               <Campo label="Origen del dato" value={op.origen_dato} />
               <Campo label="Grupo operación" value={op.grupo_operacion} />
-              <Campo label="Tipo" value={tipoVisible} />
             </div>
-
-            <AsignacionesSuperForm
-              action={guardarAsignacionesSuper}
-              idOperacion={op.id_operacion}
-              tipo={op.tipo}
-              vendedorActualId={op.usuario_id ?? ''}
-              vendedorActualNombre={mostrar(op.vendedor)}
-              responsableActualId={responsableActualId ?? ''}
-              responsableActualNombre={
-                responsableActual?.vendedor ||
-                responsableActual?.nombre ||
-                'Sin asignar'
-              }
-              vendedores={vendedoresDisponibles.map((vendedor: any) => ({
-                id: vendedor.id,
-                nombre: vendedor.vendedor || vendedor.nombre,
-              }))}
-              responsables={(responsables ?? []).map((responsable: any) => ({
-                id: responsable.id,
-                nombre: responsable.vendedor || responsable.nombre,
-              }))}
-            />
           </section>
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
@@ -785,301 +682,375 @@ export default async function SuperDetalleVentaPage({
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-gray-900">Gestión</h2>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                Supervisor · editable
+              <h2 className="text-lg font-semibold text-gray-900">
+                Gestión
+              </h2>
+
+              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600">
+                Gestión inicial
               </span>
             </div>
 
-            <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Responsable
+            <form
+              action={guardarResponsable}
+              className="mb-6 rounded-xl border border-red-100 bg-red-50/40 p-4"
+            >
+              <input type="hidden" name="id_operacion" value={op.id_operacion} />
+              <input type="hidden" name="tipo" value={op.tipo} />
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div>
+                  <label
+                    htmlFor="responsable_id"
+                    className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500"
+                  >
+                    Responsable
+                  </label>
+
+                  <select
+                    id="responsable_id"
+                    name="responsable_id"
+                    defaultValue={responsableActualId ?? ''}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                  >
+                    <option value="">Sin responsable asignado</option>
+
+                    {(responsables ?? []).map((responsable: any) => (
+                      <option key={responsable.id} value={responsable.id}>
+                        {responsable.vendedor || responsable.nombre || responsable.id}
+                      </option>
+                    ))}
+                  </select>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Solo aparecen usuarios activos habilitados para gestionar ventas.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                >
+                  Guardar responsable
+                </button>
               </div>
-              <div className="mt-1 text-sm font-semibold text-gray-800">
-                {responsableActual?.vendedor ||
-                  responsableActual?.nombre ||
-                  (responsableActualId ? 'Usuario no disponible' : 'Sin asignar')}
+
+              <div className="mt-3 text-xs text-gray-500">
+                Responsable actual:{' '}
+                <span className="font-semibold text-gray-700">
+                  {responsableActual?.vendedor ||
+                    responsableActual?.nombre ||
+                    (responsableActualId ? 'Usuario no disponible' : 'Sin asignar')}
+                </span>
               </div>
-              <div className="mt-1 text-xs text-gray-500">
-                El Responsable se modifica desde Asignaciones.
-              </div>
-            </div>
+            </form>
 
             {esBaf ? (
-              <form action={guardarGestionBaf}>
+              <form
+                action={guardarGestionBaf}
+                className="rounded-xl border border-gray-200 bg-gray-50/50 p-4"
+              >
                 <input type="hidden" name="id_operacion" value={op.id_operacion} />
 
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Estado BAF</span>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Gestión BAF
+                    </h3>
+                    <p className="mt-1 text-xs text-gray-500">
+                      La Fecha Gestión se actualiza automáticamente al guardar.
+                    </p>
+                  </div>
+
+                  <div className="text-xs text-gray-500">
+                    Última gestión:{' '}
+                    <span className="font-medium text-gray-700">
+                      {fechaArgentina(gestionBaf?.fecha_gestion)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Estado BAF
+                    </label>
                     <select
                       name="estado_baf_id"
-                      defaultValue={gestionBaf?.estado_baf_id ? String(gestionBaf.estado_baf_id) : ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      defaultValue={gestionBaf?.estado_baf_id ?? ''}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     >
                       <option value="">Sin estado</option>
-                      {gestionBaf?.estado_baf_id &&
-                        !(estadosBaf ?? []).some((estado: any) => estado.id === gestionBaf.estado_baf_id) ? (
-                          <option value={String(gestionBaf.estado_baf_id)}>
-                            {gestionBaf?.estados_baf?.nombre || 'Estado actual'} (inactivo)
-                          </option>
-                        ) : null}
                       {(estadosBaf ?? []).map((estado: any) => (
-                        <option key={estado.id} value={String(estado.id)}>
+                        <option key={estado.id} value={estado.id}>
                           {estado.nombre}
                         </option>
                       ))}
                     </select>
-                  </label>
-
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                      Fecha Gestión
-                    </div>
-                    <div className="mt-1 text-sm font-semibold text-gray-800">
-                      {fechaArgentina(gestionBaf?.fecha_gestion)}
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      Se actualiza automáticamente cuando existe un cambio real.
-                    </div>
                   </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Prospector</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      CIA Celular
+                    </label>
+                    <select
+                      name="cia_celular"
+                      defaultValue={gestionBaf?.cia_celular ?? ''}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      <option value="">Seleccionar compañía</option>
+                      <option value="CLARO">CLARO</option>
+                      <option value="PERSONAL">PERSONAL</option>
+                      <option value="MOVISTAR">MOVISTAR</option>
+                      <option value="TUENTI">TUENTI</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Prospector
+                    </label>
                     <input
                       type="text"
                       name="prospector"
                       defaultValue={gestionBaf?.prospector ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
-
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                      Detalle Lead
-                    </div>
-                    <div className="mt-1 break-words text-sm text-gray-800">
-                      {mostrar(op.origen_dato)}
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">Solo lectura</div>
                   </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">CIA Celular</span>
-                    <input
-                      type="text"
-                      name="cia_celular"
-                      defaultValue={gestionBaf?.cia_celular ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    />
-                  </label>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Detalle Lead
+                    </label>
+                    <div className="w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700">
+                      {op.origen_dato || '-'}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Proviene de la carga inicial de la venta y no se modifica desde Gestión.
+                    </p>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">SDS</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      SDS
+                    </label>
                     <input
                       type="text"
                       name="sds"
                       defaultValue={gestionBaf?.sds ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Orden Trabajo</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Orden Trabajo
+                    </label>
                     <input
                       type="text"
                       name="orden_trabajo"
                       defaultValue={gestionBaf?.orden_trabajo ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Línea Fija</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Línea Fija
+                    </label>
                     <input
                       type="text"
                       name="linea_fija"
                       defaultValue={gestionBaf?.linea_fija ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block sm:col-span-2">
-                    <span className="text-sm font-semibold text-gray-800">Fecha Instalación</span>
-                    <input
-                      type="text"
-                      name="fecha_instalacion"
-                      defaultValue={gestionBaf?.fecha_instalacion ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Ciclo Cuenta</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Ciclo Cuenta
+                    </label>
                     <input
                       type="text"
                       name="ciclo_cuenta"
                       defaultValue={gestionBaf?.ciclo_cuenta ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block sm:col-span-2">
-                    <span className="text-sm font-semibold text-gray-800">Motivo Estado</span>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Fecha Instalación
+                    </label>
+                    <input
+                      type="text"
+                      name="fecha_instalacion"
+                      defaultValue={gestionBaf?.fecha_instalacion ?? ''}
+                      placeholder="Texto libre: fecha, rango horario y aclaraciones"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Motivo Estado
+                    </label>
                     <textarea
                       name="motivo_estado"
-                      rows={3}
                       defaultValue={gestionBaf?.motivo_estado ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      rows={3}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
                 </div>
 
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
-                  <div className="text-xs text-gray-500">
-                    Solo se registran en el historial los campos que realmente cambian.
-                  </div>
+                <div className="mt-5 flex justify-end">
                   <button
                     type="submit"
-                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+                    className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
                   >
                     Guardar gestión BAF
                   </button>
                 </div>
               </form>
             ) : esPorta ? (
-              <form action={guardarGestionPorta}>
+              <form
+                action={guardarGestionPorta}
+                className="rounded-xl border border-gray-200 bg-gray-50/50 p-4"
+              >
                 <input type="hidden" name="id_operacion" value={op.id_operacion} />
 
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Estado</span>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Gestión {porta?.es_linea_nueva ? 'Línea Nueva' : 'PORTA'}
+                    </h3>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Las fechas automáticas se registran una sola vez al alcanzar el estado correspondiente.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Estado
+                    </label>
                     <select
                       name="estado_porta_id"
-                      defaultValue={
-                        gestionPorta?.estado_porta_id
-                          ? String(gestionPorta.estado_porta_id)
-                          : ''
-                      }
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      defaultValue={gestionPorta?.estado_porta_id ?? ''}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     >
                       <option value="">Sin estado</option>
-                      {gestionPorta?.estado_porta_id &&
-                      !(estadosPorta ?? []).some(
-                        (estado: any) => estado.id === gestionPorta.estado_porta_id
-                      ) ? (
-                        <option value={String(gestionPorta.estado_porta_id)}>
-                          {gestionPorta?.estados_porta?.nombre || 'Estado actual'} (inactivo)
-                        </option>
-                      ) : null}
                       {(estadosPorta ?? []).map((estado: any) => (
-                        <option key={estado.id} value={String(estado.id)}>
+                        <option key={estado.id} value={estado.id}>
                           {estado.nombre}
                         </option>
                       ))}
                     </select>
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">BBOO</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      BBOO
+                    </label>
                     <select
                       name="bboo_id"
                       defaultValue={gestionPorta?.bboo_id ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     >
-                      <option value="">Sin asignar</option>
-                      {bbooActualFueraDeLista ? (
-                        <option value={bbooActualFueraDeLista.id}>
-                          {bbooActualFueraDeLista.vendedor ||
-                            bbooActualFueraDeLista.nombre ||
-                            'BBOO actual'}{' '}
-                          (inactivo)
-                        </option>
-                      ) : null}
+                      <option value="">Sin BBOO asignado</option>
                       {(usuariosBboo ?? []).map((bboo: any) => (
                         <option key={bboo.id} value={bboo.id}>
-                          {bboo.vendedor || bboo.nombre}
+                          {bboo.vendedor || bboo.nombre || bboo.id}
                         </option>
                       ))}
                     </select>
-                  </label>
+                  </div>
 
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Fecha Carga STL
-                    </div>
-                    <div className="mt-1 text-sm font-semibold text-gray-800">
+                    </label>
+                    <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
                       {fechaArgentina(gestionPorta?.fecha_carga_stl)}
                     </div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      Se registra automáticamente al pasar a Cargado STL.
-                    </div>
                   </div>
 
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Fecha PORTA
-                    </div>
-                    <div className="mt-1 text-sm font-semibold text-gray-800">
+                    </label>
+                    <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
                       {fechaArgentina(gestionPorta?.fecha_porta)}
                     </div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      Se registra automáticamente al pasar a Cargado STL.
-                    </div>
                   </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">SIM</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      SIM
+                    </label>
                     <input
                       type="text"
                       name="sim"
+                      inputMode="numeric"
                       defaultValue={gestionPorta?.sim ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">PLAN</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      PLAN
+                    </label>
                     <input
                       type="text"
                       name="plan_cargado"
                       defaultValue={gestionPorta?.plan_cargado ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">SDS</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      SDS
+                    </label>
                     <input
                       type="text"
                       name="sds"
                       defaultValue={gestionPorta?.sds ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">SPN</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      SPN
+                    </label>
                     <input
                       type="text"
                       name="spn"
                       defaultValue={gestionPorta?.spn ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">PIN / LNVA NRO</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      PIN / LNVA NRO
+                    </label>
                     <input
                       type="text"
                       name="pin_lnva_nro"
                       defaultValue={gestionPorta?.pin_lnva_nro ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Documentación DNI</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Documentación DNI
+                    </label>
                     <select
                       name="documentacion_dni"
                       defaultValue={
@@ -1089,46 +1060,36 @@ export default async function SuperDetalleVentaPage({
                             ? 'NO'
                             : ''
                       }
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     >
                       <option value="">Sin informar</option>
-                      <option value="SI">Sí</option>
-                      <option value="NO">No</option>
+                      <option value="SI">SI</option>
+                      <option value="NO">NO</option>
                     </select>
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Medio de despacho CHIP
-                    </span>
+                    </label>
                     <select
                       name="medio_despacho_chip_id"
-                      defaultValue={
-                        gestionPorta?.medio_despacho_chip_id
-                          ? String(gestionPorta.medio_despacho_chip_id)
-                          : ''
-                      }
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      defaultValue={gestionPorta?.medio_despacho_chip_id ?? ''}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     >
-                      <option value="">Sin asignar</option>
-                      {gestionPorta?.medio_despacho_chip_id &&
-                      !(mediosDespacho ?? []).some(
-                        (medio: any) => medio.id === gestionPorta.medio_despacho_chip_id
-                      ) ? (
-                        <option value={String(gestionPorta.medio_despacho_chip_id)}>
-                          {gestionPorta?.medios_despacho_chip?.nombre || 'Medio actual'} (inactivo)
-                        </option>
-                      ) : null}
+                      <option value="">Sin informar</option>
                       {(mediosDespacho ?? []).map((medio: any) => (
-                        <option key={medio.id} value={String(medio.id)}>
+                        <option key={medio.id} value={medio.id}>
                           {medio.nombre}
                         </option>
                       ))}
                     </select>
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Tiene BAF</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Tiene BAF
+                    </label>
                     <select
                       name="tiene_baf"
                       defaultValue={
@@ -1138,16 +1099,18 @@ export default async function SuperDetalleVentaPage({
                             ? 'NO'
                             : ''
                       }
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     >
                       <option value="">Sin informar</option>
-                      <option value="SI">Sí</option>
-                      <option value="NO">No</option>
+                      <option value="SI">SI</option>
+                      <option value="NO">NO</option>
                     </select>
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Zona BAF</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Zona BAF
+                    </label>
                     <select
                       name="zona_baf"
                       defaultValue={
@@ -1157,121 +1120,39 @@ export default async function SuperDetalleVentaPage({
                             ? 'NO'
                             : ''
                       }
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     >
                       <option value="">Sin informar</option>
-                      <option value="SI">Sí</option>
-                      <option value="NO">No</option>
+                      <option value="SI">SI</option>
+                      <option value="NO">NO</option>
                     </select>
-                  </label>
+                  </div>
 
-                  <label className="block sm:col-span-2">
-                    <span className="text-sm font-semibold text-gray-800">
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Observaciones gestión
-                    </span>
+                    </label>
                     <textarea
                       name="observaciones_gestion"
-                      rows={4}
                       defaultValue={gestionPorta?.observaciones_gestion ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      rows={3}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
                 </div>
 
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
-                  <div className="text-xs text-gray-500">
-                    Solo se registran en el historial los campos que realmente cambian.
-                  </div>
+                <div className="mt-5 flex justify-end">
                   <button
                     type="submit"
-                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+                    className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
                   >
                     Guardar gestión {porta?.es_linea_nueva ? 'Línea Nueva' : 'PORTA'}
                   </button>
                 </div>
               </form>
             ) : (
-              <div className="text-sm text-gray-500">Esta venta todavía no tiene datos de gestión.</div>
-            )}
-          </section>
-
-          <section className="rounded-2xl border border-gray-200 bg-white p-5">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Historial de cambios
-              </h2>
-              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600">
-                Solo lectura
-              </span>
-            </div>
-
-            {(historial ?? []).length === 0 ? (
-              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
-                Esta operación todavía no tiene cambios registrados en el historial.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {(historial ?? []).map((item: any) => {
-                  const usuarioHistorial =
-                    item.usuario?.vendedor ||
-                    item.usuario?.nombre ||
-                    'Usuario no disponible'
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="rounded-xl border border-gray-200 bg-gray-50 p-4"
-                    >
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <div className="text-sm font-semibold text-gray-900">
-                            {item.etiqueta || item.campo || 'Modificación'}
-                          </div>
-                          <div className="mt-1 text-xs text-gray-500">
-                            {usuarioHistorial}
-                            {item.rol_actor ? ` · ${item.rol_actor}` : ''}
-                            {item.tipo_accion ? ` · ${item.tipo_accion}` : ''}
-                          </div>
-                        </div>
-
-                        <div className="text-xs font-medium text-gray-500">
-                          {fechaArgentina(item.fecha_hora)}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
-                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                            Valor anterior
-                          </div>
-                          <div className="mt-1 break-words text-sm text-gray-700">
-                            {mostrar(item.valor_anterior)}
-                          </div>
-                        </div>
-
-                        <div className="hidden text-center text-gray-400 sm:block">
-                          →
-                        </div>
-
-                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
-                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                            Valor nuevo
-                          </div>
-                          <div className="mt-1 break-words text-sm font-medium text-gray-900">
-                            {mostrar(item.valor_nuevo)}
-                          </div>
-                        </div>
-                      </div>
-
-                      {item.observacion ? (
-                        <div className="mt-3 text-sm text-gray-600">
-                          <span className="font-medium">Observación:</span>{' '}
-                          {item.observacion}
-                        </div>
-                      ) : null}
-                    </div>
-                  )
-                })}
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                Esta venta todavía no tiene datos de gestión.
               </div>
             )}
           </section>

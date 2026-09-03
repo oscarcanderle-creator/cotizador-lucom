@@ -1,9 +1,19 @@
 import Link from 'next/link'
 
+type Actual =
+  | 'VENTAS'
+  | 'MIS_VENTAS'
+  | 'MIS_CONSULTAS'
+  | 'COTIZADOR'
+  | 'GESTION_VENTAS'
+  | 'SUPER'
+  | 'ADMIN'
+
 type Props = {
   rol: string
-  actual?: 'VENTAS' | 'MIS_VENTAS' | 'MIS_CONSULTAS' | 'COTIZADOR' | 'SUPER' | 'ADMIN'
+  actual?: Actual
   variante?: 'rojo' | 'claro'
+  puedeGestionarVentas?: boolean
 }
 
 const items = [
@@ -11,12 +21,27 @@ const items = [
   { key: 'MIS_VENTAS', label: 'Mis Ventas', href: '/mis-ventas', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN'] },
   { key: 'MIS_CONSULTAS', label: 'Mis Consultas', href: '/mis-consultas', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN'] },
   { key: 'COTIZADOR', label: 'Cotizador', href: '/cotizador', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN'] },
+  { key: 'GESTION_VENTAS', label: 'Gestión de Ventas', href: '/gestion-ventas', roles: ['VENDEDOR'] },
   { key: 'SUPER', label: 'Super', href: '/super', roles: ['SUPERVISOR', 'ADMIN'] },
   { key: 'ADMIN', label: 'Admin', href: '/admin', roles: ['ADMIN'] },
 ] as const
 
-export default function AppNav({ rol, actual, variante = 'rojo' }: Props) {
-  const visibles = items.filter((item) => item.roles.some((permitido) => permitido === rol))
+export default function AppNav({
+  rol,
+  actual,
+  variante = 'rojo',
+  puedeGestionarVentas = false,
+}: Props) {
+  const visibles = items.filter((item) => {
+    const rolPermitido = item.roles.some((permitido) => permitido === rol)
+    if (!rolPermitido) return false
+
+    if (item.key === 'GESTION_VENTAS') {
+      return rol === 'VENDEDOR' && puedeGestionarVentas
+    }
+
+    return true
+  })
 
   return (
     <nav aria-label="Navegación principal" className="flex flex-wrap items-center justify-center gap-1 sm:gap-2">

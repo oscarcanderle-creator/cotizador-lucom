@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { createClient } from '../../../../utils/supabase/server'
 import AppHeader from '../../../../components/AppHeader'
 
@@ -117,23 +118,68 @@ export default async function SuperConsultaDetalle({
     const deudaRaw = String(formData.get('estado_deuda_id') ?? '').trim()
     const coberturaRaw = String(formData.get('estado_cobertura_id') ?? '').trim()
 
-    const { error: rpcError } = await supabaseAction.rpc('gestionar_consulta_completa', {
-      p_consulta_id: consultaId,
-      p_cliente: normalizar(formData.get('cliente')),
-      p_dni: normalizar(formData.get('dni')),
-      p_telefono: telefono,
-      p_tipo_domicilio: normalizar(formData.get('tipo_domicilio')),
-      p_domicilio: normalizar(formData.get('domicilio')),
-      p_entrecalles: normalizar(formData.get('entrecalles')),
-      p_localidad: normalizar(formData.get('localidad')),
-      p_observaciones: normalizar(formData.get('observaciones')),
-      p_estado_deuda_id: deudaRaw ? Number(deudaRaw) : null,
-      p_estado_cobertura_id: coberturaRaw ? Number(coberturaRaw) : null,
-    })
+    const requestHeaders = await headers()
 
-    if (rpcError) {
+    const host =
+      requestHeaders.get('x-forwarded-host') ||
+      requestHeaders.get('host')
+
+    const protocolo =
+      requestHeaders.get('x-forwarded-proto') ||
+      (process.env.NODE_ENV === 'development' ? 'http' : 'https')
+
+    const cookie = requestHeaders.get('cookie') || ''
+
+    if (!host) {
       redirect(
-        `/super/consultas/${consultaId}?error=${encodeURIComponent(rpcError.message)}`
+        `/super/consultas/${consultaId}?error=${encodeURIComponent(
+          'No se pudo determinar la dirección del servidor.'
+        )}`
+      )
+    }
+
+    let response: Response
+
+    try {
+      response = await fetch(`${protocolo}://${host}/api/gestion/consulta`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: cookie,
+        },
+        cache: 'no-store',
+        body: JSON.stringify({
+          consulta_id: consultaId,
+          cliente: normalizar(formData.get('cliente')),
+          dni: normalizar(formData.get('dni')),
+          telefono,
+          tipo_domicilio: normalizar(formData.get('tipo_domicilio')),
+          domicilio: normalizar(formData.get('domicilio')),
+          entrecalles: normalizar(formData.get('entrecalles')),
+          localidad: normalizar(formData.get('localidad')),
+          observaciones: normalizar(formData.get('observaciones')),
+          estado_deuda_id: deudaRaw ? Number(deudaRaw) : null,
+          estado_cobertura_id: coberturaRaw ? Number(coberturaRaw) : null,
+        }),
+      })
+    } catch (error) {
+      const mensaje =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo ejecutar la gestión de la Consulta.'
+
+      redirect(
+        `/super/consultas/${consultaId}?error=${encodeURIComponent(mensaje)}`
+      )
+    }
+
+    const resultado = await response.json()
+
+    if (!response.ok || !resultado?.ok) {
+      redirect(
+        `/super/consultas/${consultaId}?error=${encodeURIComponent(
+          resultado?.error || 'No se pudo guardar la gestión de la Consulta.'
+        )}`
       )
     }
 

@@ -43,6 +43,7 @@ type Props = {
   novedades: NovedadPropuesta[]
   usuario: string
   rol: string
+  puedeGestionarVentas: boolean
 }
 
 type PortabilidadUI = {
@@ -107,6 +108,7 @@ export default function Cotizador({
   novedades,
   usuario,
   rol,
+  puedeGestionarVentas,
 }: Props) {
   const propuestaRef = useRef<HTMLDivElement>(null)
   const [exportando, setExportando] = useState(false)
@@ -783,6 +785,7 @@ async function compartirPropuesta() {
         rol={rol}
         usuario={usuario}
         actual="COTIZADOR"
+        puedeGestionarVentas={puedeGestionarVentas}
       />
 
       <div className="max-w-7xl mx-auto px-3 py-3 sm:px-5 sm:py-4 grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-4 lg:gap-5">
@@ -1076,7 +1079,7 @@ async function compartirPropuesta() {
 
               <div className="flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-2">
 
-                <label className="flex items-center gap-2 text-sm text-gray-800">
+                <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={clienteTieneLineasClaro}
@@ -1085,8 +1088,9 @@ async function compartirPropuesta() {
                         e.target.checked
                       )
                     }
-                    className="w-4 h-4"
+                    className="sr-only peer"
                   />
+                  <span className="relative w-9 h-5 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
                   Tiene Líneas Mov.?
                 </label>
 
@@ -1110,7 +1114,7 @@ async function compartirPropuesta() {
                   </label>
                 )}
 
-                <label className="flex items-center gap-2 text-sm text-gray-800">
+                <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={clienteTieneBAF}
@@ -1119,8 +1123,9 @@ async function compartirPropuesta() {
                         e.target.checked
                       )
                     }
-                    className="w-4 h-4"
+                    className="sr-only peer"
                   />
+                  <span className="relative w-9 h-5 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
                   Tiene BAF?
                 </label>
 
@@ -1341,21 +1346,17 @@ async function compartirPropuesta() {
 
             <div className="flex items-center gap-2 mb-2">
 
-              <input
-                type="checkbox"
-
-                checked={
-                  internetActivo
-                }
-
-                onChange={(e) =>
-                  setInternetActivo(
-                    e.target.checked
-                  )
-                }
-
-                className="w-5 h-5"
-              />
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={internetActivo}
+                  onChange={(e) =>
+                    setInternetActivo(e.target.checked)
+                  }
+                  className="sr-only peer"
+                />
+                <span className="relative w-9 h-5 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
+              </label>
 
               <h2 className="text-lg font-semibold">
                 Internet WiFi
@@ -1436,25 +1437,18 @@ async function compartirPropuesta() {
 
               </div>
 
-              <input
-                type="checkbox"
-
-                disabled={
-                  !puedeContratarTV
-                }
-
-                checked={
-                  tvActivo
-                }
-
-                onChange={(e) =>
-                  setTvActivo(
-                    e.target.checked
-                  )
-                }
-
-                className="w-5 h-5 disabled:opacity-40"
-              />
+              <label className={`relative inline-flex items-center ${puedeContratarTV ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}>
+                <input
+                  type="checkbox"
+                  disabled={!puedeContratarTV}
+                  checked={tvActivo}
+                  onChange={(e) =>
+                    setTvActivo(e.target.checked)
+                  }
+                  className="sr-only peer"
+                />
+                <span className="relative w-9 h-5 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
+              </label>
 
             </div>
 

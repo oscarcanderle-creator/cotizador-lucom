@@ -20,7 +20,7 @@ export default async function CotizadorPage() {
    */
   const { data: profile } = await supabase
     .from('profiles')
-    .select('nombre, rol, activo')
+    .select('nombre, rol, activo, puede_gestionar_ventas')
     .eq('id', user.id)
     .single()
 
@@ -139,6 +139,7 @@ export default async function CotizadorPage() {
       novedades={novedades ?? []}
       usuario={vendedor}
       rol={profile.rol}
+      puedeGestionarVentas={profile.puede_gestionar_ventas === true}
     />
   )
 }

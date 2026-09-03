@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { createClient } from '../../../../utils/supabase/server'
 import AppHeader from '../../../../components/AppHeader'
 
@@ -134,35 +135,84 @@ export default async function SuperPedidoDetalle({
 
     const estadoRaw = String(formData.get('estado_pedido_id') ?? '').trim()
 
-    const { error: rpcError } = await supabaseAction.rpc('gestionar_pedido_completo', {
-      p_pedido_id: pedidoId,
-      p_dni: normalizar(formData.get('dni')),
-      p_telefono: telefono,
-      p_domicilio: normalizar(formData.get('domicilio')),
-      p_tipo_domicilio: normalizar(formData.get('tipo_domicilio')),
-      p_nombre_edificio: normalizar(formData.get('nombre_edificio')),
-      p_cant_unidades_f: normalizar(formData.get('cant_unidades_f')),
-      p_cant_pisos: normalizar(formData.get('cant_pisos')),
-      p_cant_torres: normalizar(formData.get('cant_torres')),
-      p_administrador: normalizar(formData.get('administrador')),
-      p_telefono_adm: telefonoAdm || null,
-      p_correo_adm: normalizar(formData.get('correo_adm')),
-      p_encargado: normalizar(formData.get('encargado')),
-      p_telefono_enc: telefonoEnc || null,
-      p_correo_enc: normalizar(formData.get('correo_enc')),
-      p_observaciones_vendedor: normalizar(formData.get('observaciones_vendedor')),
-      p_permisos_acceso: normalizar(formData.get('permisos_acceso')),
-      p_planos: normalizar(formData.get('planos')),
-      p_cant_preventas: normalizar(formData.get('cant_preventas')),
-      p_wo: normalizar(formData.get('wo')),
-      p_observaciones_gestion: normalizar(formData.get('observaciones_gestion')),
-      p_fecha_ok: normalizar(formData.get('fecha_ok')),
-      p_estado_pedido_id: estadoRaw ? Number(estadoRaw) : null,
-    })
+    const requestHeaders = await headers()
 
-    if (rpcError) {
+    const host =
+      requestHeaders.get('x-forwarded-host') ||
+      requestHeaders.get('host')
+
+    const protocolo =
+      requestHeaders.get('x-forwarded-proto') ||
+      (process.env.NODE_ENV === 'development' ? 'http' : 'https')
+
+    const cookie = requestHeaders.get('cookie') || ''
+
+    if (!host) {
       redirect(
-        `/super/pedidos/${pedidoId}?error=${encodeURIComponent(rpcError.message)}`
+        `/super/pedidos/${pedidoId}?error=${encodeURIComponent(
+          'No se pudo determinar la dirección del servidor.'
+        )}`
+      )
+    }
+
+    let response: Response
+
+    try {
+      response = await fetch(`${protocolo}://${host}/api/gestion/pedido`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: cookie,
+        },
+        cache: 'no-store',
+        body: JSON.stringify({
+          pedido_id: pedidoId,
+          dni: normalizar(formData.get('dni')),
+          telefono,
+          domicilio: normalizar(formData.get('domicilio')),
+          tipo_domicilio: normalizar(formData.get('tipo_domicilio')),
+          nombre_edificio: normalizar(formData.get('nombre_edificio')),
+          cant_unidades_f: normalizar(formData.get('cant_unidades_f')),
+          cant_pisos: normalizar(formData.get('cant_pisos')),
+          cant_torres: normalizar(formData.get('cant_torres')),
+          administrador: normalizar(formData.get('administrador')),
+          telefono_adm: telefonoAdm || null,
+          correo_adm: normalizar(formData.get('correo_adm')),
+          encargado: normalizar(formData.get('encargado')),
+          telefono_enc: telefonoEnc || null,
+          correo_enc: normalizar(formData.get('correo_enc')),
+          observaciones_vendedor: normalizar(
+            formData.get('observaciones_vendedor')
+          ),
+          permisos_acceso: normalizar(formData.get('permisos_acceso')),
+          planos: normalizar(formData.get('planos')),
+          cant_preventas: normalizar(formData.get('cant_preventas')),
+          wo: normalizar(formData.get('wo')),
+          observaciones_gestion: normalizar(
+            formData.get('observaciones_gestion')
+          ),
+          fecha_ok: normalizar(formData.get('fecha_ok')),
+          estado_pedido_id: estadoRaw ? Number(estadoRaw) : null,
+        }),
+      })
+    } catch (error) {
+      const mensaje =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo ejecutar la gestión del Pedido.'
+
+      redirect(
+        `/super/pedidos/${pedidoId}?error=${encodeURIComponent(mensaje)}`
+      )
+    }
+
+    const resultado = await response.json()
+
+    if (!response.ok || !resultado?.ok) {
+      redirect(
+        `/super/pedidos/${pedidoId}?error=${encodeURIComponent(
+          resultado?.error || 'No se pudo guardar la gestión del Pedido.'
+        )}`
       )
     }
 

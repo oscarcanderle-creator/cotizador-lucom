@@ -422,7 +422,7 @@ export default async function VentasPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('nombre, vendedor, rol, activo')
+    .select('nombre, vendedor, rol, activo, puede_gestionar_ventas')
     .eq('id', user.id)
     .single()
 
@@ -973,6 +973,7 @@ export default async function VentasPage() {
       nombreUsuario={nombreUsuario}
       vendedor={vendedor}
       rol={profile.rol}
+      puedeGestionarVentas={profile.puede_gestionar_ventas === true}
       planesPorta={(planesPorta ?? []).map((x) => x.nombre)}
       planesBaf={(planesBaf ?? []).map((x) => x.nombre)}
       origenes={(origenes ?? []).map((x) => x.nombre)}
