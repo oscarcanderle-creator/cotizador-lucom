@@ -76,12 +76,14 @@ async function guardarResponsable(formData: FormData) {
     .eq('id', user.id)
     .maybeSingle()
 
-  const esVendedorGestor =
+  const esUsuarioGestion =
     profile?.activo === true &&
-    profile?.rol === 'VENDEDOR' &&
-    profile?.puede_gestionar_ventas === true
+    (
+      (profile?.rol === 'VENDEDOR' && profile?.puede_gestionar_ventas === true) ||
+      profile?.rol === 'BBOO'
+    )
 
-  if (!esVendedorGestor) {
+  if (!esUsuarioGestion) {
     throw new Error('No tiene permisos para asignar responsables.')
   }
 
@@ -322,8 +324,7 @@ async function guardarGestionPorta(formData: FormData) {
       pin_lnva_nro: texto('pin_lnva_nro'),
       documentacion_dni: booleano('documentacion_dni'),
       medio_despacho_chip_id: medioDespachoId,
-      tiene_baf: booleano('tiene_baf'),
-      zona_baf: booleano('zona_baf'),
+      numero_seguimiento: texto('numero_seguimiento'),
       observaciones_gestion: texto('observaciones_gestion'),
     }),
     cache: 'no-store',
@@ -366,11 +367,14 @@ export default async function DetalleVentaPage({
 
   if (!profile?.activo) redirect('/login')
 
-  const esVendedorGestor =
-    profile.rol === 'VENDEDOR' &&
-    profile.puede_gestionar_ventas === true
+  const esUsuarioGestion =
+    profile.activo === true &&
+    (
+      (profile.rol === 'VENDEDOR' && profile.puede_gestionar_ventas === true) ||
+      profile.rol === 'BBOO'
+    )
 
-  if (!esVendedorGestor) redirect('/ventas')
+  if (!esUsuarioGestion) redirect('/ventas')
 
   // El acceso se valida con la sesión del usuario. Los datos relacionados se
   // leen con el cliente admin para evitar que las RLS de tablas hijas oculten
@@ -521,8 +525,7 @@ export default async function DetalleVentaPage({
         documentacion_dni,
         medio_despacho_chip_id,
         fecha_porta,
-        tiene_baf,
-        zona_baf,
+        numero_seguimiento,
         observaciones_gestion,
         estado_porta_id,
         estados_porta (
@@ -1350,47 +1353,17 @@ export default async function DetalleVentaPage({
                       ))}
                     </select>
                   </div>
-
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Tiene BAF
+                      Número de seguimiento
                     </label>
-                    <select
-                      name="tiene_baf"
-                      defaultValue={
-                        gestionPorta?.tiene_baf === true
-                          ? 'SI'
-                          : gestionPorta?.tiene_baf === false
-                            ? 'NO'
-                            : ''
-                      }
+                    <input
+                      type="text"
+                      name="numero_seguimiento"
+                      defaultValue={gestionPorta?.numero_seguimiento ?? ''}
+                      placeholder="Ej.: código Andreani / Cadetería"
                       className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    >
-                      <option value="">Sin informar</option>
-                      <option value="SI">SI</option>
-                      <option value="NO">NO</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Zona BAF
-                    </label>
-                    <select
-                      name="zona_baf"
-                      defaultValue={
-                        gestionPorta?.zona_baf === true
-                          ? 'SI'
-                          : gestionPorta?.zona_baf === false
-                            ? 'NO'
-                            : ''
-                      }
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    >
-                      <option value="">Sin informar</option>
-                      <option value="SI">SI</option>
-                      <option value="NO">NO</option>
-                    </select>
+                    />
                   </div>
 
                   <div className="sm:col-span-2">

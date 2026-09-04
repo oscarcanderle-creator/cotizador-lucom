@@ -3,6 +3,7 @@ import { createClient } from '../../utils/supabase/server'
 import { createAdminClient } from '../../utils/supabase/admin'
 import AppHeader from '../../components/AppHeader'
 import FiltrosAvanzadosVentas from '../../components/FiltrosAvanzadosVentas'
+import BandejasGestionVentas from '../../components/BandejasGestionVentas'
 
 type SearchParams = Promise<{
   q?: string
@@ -29,6 +30,7 @@ type SearchParams = Promise<{
   f4_op?: string
   f4_value?: string
   f4_value2?: string
+  bandeja?: string
 }>
 
 function fechaArgentina(fecha: string | null) {
@@ -182,11 +184,15 @@ export default async function GestionVentasPage({
     profile.rol === 'VENDEDOR' &&
     profile.puede_gestionar_ventas === true
 
-  if (!esVendedorGestor) redirect('/ventas')
+  const esBboo = profile.rol === 'BBOO'
+  const puedeGestionarVentas = esVendedorGestor || esBboo
+
+  if (!puedeGestionarVentas) redirect('/ventas')
 
   /*
    * Desde este punto usamos el cliente ADMIN, pero solamente después
-   * de autenticar y validar que el usuario es un VENDEDOR GESTOR activo.
+   * de autenticar y validar que el usuario puede gestionar ventas
+   * (VENDEDOR GESTOR o BBOO activo).
    *
    * Esto evita que RLS o las relaciones embebidas oculten Cliente,
    * datos PORTA/LN y demás información necesaria en el listado.
@@ -199,6 +205,17 @@ export default async function GestionVentasPage({
   const filtroVendedor = String(params?.vendedor ?? '').trim()
   const filtroResponsable = String(params?.responsable ?? '').trim()
   const filtroEstado = String(params?.estado ?? '').trim()
+  const bandejaActiva = String(params?.bandeja ?? '').trim()
+
+  const { data: bandejasResultado, error: errorBandejas } = await admin
+    .from('bandejas_gestion_ventas')
+    .select('id, nombre, filtros')
+    .eq('usuario_id', user.id)
+    .order('nombre', { ascending: true })
+
+  if (errorBandejas) {
+    throw new Error(`No se pudieron cargar las bandejas: ${errorBandejas.message}`)
+  }
 
   const { data: operacionesBase, error } = await admin
     .from('operaciones')
@@ -276,7 +293,7 @@ export default async function GestionVentasPage({
     idsOperaciones.length > 0
       ? admin
           .from('gestion_porta')
-          .select('operacion_id, responsable_id, updated_at, estado_porta_id, medio_despacho_chip_id, fecha_carga_stl, fecha_porta, pin_lnva_nro, sim')
+          .select('operacion_id, responsable_id, updated_at, estado_porta_id, medio_despacho_chip_id, fecha_carga_stl, fecha_porta, pin_lnva_nro, sim, numero_seguimiento')
           .in('operacion_id', idsOperaciones)
       : Promise.resolve({ data: [], error: null }),
 
@@ -544,6 +561,22 @@ export default async function GestionVentasPage({
     })
     .filter((filtro) => filtro.campo && filtro.condicion)
 
+  const filtrosActualesParaBandeja = {
+    tipo: filtroTipo,
+    vendedor: filtroVendedor,
+    responsable: filtroResponsable,
+    estado: filtroEstado,
+    avanzados: filtrosAvanzados,
+  }
+
+  const puedeGuardarBandeja = Boolean(
+    filtroTipo ||
+    filtroVendedor ||
+    filtroResponsable ||
+    filtroEstado ||
+    filtrosAvanzados.length > 0
+  )
+
   const fechaSoloDiaArgentina = (valor: string | null | undefined) => {
     if (!valor) return ''
     const fecha = new Date(valor)
@@ -588,6 +621,8 @@ export default async function GestionVentasPage({
         return String(gestionPorta?.pin_lnva_nro ?? '').trim()
       case 'sim_operativo':
         return String(gestionPorta?.sim ?? '').trim()
+      case 'numero_seguimiento':
+        return String(gestionPorta?.numero_seguimiento ?? '').trim()
       default:
         return ''
     }
@@ -616,6 +651,7 @@ export default async function GestionVentasPage({
 
     if (filtro.condicion === 'es') return actualNormalizado === esperadoNormalizado
     if (filtro.condicion === 'no_es') return actualNormalizado !== esperadoNormalizado
+    if (filtro.condicion === 'contiene') return actualNormalizado.includes(esperadoNormalizado)
 
     return true
   }
@@ -711,6 +747,17 @@ export default async function GestionVentasPage({
             Gestión operativa de BAF, Portabilidad y Línea Nueva.
           </p>
         </div>
+
+        <BandejasGestionVentas
+          bandejas={(bandejasResultado ?? []).map((b: any) => ({
+            id: String(b.id),
+            nombre: String(b.nombre ?? ''),
+            filtros: b.filtros ?? {},
+          }))}
+          filtrosActuales={filtrosActualesParaBandeja}
+          puedeGuardar={puedeGuardarBandeja}
+          bandejaActiva={bandejaActiva}
+        />
 
         <form
           method="get"

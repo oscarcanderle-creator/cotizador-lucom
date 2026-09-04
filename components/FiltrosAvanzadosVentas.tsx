@@ -31,6 +31,7 @@ const CAMPOS = [
   ['fecha_porta', 'Fecha Porta'],
   ['pin', 'PIN'],
   ['sim_operativo', 'SIM operativo'],
+  ['numero_seguimiento', 'Número de seguimiento'],
 ] as const
 
 const vacio: Filtro = {
@@ -57,6 +58,16 @@ function condiciones(campo: string) {
     return [
       ['no_vacio', 'con dato'],
       ['vacio', 'sin dato'],
+    ]
+  }
+
+  if (campo === 'numero_seguimiento') {
+    return [
+      ['contiene', 'contiene'],
+      ['es', 'es'],
+      ['no_es', 'no es'],
+      ['vacio', 'está vacío'],
+      ['no_vacio', 'no está vacío'],
     ]
   }
 
@@ -205,6 +216,15 @@ export default function FiltrosAvanzadosVentas({
                         />
                       )}
                     </>
+                  ) : filtro.campo === 'numero_seguimiento' ? (
+                    <input
+                      type="text"
+                      name={`f${indice + 1}_value`}
+                      value={filtro.valor}
+                      onChange={(e) => cambiar(indice, { valor: e.target.value })}
+                      placeholder="Número de seguimiento..."
+                      className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                    />
                   ) : (
                     <select
                       name={`f${indice + 1}_value`}

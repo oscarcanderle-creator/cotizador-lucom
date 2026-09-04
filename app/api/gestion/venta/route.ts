@@ -34,8 +34,7 @@ type BodyGestionVenta = {
   pin_lnva_nro?: string | null
   documentacion_dni?: boolean | null
   medio_despacho_chip_id?: number | null
-  tiene_baf?: boolean | null
-  zona_baf?: boolean | null
+  numero_seguimiento?: string | null
   observaciones_gestion?: string | null
 }
 
@@ -290,8 +289,7 @@ export async function POST(request: Request) {
           documentacion_dni,
           medio_despacho_chip_id,
           fecha_porta,
-          tiene_baf,
-          zona_baf,
+          numero_seguimiento,
           observaciones_gestion
         `)
         .eq('operacion_id', operacionId)
@@ -318,8 +316,7 @@ export async function POST(request: Request) {
       p_pin_lnva_nro: body.pin_lnva_nro ?? null,
       p_documentacion_dni: body.documentacion_dni ?? null,
       p_medio_despacho_chip_id: body.medio_despacho_chip_id ?? null,
-      p_tiene_baf: body.tiene_baf ?? null,
-      p_zona_baf: body.zona_baf ?? null,
+      p_numero_seguimiento: body.numero_seguimiento ?? null,
       p_observaciones_gestion: body.observaciones_gestion ?? null,
     })
 
@@ -341,8 +338,7 @@ export async function POST(request: Request) {
         documentacion_dni,
         medio_despacho_chip_id,
         fecha_porta,
-        tiene_baf,
-        zona_baf,
+        numero_seguimiento,
         observaciones_gestion
       `)
       .eq('operacion_id', operacionId)
@@ -479,17 +475,9 @@ export async function POST(request: Request) {
     )
     agregarCambio(
       cambios,
-      'Tiene BAF',
-      anterior?.tiene_baf,
-      posterior.tiene_baf,
-      booleano
-    )
-    agregarCambio(
-      cambios,
-      'Zona BAF',
-      anterior?.zona_baf,
-      posterior.zona_baf,
-      booleano
+      'Número de seguimiento',
+      anterior?.numero_seguimiento,
+      posterior.numero_seguimiento
     )
     agregarCambio(
       cambios,

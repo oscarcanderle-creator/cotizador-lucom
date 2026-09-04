@@ -328,8 +328,7 @@ async function guardarGestionPorta(formData: FormData) {
       pin_lnva_nro: texto('pin_lnva_nro'),
       documentacion_dni: booleano('documentacion_dni'),
       medio_despacho_chip_id: medioDespachoId,
-      tiene_baf: booleano('tiene_baf'),
-      zona_baf: booleano('zona_baf'),
+      numero_seguimiento: texto('numero_seguimiento'),
       observaciones_gestion: texto('observaciones_gestion'),
     }),
     cache: 'no-store',
@@ -525,8 +524,7 @@ export default async function SuperDetalleVentaPage({
         documentacion_dni,
         medio_despacho_chip_id,
         fecha_porta,
-        tiene_baf,
-        zona_baf,
+        numero_seguimiento,
         observaciones_gestion,
         estado_porta_id,
         estados_porta (
@@ -1262,43 +1260,17 @@ export default async function SuperDetalleVentaPage({
                       ))}
                     </select>
                   </label>
-
                   <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Tiene BAF</span>
-                    <select
-                      name="tiene_baf"
-                      defaultValue={
-                        gestionPorta?.tiene_baf === true
-                          ? 'SI'
-                          : gestionPorta?.tiene_baf === false
-                            ? 'NO'
-                            : ''
-                      }
+                    <span className="text-sm font-semibold text-gray-800">
+                      Número de seguimiento
+                    </span>
+                    <input
+                      type="text"
+                      name="numero_seguimiento"
+                      defaultValue={gestionPorta?.numero_seguimiento ?? ''}
+                      placeholder="Ej.: código Andreani / Cadetería"
                       className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    >
-                      <option value="">Sin informar</option>
-                      <option value="SI">Sí</option>
-                      <option value="NO">No</option>
-                    </select>
-                  </label>
-
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Zona BAF</span>
-                    <select
-                      name="zona_baf"
-                      defaultValue={
-                        gestionPorta?.zona_baf === true
-                          ? 'SI'
-                          : gestionPorta?.zona_baf === false
-                            ? 'NO'
-                            : ''
-                      }
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    >
-                      <option value="">Sin informar</option>
-                      <option value="SI">Sí</option>
-                      <option value="NO">No</option>
-                    </select>
+                    />
                   </label>
 
                   <label className="block sm:col-span-2">
