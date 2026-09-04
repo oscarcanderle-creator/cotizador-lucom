@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
+import { createAdminClient } from '../../../utils/supabase/admin'
 import { createClient } from '../../../utils/supabase/server'
 import AppHeader from '../../../components/AppHeader'
 
@@ -61,20 +62,28 @@ function Campo({
 async function guardarResponsable(formData: FormData) {
   'use server'
 
-  const tTotal = Date.now()
-  console.log('[guardarResponsable] INICIO')
-
-  const tClient = Date.now()
   const supabase = await createClient()
-  console.log(`[guardarResponsable] createClient: ${Date.now() - tClient} ms`)
 
-  const tAuth = Date.now()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  console.log(`[guardarResponsable] auth.getUser: ${Date.now() - tAuth} ms`)
 
   if (!user) redirect('/login')
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('rol, activo, puede_gestionar_ventas')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  const esVendedorGestor =
+    profile?.activo === true &&
+    profile?.rol === 'VENDEDOR' &&
+    profile?.puede_gestionar_ventas === true
+
+  if (!esVendedorGestor) {
+    throw new Error('No tiene permisos para asignar responsables.')
+  }
 
   const idOperacion = String(formData.get('id_operacion') ?? '').trim()
   const responsableId = String(formData.get('responsable_id') ?? '').trim()
@@ -84,31 +93,60 @@ async function guardarResponsable(formData: FormData) {
     throw new Error('Datos de operación inválidos.')
   }
 
-  const tRpc = Date.now()
-  const { error } = await supabase.rpc('gestor_asignar_responsable_venta', {
-    p_operacion_id: idOperacion,
-    p_responsable_id: responsableId || null,
-  })
-  console.log(`[guardarResponsable] RPC gestor_asignar_responsable_venta: ${Date.now() - tRpc} ms`)
+  const { data: operacionBase, error: operacionBaseError } = await supabase
+    .from('operaciones')
+    .select('id_operacion, grupo_operacion, tipo')
+    .eq('id_operacion', idOperacion)
+    .maybeSingle()
 
-  if (error) {
-    console.error('[guardarResponsable] RPC ERROR:', error)
-    throw new Error(`No se pudo guardar el responsable: ${error.message}`)
+  if (operacionBaseError || !operacionBase) {
+    throw new Error(
+      `No se pudo identificar la operación: ${operacionBaseError?.message || 'Operación inexistente.'}`
+    )
   }
 
-  const tRevalidate = Date.now()
-  revalidatePath(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
+  let idsObjetivo = [idOperacion]
+
+  if (operacionBase.tipo === 'PORTA' && operacionBase.grupo_operacion) {
+    const { data: hermanas, error: hermanasError } = await supabase
+      .from('operaciones')
+      .select('id_operacion')
+      .eq('grupo_operacion', operacionBase.grupo_operacion)
+      .eq('tipo', 'PORTA')
+
+    if (hermanasError) {
+      throw new Error(`No se pudieron cargar las líneas relacionadas: ${hermanasError.message}`)
+    }
+
+    idsObjetivo = (hermanas ?? []).map((item: any) => item.id_operacion)
+
+    if (idsObjetivo.length === 0) {
+      idsObjetivo = [idOperacion]
+    }
+  }
+
+  for (const idObjetivo of idsObjetivo) {
+    const { error } = await supabase.rpc('gestor_asignar_responsable_venta', {
+      p_operacion_id: idObjetivo,
+      p_responsable_id: responsableId || null,
+    })
+
+    if (error) {
+      throw new Error(
+        `No se pudo guardar el Responsable de ${idObjetivo}: ${error.message}`
+      )
+    }
+
+    revalidatePath(`/gestion-ventas/${encodeURIComponent(idObjetivo)}`)
+    revalidatePath(`/super/ventas/${encodeURIComponent(idObjetivo)}`)
+    revalidatePath(`/mis-ventas/${encodeURIComponent(idObjetivo)}`)
+  }
+
   revalidatePath('/gestion-ventas')
-  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
   revalidatePath('/super')
-  console.log(`[guardarResponsable] revalidatePath total: ${Date.now() - tRevalidate} ms`)
-
-  console.log(`[guardarResponsable] TOTAL antes de redirect: ${Date.now() - tTotal} ms`)
-  console.log('[guardarResponsable] FIN -> redirect')
-
+  revalidatePath('/mis-ventas')
   redirect(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
 }
-
 
 async function guardarGestionBaf(formData: FormData) {
   'use server'
@@ -334,6 +372,11 @@ export default async function DetalleVentaPage({
 
   if (!esVendedorGestor) redirect('/ventas')
 
+  // El acceso se valida con la sesión del usuario. Los datos relacionados se
+  // leen con el cliente admin para evitar que las RLS de tablas hijas oculten
+  // Cliente, Domicilio u operaciones_porta al Vendedor Gestor autorizado.
+  const admin = createAdminClient()
+
   const { data: responsables, error: responsablesError } = await supabase
     .from('profiles')
     .select('id, nombre, vendedor, rol')
@@ -392,7 +435,7 @@ export default async function DetalleVentaPage({
   const { id_operacion } = await params
   const id = decodeURIComponent(id_operacion)
 
-  const { data: operacion, error } = await supabase
+  const { data: operacion, error } = await admin
     .from('operaciones')
     .select(`
       id_operacion,
@@ -406,6 +449,8 @@ export default async function DetalleVentaPage({
       fila_sheet,
       error_sync,
       usuario_id,
+      cliente_id,
+      domicilio_id,
       cliente:clientes (
         dni,
         tipo_documento,
@@ -441,6 +486,7 @@ export default async function DetalleVentaPage({
         nim,
         es_linea_nueva,
         gigas_acordados,
+        tipo_sim,
         compania_actual,
         prepago_pospago,
         observaciones,
@@ -497,10 +543,103 @@ export default async function DetalleVentaPage({
   if (!operacion) notFound()
 
   const op: any = operacion
-  const cliente = op.cliente
-  const domicilio = op.domicilio
-  const baf = op.operaciones_baf
-  const porta = op.operaciones_porta
+
+  // Para el Vendedor Gestor no dependemos de los joins embebidos de PostgREST:
+  // primero autorizamos la operación con su sesión y luego leemos directamente,
+  // del lado servidor, las tablas relacionadas con el cliente admin.
+  const [
+    clienteResultado,
+    domicilioResultado,
+    bafResultado,
+    portaResultado,
+  ] = await Promise.all([
+    op.cliente_id
+      ? admin
+          .from('clientes')
+          .select(`
+            dni,
+            tipo_documento,
+            nombre,
+            apellido,
+            fecha_nacimiento,
+            email,
+            telefono,
+            telefono_alternativo
+          `)
+          .eq('id', op.cliente_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    op.domicilio_id
+      ? admin
+          .from('domicilios')
+          .select(`
+            calle_nro,
+            piso,
+            dpto,
+            entre_calles,
+            barrio,
+            localidad,
+            coordenadas,
+            datos_extras
+          `)
+          .eq('id', op.domicilio_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    op.tipo === 'BAF'
+      ? admin
+          .from('operaciones_baf')
+          .select(`
+            tipo_domicilio,
+            plan,
+            tv,
+            cantidad_decos,
+            zona,
+            horario_contacto,
+            convergente,
+            linea_convergente,
+            modalidad_plan
+          `)
+          .eq('operacion_id', op.id_operacion)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    op.tipo === 'PORTA'
+      ? admin
+          .from('operaciones_porta')
+          .select(`
+            nim,
+            es_linea_nueva,
+            gigas_acordados,
+            tipo_sim,
+            compania_actual,
+            prepago_pospago,
+            observaciones,
+            numero_linea
+          `)
+          .eq('operacion_id', op.id_operacion)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ])
+
+  if (clienteResultado.error) {
+    throw new Error(`No se pudo cargar el Cliente: ${clienteResultado.error.message}`)
+  }
+
+  if (domicilioResultado.error) {
+    throw new Error(`No se pudo cargar el Domicilio: ${domicilioResultado.error.message}`)
+  }
+
+  if (bafResultado.error) {
+    throw new Error(`No se pudieron cargar los datos BAF: ${bafResultado.error.message}`)
+  }
+
+  if (portaResultado.error) {
+    throw new Error(`No se pudieron cargar los datos PORTA/Línea Nueva: ${portaResultado.error.message}`)
+  }
+
+  const cliente = clienteResultado.data ?? op.cliente
+  const domicilio = domicilioResultado.data ?? op.domicilio
+  const baf = bafResultado.data ?? op.operaciones_baf
+  const porta = portaResultado.data ?? op.operaciones_porta
   const gestionBaf = op.gestion_baf
   const gestionPorta = op.gestion_porta
 
@@ -512,6 +651,61 @@ export default async function DetalleVentaPage({
       : esPorta
         ? 'Portabilidad'
         : op.tipo
+
+
+  // Líneas móviles hermanas del mismo grupo.
+  // Se cargan en dos pasos para no depender de joins embebidos afectados por RLS.
+  let lineasGrupo: any[] = []
+
+  if (esPorta && op.grupo_operacion) {
+    const { data: operacionesGrupo, error: operacionesGrupoError } = await admin
+      .from('operaciones')
+      .select('id_operacion')
+      .eq('grupo_operacion', op.grupo_operacion)
+      .eq('tipo', 'PORTA')
+
+    if (operacionesGrupoError) {
+      throw new Error(
+        `No se pudieron cargar las líneas del grupo: ${operacionesGrupoError.message}`
+      )
+    }
+
+    const idsGrupo = (operacionesGrupo ?? []).map(
+      (item: any) => item.id_operacion
+    )
+
+    if (idsGrupo.length > 0) {
+      const { data: detallesGrupo, error: detallesGrupoError } = await admin
+        .from('operaciones_porta')
+        .select(`
+          operacion_id,
+          numero_linea,
+          nim,
+          es_linea_nueva,
+          tipo_sim
+        `)
+        .in('operacion_id', idsGrupo)
+
+      if (detallesGrupoError) {
+        throw new Error(
+          `No se pudieron cargar los datos de las líneas: ${detallesGrupoError.message}`
+        )
+      }
+
+      lineasGrupo = (detallesGrupo ?? [])
+        .map((item: any) => ({
+          id_operacion: item.operacion_id,
+          numero_linea: item.numero_linea,
+          nim: item.nim,
+          es_linea_nueva: item.es_linea_nueva,
+          tipo_sim: item.tipo_sim,
+        }))
+        .sort(
+          (a: any, b: any) =>
+            Number(a.numero_linea ?? 0) - Number(b.numero_linea ?? 0)
+        )
+    }
+  }
 
   const responsableActualId =
     esBaf ? gestionBaf?.responsable_id : gestionPorta?.responsable_id
@@ -556,6 +750,69 @@ export default async function DetalleVentaPage({
         </div>
 
         <div className="space-y-5">
+            <form
+              action={guardarResponsable}
+              className="rounded-2xl border border-red-100 bg-red-50/40 p-5"
+            >
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">Responsable</h2>
+                {esPorta && lineasGrupo.length > 1 && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    La asignación se aplica a todas las líneas relacionadas.
+                  </p>
+                )}
+              </div>
+              <input type="hidden" name="id_operacion" value={op.id_operacion} />
+              <input type="hidden" name="tipo" value={op.tipo} />
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div>
+                  <label
+                    htmlFor="responsable_id"
+                    className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500"
+                  >
+                    Responsable
+                  </label>
+
+                  <select
+                    id="responsable_id"
+                    name="responsable_id"
+                    defaultValue={responsableActualId ?? ''}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                  >
+                    <option value="">Sin responsable asignado</option>
+
+                    {(responsables ?? []).map((responsable: any) => (
+                      <option key={responsable.id} value={responsable.id}>
+                        {responsable.vendedor || responsable.nombre || responsable.id}
+                      </option>
+                    ))}
+                  </select>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Solo aparecen usuarios activos habilitados para gestionar ventas.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                >
+                  Guardar responsable
+                </button>
+              </div>
+
+              <div className="mt-3 text-xs text-gray-500">
+                Responsable actual:{' '}
+                <span className="font-semibold text-gray-700">
+                  {responsableActual?.vendedor ||
+                    responsableActual?.nombre ||
+                    (responsableActualId ? 'Usuario no disponible' : 'Sin asignar')}
+                </span>
+              </div>
+            </form>
+
+
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
             <h2 className="mb-4 text-lg font-semibold text-gray-900">
               Operación
@@ -619,6 +876,48 @@ export default async function DetalleVentaPage({
             </div>
           </section>
 
+          {esPorta && lineasGrupo.length > 1 && (
+            <section
+            id="lineas-operacion"
+            className="mb-5 scroll-mt-6 rounded-2xl border border-gray-200 bg-white p-4"
+          >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-gray-900">
+                  Líneas de esta operación
+                </h2>
+                <span className="text-xs text-gray-500">
+                  Línea {porta?.numero_linea ?? '-'} de {lineasGrupo.length}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {lineasGrupo.map((linea: any) => {
+                  const activa = linea.id_operacion === op.id_operacion
+                  const etiquetaTipo = linea.es_linea_nueva ? 'LN' : 'PORTA'
+
+                  return (
+                    <a
+                      key={linea.id_operacion}
+                      href={`/gestion-ventas/${encodeURIComponent(linea.id_operacion)}#lineas-operacion`}
+                      className={
+                        activa
+                          ? 'rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-sm'
+                          : 'rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100'
+                      }
+                    >
+                      Línea {linea.numero_linea} · {etiquetaTipo}
+                    </a>
+                  )
+                })}
+              </div>
+
+              <p className="mt-3 text-xs text-gray-500">
+                Seleccioná una línea para ver y gestionar sus datos independientes.
+              </p>
+            </section>
+          )}
+
+
           {esBaf && (
             <section className="rounded-2xl border border-gray-200 bg-white p-5">
               <h2 className="mb-4 text-lg font-semibold text-gray-900">
@@ -660,6 +959,16 @@ export default async function DetalleVentaPage({
                   value={porta?.gigas_acordados}
                 />
                 <Campo
+                  label="Tipo de SIM"
+                  value={
+                    porta?.tipo_sim === 'ESIM'
+                      ? 'eSIM'
+                      : porta?.tipo_sim === 'SIMCARD'
+                        ? 'SIMCARD'
+                        : porta?.tipo_sim
+                  }
+                />
+                <Campo
                   label="Compañía actual"
                   value={porta?.compania_actual}
                 />
@@ -690,60 +999,6 @@ export default async function DetalleVentaPage({
                 Gestión inicial
               </span>
             </div>
-
-            <form
-              action={guardarResponsable}
-              className="mb-6 rounded-xl border border-red-100 bg-red-50/40 p-4"
-            >
-              <input type="hidden" name="id_operacion" value={op.id_operacion} />
-              <input type="hidden" name="tipo" value={op.tipo} />
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                <div>
-                  <label
-                    htmlFor="responsable_id"
-                    className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500"
-                  >
-                    Responsable
-                  </label>
-
-                  <select
-                    id="responsable_id"
-                    name="responsable_id"
-                    defaultValue={responsableActualId ?? ''}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                  >
-                    <option value="">Sin responsable asignado</option>
-
-                    {(responsables ?? []).map((responsable: any) => (
-                      <option key={responsable.id} value={responsable.id}>
-                        {responsable.vendedor || responsable.nombre || responsable.id}
-                      </option>
-                    ))}
-                  </select>
-
-                  <p className="mt-1 text-xs text-gray-500">
-                    Solo aparecen usuarios activos habilitados para gestionar ventas.
-                  </p>
-                </div>
-
-                <button
-                  type="submit"
-                  className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
-                >
-                  Guardar responsable
-                </button>
-              </div>
-
-              <div className="mt-3 text-xs text-gray-500">
-                Responsable actual:{' '}
-                <span className="font-semibold text-gray-700">
-                  {responsableActual?.vendedor ||
-                    responsableActual?.nombre ||
-                    (responsableActualId ? 'Usuario no disponible' : 'Sin asignar')}
-                </span>
-              </div>
-            </form>
 
             {esBaf ? (
               <form
@@ -921,11 +1176,21 @@ export default async function DetalleVentaPage({
                 <input type="hidden" name="id_operacion" value={op.id_operacion} />
 
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">
-                      Gestión {porta?.es_linea_nueva ? 'Línea Nueva' : 'PORTA'}
-                    </h3>
-                    <p className="mt-1 text-xs text-gray-500">
+                  <div className="w-full">
+                    <div
+                      className={
+                        porta?.es_linea_nueva
+                          ? 'rounded-xl bg-green-600 px-4 py-3 text-white'
+                          : 'rounded-xl bg-blue-600 px-4 py-3 text-white'
+                      }
+                    >
+                      <h3 className="font-semibold">
+                        {porta?.es_linea_nueva
+                          ? 'Gestión de Línea Nueva'
+                          : 'Gestión PORTA'}
+                      </h3>
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500">
                       Las fechas automáticas se registran una sola vez al alcanzar el estado correspondiente.
                     </p>
                   </div>

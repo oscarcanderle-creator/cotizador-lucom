@@ -340,15 +340,16 @@ async function agregarPortaTesting(
 
 
 type LineaPortaInput = {
+  esLineaNueva: boolean
   nim: string
   plan: string
+  tipoSim: string
   companiaActual: string
   prepagoPospago: string
 }
 
 function lineasPortaDesdeFormData(
-  formData: FormData,
-  esLineaNueva: boolean
+  formData: FormData
 ): LineaPortaInput[] {
   const cantidad = Math.max(
     1,
@@ -358,29 +359,34 @@ function lineasPortaDesdeFormData(
   const lineas: LineaPortaInput[] = []
 
   for (let i = 0; i < cantidad; i += 1) {
+    const esLineaNueva = texto(formData, `tipo_linea_${i}`) === 'LN'
     const plan = texto(formData, `plan_${i}`)
+    const tipoSimFormulario = texto(formData, `tipo_sim_${i}`)
+    const tipoSim =
+      tipoSimFormulario.toUpperCase() === 'ESIM'
+        ? 'ESIM'
+        : tipoSimFormulario.toUpperCase() === 'SIMCARD'
+          ? 'SIMCARD'
+          : ''
 
-    if (esLineaNueva) {
-      if (plan) {
-        lineas.push({
-          nim: '9999999999',
-          plan,
-          companiaActual: '',
-          prepagoPospago: '',
-        })
-      }
+    const nim = esLineaNueva
+      ? '9999999999'
+      : texto(formData, `nim_${i}`)
 
-      continue
-    }
+    const companiaActual = esLineaNueva
+      ? ''
+      : texto(formData, `compania_actual_${i}`)
 
-    const nim = texto(formData, `nim_${i}`)
-    const companiaActual = texto(formData, `compania_actual_${i}`)
-    const prepagoPospago = texto(formData, `prepago_pospago_${i}`)
+    const prepagoPospago = esLineaNueva
+      ? ''
+      : texto(formData, `prepago_pospago_${i}`)
 
-    if (nim || plan || companiaActual || prepagoPospago) {
+    if (nim || plan || tipoSim || companiaActual || prepagoPospago) {
       lineas.push({
+        esLineaNueva,
         nim,
         plan,
+        tipoSim,
         companiaActual,
         prepagoPospago,
       })
@@ -392,8 +398,7 @@ function lineasPortaDesdeFormData(
 
 function formDataParaLineaPorta(
   formData: FormData,
-  linea: LineaPortaInput,
-  esLineaNueva: boolean
+  linea: LineaPortaInput
 ) {
   const copia = new FormData()
 
@@ -402,9 +407,11 @@ function formDataParaLineaPorta(
   })
 
   copia.set('plan', linea.plan)
-  copia.set('nim', esLineaNueva ? '' : linea.nim)
+  copia.set('nim', linea.esLineaNueva ? '' : linea.nim)
+  copia.set('tipo_sim', linea.tipoSim)
   copia.set('compania_actual', linea.companiaActual)
   copia.set('prepago_pospago', linea.prepagoPospago)
+  copia.set('es_linea_nueva', linea.esLineaNueva ? 'on' : '')
 
   return copia
 }
@@ -632,11 +639,9 @@ export default async function VentasPage() {
         'Vendedor'
 
       if (tipo === 'PORTA') {
-        const esLineaNueva =
-          formData.get('es_linea_nueva') === 'on'
 
         const lineas =
-          lineasPortaDesdeFormData(formData, esLineaNueva)
+          lineasPortaDesdeFormData(formData)
 
         if (lineas.length === 0) {
           return {
@@ -645,35 +650,35 @@ export default async function VentasPage() {
           }
         }
 
-        if (!esLineaNueva) {
-          const nims = lineas.map((linea) => linea.nim)
+        const nimsPorta = lineas
+          .filter((linea) => !linea.esLineaNueva)
+          .map((linea) => linea.nim)
 
-          const nimInvalido = nims.find(
-            (nim) => !/^[1-46-9]\d{9}$/.test(nim)
-          )
+        const nimInvalido = nimsPorta.find(
+          (nim) => !/^[1-46-9]\d{9}$/.test(nim)
+        )
 
-          if (nimInvalido) {
-            return {
-              ok: false,
-              mensaje:
-                'Cada NIM debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 5.',
-            }
+        if (nimInvalido) {
+          return {
+            ok: false,
+            mensaje:
+              'Cada NIM de Portabilidad debe contener exactamente 10 dígitos, sin espacios ni guiones, y no puede comenzar con 0 ni con 5.',
           }
+        }
 
-          const vistos = new Set<string>()
-          const duplicado = nims.find((nim) => {
-            if (vistos.has(nim)) return true
-            vistos.add(nim)
-            return false
-          })
+        const vistos = new Set<string>()
+        const duplicado = nimsPorta.find((nim) => {
+          if (vistos.has(nim)) return true
+          vistos.add(nim)
+          return false
+        })
 
-          if (duplicado) {
-            return {
-              ok: false,
-              mensaje:
-                `El NIM ${duplicado} está repetido en esta carga. ` +
-                'Cada línea debe tener un NIM diferente.',
-            }
+        if (duplicado) {
+          return {
+            ok: false,
+            mensaje:
+              `El NIM ${duplicado} está repetido en esta carga. ` +
+              'Cada línea de Portabilidad debe tener un NIM diferente.',
           }
         }
 
@@ -685,7 +690,14 @@ export default async function VentasPage() {
             }
           }
 
-          if (!esLineaNueva) {
+          if (!linea.tipoSim) {
+            return {
+              ok: false,
+              mensaje: `Falta seleccionar el tipo de SIM de la línea ${indice + 1}.`,
+            }
+          }
+
+          if (!linea.esLineaNueva) {
             if (!linea.nim) {
               return {
                 ok: false,
@@ -737,13 +749,14 @@ export default async function VentasPage() {
             .from('operaciones_porta')
             .insert({
               operacion_id: idLinea,
-              nim: esLineaNueva ? '9999999999' : linea.nim,
-              es_linea_nueva: esLineaNueva,
+              nim: linea.esLineaNueva ? '9999999999' : linea.nim,
+              es_linea_nueva: linea.esLineaNueva,
               gigas_acordados: linea.plan || null,
+              tipo_sim: linea.tipoSim,
               compania_actual:
-                esLineaNueva ? null : linea.companiaActual || null,
+                linea.esLineaNueva ? null : linea.companiaActual || null,
               prepago_pospago:
-                esLineaNueva ? null : linea.prepagoPospago || null,
+                linea.esLineaNueva ? null : linea.prepagoPospago || null,
               observaciones: texto(formData, 'observaciones') || null,
               numero_linea: numeroLinea,
             })
@@ -753,8 +766,7 @@ export default async function VentasPage() {
           const formDataLinea =
             formDataParaLineaPorta(
               formData,
-              linea,
-              esLineaNueva
+              linea
             )
 
           try {

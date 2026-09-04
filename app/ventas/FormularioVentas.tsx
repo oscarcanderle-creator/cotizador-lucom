@@ -8,6 +8,7 @@ type TipoOperacion = 'PORTA' | 'BAF' | 'FACTIBILIDAD'
 
 type PortaLine = {
   id: number
+  esLineaNueva: boolean
 }
 
 type ResultadoGuardado = {
@@ -155,8 +156,7 @@ export default function FormularioVentas({
   guardarVenta,
 }: Props) {
   const [tipo, setTipo] = useState<TipoOperacion>('PORTA')
-  const [esLineaNueva, setEsLineaNueva] = useState(false)
-  const [lineasPorta, setLineasPorta] = useState<PortaLine[]>([{ id: 1 }])
+  const [lineasPorta, setLineasPorta] = useState<PortaLine[]>([{ id: 1, esLineaNueva: false }])
   const [guardando, iniciarGuardado] = useTransition()
   const [resultado, setResultado] =
     useState<ResultadoGuardado | null>(null)
@@ -176,8 +176,7 @@ export default function FormularioVentas({
 
       if (respuesta.ok) {
         form.reset()
-        setEsLineaNueva(false)
-        setLineasPorta([{ id: 1 }])
+        setLineasPorta([{ id: 1, esLineaNueva: false }])
       }
     })
   }
@@ -216,8 +215,7 @@ export default function FormularioVentas({
                 onClick={() => {
                   setTipo(opcion)
                   setResultado(null)
-                  setEsLineaNueva(false)
-                }}
+                          }}
                 className={[
                   'min-h-16 rounded-2xl px-4 py-3 text-sm sm:text-base font-extrabold transition-all duration-150',
                   'border-4 shadow-sm active:scale-[0.99]',
@@ -418,28 +416,6 @@ export default function FormularioVentas({
 
             <div className="bg-white border border-gray-200 rounded-2xl p-3 sm:p-4 shadow-sm">
 
-              <label className="mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
-                <div>
-                  <div className="text-sm font-semibold text-gray-800">
-                    {esLineaNueva ? 'Línea Nueva' : 'Portabilidad'}
-                  </div>
-                  <div className="text-[11px] text-gray-500">
-                    Activá para cargar una o más líneas nuevas
-                  </div>
-                </div>
-
-                <input
-                  type="checkbox"
-                  name="es_linea_nueva"
-                  checked={esLineaNueva}
-                  onChange={(e) => {
-                    setEsLineaNueva(e.target.checked)
-                    setLineasPorta([{ id: 1 }])
-                  }}
-                  className="h-5 w-5 accent-red-600"
-                />
-              </label>
-
               <input
                 type="hidden"
                 name="porta_line_count"
@@ -452,11 +428,14 @@ export default function FormularioVentas({
                     key={linea.id}
                     className="border border-gray-200 rounded-2xl p-3 bg-gray-50/80"
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="text-sm font-bold text-gray-800">
-                        {esLineaNueva
-                          ? `Línea Nueva ${index + 1}`
-                          : `Línea ${index + 1}`}
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <div className="text-sm font-bold text-gray-800">
+                          Línea {index + 1}
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          {linea.esLineaNueva ? 'Línea Nueva' : 'Portabilidad'}
+                        </div>
                       </div>
 
                       {lineasPorta.length > 1 && (
@@ -474,14 +453,41 @@ export default function FormularioVentas({
                       )}
                     </div>
 
+                    <div className="mb-3">
+                      <label className="block">
+                        <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">
+                          Tipo de línea *
+                        </span>
+                        <select
+                          name={`tipo_linea_${index}`}
+                          value={linea.esLineaNueva ? 'LN' : 'PORTA'}
+                          onChange={(e) => {
+                            const esLN = e.target.value === 'LN'
+                            setLineasPorta((actuales) =>
+                              actuales.map((item) =>
+                                item.id === linea.id
+                                  ? { ...item, esLineaNueva: esLN }
+                                  : item
+                              )
+                            )
+                          }}
+                          required
+                          className="w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-white text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        >
+                          <option value="PORTA">Portabilidad</option>
+                          <option value="LN">Línea Nueva</option>
+                        </select>
+                      </label>
+                    </div>
+
                     <div
                       className={
-                        esLineaNueva
-                          ? 'grid grid-cols-1 sm:grid-cols-2 gap-2'
-                          : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2'
+                        linea.esLineaNueva
+                          ? 'grid grid-cols-1 sm:grid-cols-3 gap-2'
+                          : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2'
                       }
                     >
-                      {esLineaNueva ? (
+                      {linea.esLineaNueva ? (
                         <Input
                           label="NIM"
                           name={`nim_${index}`}
@@ -508,11 +514,18 @@ export default function FormularioVentas({
                       <Select
                         label="Gigas acordados"
                         name={`plan_${index}`}
-                        opciones={planes}
+                        opciones={planesPorta}
                         required
                       />
 
-                      {!esLineaNueva && (
+                      <Select
+                        label="SIM"
+                        name={`tipo_sim_${index}`}
+                        opciones={['eSIM', 'SIMCARD']}
+                        required
+                      />
+
+                      {!linea.esLineaNueva && (
                         <>
                           <Select
                             label="Compañía actual"
@@ -544,31 +557,14 @@ export default function FormularioVentas({
                             0,
                             ...actuales.map((item) => item.id)
                           ) + 1,
+                        esLineaNueva: false,
                       },
                     ])
                   }
                   className="w-full sm:w-auto border border-dashed border-red-300 bg-red-50/50 text-red-600 rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-red-50"
                 >
-                  {esLineaNueva
-                    ? '+ Agregar Línea Nueva'
-                    : '+ Agregar línea'}
+                  + Agregar línea
                 </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
-                <div className="sm:col-span-2">
-                  <label className="block">
-                    <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">
-                      Observaciones
-                    </span>
-
-                    <textarea
-                      name="observaciones"
-                      rows={2}
-                      className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-white text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
-                    />
-                  </label>
-                </div>
               </div>
             </div>
           </section>

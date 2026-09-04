@@ -207,20 +207,23 @@ export default function Cotizador({
    * LÍNEAS NUEVAS
    * =====================================================
    */
-
   const [lineas, setLineas] =
-    useState<LineaUI[]>([
-      {
-        id: 1,
-        tipo: 'LINEA NUEVA',
-        plan: '7 Gigas',
-        cantidad: 1,
-        portabilidades: [],
-      },
-    ])
+    useState<LineaUI[]>(
+      cotizadorAnonimo
+        ? []
+        : [
+            {
+              id: 1,
+              tipo: 'LINEA NUEVA',
+              plan: '7 Gigas',
+              cantidad: 1,
+              portabilidades: [],
+            },
+          ]
+    )
 
   const [nextLineaId, setNextLineaId] =
-    useState(2)
+    useState(cotizadorAnonimo ? 1 : 2)
 
   /*
    * =====================================================
@@ -231,7 +234,7 @@ export default function Cotizador({
   const [
     internetActivo,
     setInternetActivo,
-  ] = useState(false)
+  ] = useState(cotizadorAnonimo)
 
   const [
     planInternet,

@@ -469,6 +469,7 @@ export default async function DetalleVentaPage({
         nim,
         es_linea_nueva,
         gigas_acordados,
+        tipo_sim,
         compania_actual,
         prepago_pospago,
         observaciones,
@@ -542,6 +543,51 @@ export default async function DetalleVentaPage({
         ? 'Portabilidad'
         : op.tipo
 
+
+  // Líneas móviles hermanas del mismo grupo.
+  // Cada pestaña conserva su propio id_operacion y, por lo tanto,
+  // su gestión, historial y notificaciones independientes.
+  let lineasGrupo: any[] = []
+
+  if (esPorta && op.grupo_operacion) {
+    let consultaLineasGrupo = supabase
+      .from('operaciones')
+      .select(`
+        id_operacion,
+        operaciones_porta (
+          numero_linea,
+          nim,
+          es_linea_nueva,
+          tipo_sim
+        )
+      `)
+      .eq('grupo_operacion', op.grupo_operacion)
+      .eq('tipo', 'PORTA')
+      .eq('usuario_id', user.id)
+
+    const { data: operacionesGrupo, error: operacionesGrupoError } =
+      await consultaLineasGrupo
+
+    if (operacionesGrupoError) {
+      throw new Error(
+        `No se pudieron cargar las líneas del grupo: ${operacionesGrupoError.message}`
+      )
+    }
+
+    lineasGrupo = (operacionesGrupo ?? [])
+      .map((item: any) => ({
+        id_operacion: item.id_operacion,
+        ...(Array.isArray(item.operaciones_porta)
+          ? item.operaciones_porta[0]
+          : item.operaciones_porta),
+      }))
+      .filter((item: any) => item.numero_linea != null)
+      .sort(
+        (a: any, b: any) =>
+          Number(a.numero_linea ?? 0) - Number(b.numero_linea ?? 0)
+      )
+  }
+
   const responsableActualId =
     esBaf ? gestionBaf?.responsable_id : gestionPorta?.responsable_id
 
@@ -583,6 +629,44 @@ export default async function DetalleVentaPage({
             Volver a Mis Ventas
           </a>
         </div>
+
+        {esPorta && lineasGrupo.length > 1 && (
+          <section className="mb-5 rounded-2xl border border-gray-200 bg-white p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-gray-900">
+                Líneas de esta operación
+              </h2>
+              <span className="text-xs text-gray-500">
+                Línea {porta?.numero_linea ?? '-'} de {lineasGrupo.length}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {lineasGrupo.map((linea: any) => {
+                const activa = linea.id_operacion === op.id_operacion
+                const etiquetaTipo = linea.es_linea_nueva ? 'LN' : 'PORTA'
+
+                return (
+                  <a
+                    key={linea.id_operacion}
+                    href={`/mis-ventas/${encodeURIComponent(linea.id_operacion)}`}
+                    className={
+                      activa
+                        ? 'rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-sm'
+                        : 'rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100'
+                    }
+                  >
+                    Línea {linea.numero_linea} · {etiquetaTipo}
+                  </a>
+                )
+              })}
+            </div>
+
+            <p className="mt-3 text-xs text-gray-500">
+              Seleccioná una línea para ver y gestionar sus datos independientes.
+            </p>
+          </section>
+        )}
 
         <div className="space-y-5">
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
@@ -687,6 +771,16 @@ export default async function DetalleVentaPage({
                 <Campo
                   label="Gigas acordados"
                   value={porta?.gigas_acordados}
+                />
+                <Campo
+                  label="Tipo de SIM"
+                  value={
+                    porta?.tipo_sim === 'ESIM'
+                      ? 'eSIM'
+                      : porta?.tipo_sim === 'SIMCARD'
+                        ? 'SIMCARD'
+                        : porta?.tipo_sim
+                  }
                 />
                 <Campo
                   label="Compañía actual"

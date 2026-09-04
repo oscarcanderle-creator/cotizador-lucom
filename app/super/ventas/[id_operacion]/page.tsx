@@ -85,23 +85,62 @@ async function guardarAsignacionesSuper(formData: FormData) {
     throw new Error('Datos de operación inválidos.')
   }
 
-  const { error } = await supabase.rpc('super_reasignar_venta', {
-    p_operacion_id: idOperacion,
-    p_vendedor_id: vendedorId,
-    p_responsable_id: responsableId || null,
-    p_motivo_vendedor: motivoVendedor || null,
-  })
+  const { data: operacionBase, error: operacionBaseError } = await supabase
+    .from('operaciones')
+    .select('id_operacion, grupo_operacion, tipo')
+    .eq('id_operacion', idOperacion)
+    .maybeSingle()
 
-  if (error) {
-    throw new Error(`No se pudieron guardar las asignaciones: ${error.message}`)
+  if (operacionBaseError || !operacionBase) {
+    throw new Error(
+      `No se pudo identificar la operación: ${operacionBaseError?.message || 'Operación inexistente.'}`
+    )
   }
 
-  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  let idsObjetivo = [idOperacion]
+
+  if (operacionBase.tipo === 'PORTA' && operacionBase.grupo_operacion) {
+    const { data: hermanas, error: hermanasError } = await supabase
+      .from('operaciones')
+      .select('id_operacion')
+      .eq('grupo_operacion', operacionBase.grupo_operacion)
+      .eq('tipo', 'PORTA')
+
+    if (hermanasError) {
+      throw new Error(`No se pudieron cargar las líneas relacionadas: ${hermanasError.message}`)
+    }
+
+    idsObjetivo = (hermanas ?? []).map((item: any) => item.id_operacion)
+
+    if (idsObjetivo.length === 0) {
+      idsObjetivo = [idOperacion]
+    }
+  }
+
+  for (const idObjetivo of idsObjetivo) {
+    const { error } = await supabase.rpc('super_reasignar_venta', {
+      p_operacion_id: idObjetivo,
+      p_vendedor_id: vendedorId,
+      p_responsable_id: responsableId || null,
+      p_motivo_vendedor: motivoVendedor || null,
+    })
+
+    if (error) {
+      throw new Error(
+        `No se pudieron guardar las asignaciones de ${idObjetivo}: ${error.message}`
+      )
+    }
+
+    revalidatePath(`/super/ventas/${encodeURIComponent(idObjetivo)}`)
+    revalidatePath(`/gestion-ventas/${encodeURIComponent(idObjetivo)}`)
+    revalidatePath(`/mis-ventas/${encodeURIComponent(idObjetivo)}`)
+  }
+
   revalidatePath('/super')
+  revalidatePath('/gestion-ventas')
   revalidatePath('/mis-ventas')
   redirect(`/super/ventas/${encodeURIComponent(idOperacion)}`)
 }
-
 
 async function guardarGestionBaf(formData: FormData) {
   'use server'
@@ -451,6 +490,7 @@ export default async function SuperDetalleVentaPage({
         nim,
         es_linea_nueva,
         gigas_acordados,
+        tipo_sim,
         compania_actual,
         prepago_pospago,
         observaciones,
@@ -567,6 +607,50 @@ export default async function SuperDetalleVentaPage({
       : esPorta
         ? 'Portabilidad'
         : op.tipo
+
+
+  // Líneas móviles hermanas del mismo grupo.
+  // Cada pestaña conserva su propio id_operacion y, por lo tanto,
+  // su gestión, historial y notificaciones independientes.
+  let lineasGrupo: any[] = []
+
+  if (esPorta && op.grupo_operacion) {
+    let consultaLineasGrupo = supabase
+      .from('operaciones')
+      .select(`
+        id_operacion,
+        operaciones_porta (
+          numero_linea,
+          nim,
+          es_linea_nueva,
+          tipo_sim
+        )
+      `)
+      .eq('grupo_operacion', op.grupo_operacion)
+      .eq('tipo', 'PORTA')
+
+    const { data: operacionesGrupo, error: operacionesGrupoError } =
+      await consultaLineasGrupo
+
+    if (operacionesGrupoError) {
+      throw new Error(
+        `No se pudieron cargar las líneas del grupo: ${operacionesGrupoError.message}`
+      )
+    }
+
+    lineasGrupo = (operacionesGrupo ?? [])
+      .map((item: any) => ({
+        id_operacion: item.id_operacion,
+        ...(Array.isArray(item.operaciones_porta)
+          ? item.operaciones_porta[0]
+          : item.operaciones_porta),
+      }))
+      .filter((item: any) => item.numero_linea != null)
+      .sort(
+        (a: any, b: any) =>
+          Number(a.numero_linea ?? 0) - Number(b.numero_linea ?? 0)
+      )
+  }
 
   const responsableActualId =
     esBaf ? gestionBaf?.responsable_id : gestionPorta?.responsable_id
@@ -722,6 +806,48 @@ export default async function SuperDetalleVentaPage({
             </div>
           </section>
 
+          {esPorta && lineasGrupo.length > 1 && (
+            <section
+            id="lineas-operacion"
+            className="mb-5 scroll-mt-6 rounded-2xl border border-gray-200 bg-white p-4"
+          >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-gray-900">
+                  Líneas de esta operación
+                </h2>
+                <span className="text-xs text-gray-500">
+                  Línea {porta?.numero_linea ?? '-'} de {lineasGrupo.length}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {lineasGrupo.map((linea: any) => {
+                  const activa = linea.id_operacion === op.id_operacion
+                  const etiquetaTipo = linea.es_linea_nueva ? 'LN' : 'PORTA'
+
+                  return (
+                    <a
+                      key={linea.id_operacion}
+                      href={`/super/ventas/${encodeURIComponent(linea.id_operacion)}#lineas-operacion`}
+                      className={
+                        activa
+                          ? 'rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-sm'
+                          : 'rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100'
+                      }
+                    >
+                      Línea {linea.numero_linea} · {etiquetaTipo}
+                    </a>
+                  )
+                })}
+              </div>
+
+              <p className="mt-3 text-xs text-gray-500">
+                Seleccioná una línea para ver y gestionar sus datos independientes.
+              </p>
+            </section>
+          )}
+
+
           {esBaf && (
             <section className="rounded-2xl border border-gray-200 bg-white p-5">
               <h2 className="mb-4 text-lg font-semibold text-gray-900">
@@ -763,6 +889,16 @@ export default async function SuperDetalleVentaPage({
                   value={porta?.gigas_acordados}
                 />
                 <Campo
+                  label="Tipo de SIM"
+                  value={
+                    porta?.tipo_sim === 'ESIM'
+                      ? 'eSIM'
+                      : porta?.tipo_sim === 'SIMCARD'
+                        ? 'SIMCARD'
+                        : porta?.tipo_sim
+                  }
+                />
+                <Campo
                   label="Compañía actual"
                   value={porta?.compania_actual}
                 />
@@ -789,20 +925,6 @@ export default async function SuperDetalleVentaPage({
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                 Supervisor · editable
               </span>
-            </div>
-
-            <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Responsable
-              </div>
-              <div className="mt-1 text-sm font-semibold text-gray-800">
-                {responsableActual?.vendedor ||
-                  responsableActual?.nombre ||
-                  (responsableActualId ? 'Usuario no disponible' : 'Sin asignar')}
-              </div>
-              <div className="mt-1 text-xs text-gray-500">
-                El Responsable se modifica desde Asignaciones.
-              </div>
             </div>
 
             {esBaf ? (
@@ -950,6 +1072,20 @@ export default async function SuperDetalleVentaPage({
             ) : esPorta ? (
               <form action={guardarGestionPorta}>
                 <input type="hidden" name="id_operacion" value={op.id_operacion} />
+
+                <div
+                  className={
+                    porta?.es_linea_nueva
+                      ? 'mb-5 rounded-xl bg-green-600 px-4 py-3 text-white'
+                      : 'mb-5 rounded-xl bg-blue-600 px-4 py-3 text-white'
+                  }
+                >
+                  <h3 className="font-semibold">
+                    {porta?.es_linea_nueva
+                      ? 'Gestión de Línea Nueva'
+                      : 'Gestión PORTA'}
+                  </h3>
+                </div>
 
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <label className="block">
