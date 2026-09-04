@@ -27,6 +27,7 @@ export default async function MisConsultasPage() {
         rol={profile.rol}
         usuario={profile.nombre?.trim() || user.email || 'Usuario'}
         actual="MIS_CONSULTAS"
+        puedeGestionarVentas={profile.puede_gestionar_ventas === true}
       />
 
       <MisConsultasClient

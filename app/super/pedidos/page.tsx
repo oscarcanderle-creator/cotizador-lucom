@@ -3,7 +3,7 @@ import { createClient } from '../../../utils/supabase/server'
 import { createAdminClient } from '../../../utils/supabase/admin'
 import AppHeader from '../../../components/AppHeader'
 
-type SearchParams = Promise<{ q?: string; tipo?: string; vendedor?: string; responsable?: string; estado?: string }>
+type SearchParams = Promise<{ q?: string; tipo?: string; vendedor?: string; responsable?: string; estado?: string; pagina?: string; por_pagina?: string }>
 
 function fechaArgentina(fecha: string | null) {
   if (!fecha) return '-'
@@ -33,6 +33,10 @@ export default async function SuperPedidosPage({ searchParams }: { searchParams:
   const filtroVendedor = String(params?.vendedor ?? '').trim()
   const filtroResponsable = String(params?.responsable ?? '').trim()
   const filtroEstado = String(params?.estado ?? '').trim()
+  const paginaSolicitada = Math.max(1, parseInt(String(params?.pagina ?? '1'), 10) || 1)
+  const opcionesPorPagina = [10, 20, 50]
+  const porPaginaSolicitado = parseInt(String(params?.por_pagina ?? '20'), 10) || 20
+  const porPagina = opcionesPorPagina.includes(porPaginaSolicitado) ? porPaginaSolicitado : 20
 
   const [
     { data: pedidos, error: pedidosError },
@@ -79,15 +83,58 @@ export default async function SuperPedidosPage({ searchParams }: { searchParams:
     return [p.id,p.dni,p.telefono].filter((valor) => valor !== null && valor !== undefined).some((valor) => String(valor).toLowerCase().includes(q))
   })
 
+
+  const totalPaginas = Math.max(1, Math.ceil(filas.length / porPagina))
+  const pagina = Math.min(paginaSolicitada, totalPaginas)
+  const inicio = (pagina - 1) * porPagina
+  const fin = Math.min(inicio + porPagina, filas.length)
+  const filasPagina = filas.slice(inicio, fin)
+
+  const hrefPagina = (n: number) => {
+    const qs = new URLSearchParams()
+    if (params?.q) qs.set('q', String(params.q))
+    if (filtroTipo) qs.set('tipo', filtroTipo)
+    if (filtroVendedor) qs.set('vendedor', filtroVendedor)
+    if (filtroResponsable) qs.set('responsable', filtroResponsable)
+    if (filtroEstado) qs.set('estado', filtroEstado)
+    qs.set('pagina', String(n))
+    qs.set('por_pagina', String(porPagina))
+    return `/super/pedidos?${qs.toString()}`
+  }
+
   return (
     <main className="min-h-screen bg-gray-50">
       <AppHeader rol={profile.rol} usuario={profile.nombre?.trim() || user.email || 'Usuario'} actual="SUPER" />
-      <div className="mx-auto max-w-7xl p-4 sm:p-8">
+      <div className="mx-auto max-w-[1500px] p-4 sm:p-6 lg:p-8">
         <div className="mb-6"><h1 className="text-2xl font-bold text-gray-900">Super / Pedidos</h1><p className="mt-1 text-sm text-gray-500">Supervisión global de Pedidos. Esta pantalla es de control y lectura.</p></div>
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <a href="/super" className="rounded-2xl border border-gray-200 bg-white p-4 hover:border-red-300"><div className="text-sm font-semibold text-gray-900">Ventas</div><div className="mt-1 text-xs text-gray-500">BAF, PORTA y Línea Nueva</div></a>
-          <a href="/super/consultas" className="rounded-2xl border border-gray-200 bg-white p-4 hover:border-red-300"><div className="text-sm font-semibold text-gray-900">Consultas</div><div className="mt-1 text-xs text-gray-500">Deuda y Cobertura</div></a>
-          <a href="/super/pedidos" className="rounded-2xl border border-red-200 bg-red-50 p-4"><div className="text-sm font-semibold text-red-700">Pedidos</div><div className="mt-1 text-xs text-gray-500">Pedidos y Rellamados</div></a>
+          <a
+            href="/super"
+            className="rounded-2xl border border-gray-200 bg-gray-100 text-gray-900 hover:bg-gray-200 p-4 transition"
+          >
+            <div className="flex min-h-[60px] flex-col justify-center">
+              <div className="text-sm font-semibold text-gray-900">Ventas</div>
+              <div className="mt-1 text-xs text-gray-500">BAF, PORTA y Línea Nueva</div>
+            </div>
+          </a>
+          <a
+            href="/super/consultas"
+            className="rounded-2xl border border-gray-200 bg-gray-100 text-gray-900 hover:bg-gray-200 p-4 transition"
+          >
+            <div className="flex min-h-[60px] flex-col justify-center">
+              <div className="text-sm font-semibold text-gray-900">Consultas</div>
+              <div className="mt-1 text-xs text-gray-500">Deuda y Cobertura</div>
+            </div>
+          </a>
+          <a
+            href="/super/pedidos"
+            className="rounded-2xl border border-red-600 bg-red-600 text-white shadow-sm p-4 transition"
+          >
+            <div className="flex min-h-[60px] flex-col justify-center">
+              <div className="text-sm font-semibold text-white">Pedidos</div>
+              <div className="mt-1 text-xs text-red-50">Pedidos y Rellamados</div>
+            </div>
+          </a>
         </div>
 
         <form method="get" className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 bg-white p-4 md:grid-cols-2 xl:grid-cols-6">
@@ -100,12 +147,36 @@ export default async function SuperPedidosPage({ searchParams }: { searchParams:
         </form>
 
         <div className="mb-3 text-sm text-gray-500">{filas.length} {filas.length===1?'pedido':'pedidos'}</div>
-        <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white md:block"><div className="overflow-x-auto"><table className="w-full text-left text-sm">
-          <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-4 py-3">ID</th><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Fecha Gestión</th><th className="px-4 py-3">Código</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">DNI</th><th className="px-4 py-3">Teléfono</th><th className="px-4 py-3">Vendedor</th><th className="px-4 py-3">Responsable</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3 text-right">Acción</th></tr></thead>
-          <tbody className="divide-y divide-gray-100">{filas.map((p:any)=>{const tipo:any=tipoMap.get(String(p.tipo_pedido_id)); return <tr key={p.id} className="hover:bg-gray-50"><td className="px-4 py-3 font-semibold text-gray-900">#{p.id}</td><td className="whitespace-nowrap px-4 py-3 text-gray-600">{fechaArgentina(p.marca_temporal)}</td><td className="whitespace-nowrap px-4 py-3 text-gray-600">{fechaArgentina(p.fecha_gestion)}</td><td className="px-4 py-3 font-medium text-gray-900">{p.codigo || `#${p.id}`}</td><td className="px-4 py-3">{tipo?.nombre || '-'}</td><td className="px-4 py-3 text-gray-600">{p.dni || '-'}</td><td className="px-4 py-3 text-gray-600">{p.telefono || '-'}</td><td className="px-4 py-3 text-gray-600">{nombrePerfil(p.vendedor_id)}</td><td className="px-4 py-3 text-gray-600">{nombrePerfil(p.responsable_id)}</td><td className="px-4 py-3 text-gray-600">{estadoTexto(p)}</td><td className="px-4 py-3 text-right"><a href={`/super/pedidos/${p.id}`} className="font-medium text-red-600 hover:text-red-700">Ver detalle</a></td></tr>})}{filas.length===0&&<tr><td colSpan={11} className="px-4 py-10 text-center text-gray-500">No se encontraron Pedidos.</td></tr>}</tbody>
+        <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white md:block"><div className="overflow-x-auto"><table className="min-w-[1400px] w-full table-fixed text-left text-[13px]">
+          <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="w-[70px] px-3 py-3">ID</th><th className="w-[135px] px-3 py-3">Fecha</th><th className="w-[135px] px-3 py-3">Fecha Gestión</th><th className="w-[135px] px-3 py-3">Código</th><th className="w-[180px] px-3 py-3">Tipo</th><th className="w-[110px] px-3 py-3">DNI</th><th className="w-[120px] px-3 py-3">Teléfono</th><th className="w-[170px] px-3 py-3">Vendedor</th><th className="w-[170px] px-3 py-3">Responsable</th><th className="w-[170px] px-3 py-3">Estado</th><th className="sticky right-0 z-20 w-[94px] border-l border-gray-200 bg-gray-50 px-3 py-3 text-center">Acción</th></tr></thead>
+          <tbody className="divide-y divide-gray-100">{filasPagina.map((p:any)=>{const tipo:any=tipoMap.get(String(p.tipo_pedido_id)); return <tr key={p.id} className="group hover:bg-gray-50"><td className="px-3 py-3 font-semibold text-gray-900">#{p.id}</td><td className="px-3 py-3 align-top text-gray-600"><div className="leading-5">{fechaArgentina(p.marca_temporal)}</div></td><td className="px-3 py-3 align-top text-gray-600"><div className="leading-5">{fechaArgentina(p.fecha_gestion)}</div></td><td className="px-3 py-3 font-medium text-gray-900">{p.codigo || `#${p.id}`}</td><td className="px-3 py-3 align-top"><div className="whitespace-normal break-words leading-5">{tipo?.nombre || '-'}</div></td><td className="px-3 py-3 text-gray-600">{p.dni || '-'}</td><td className="px-3 py-3 text-gray-600">{p.telefono || '-'}</td><td className="px-3 py-3 align-top text-gray-600"><div className="break-words leading-5">{nombrePerfil(p.vendedor_id)}</div></td><td className="px-3 py-3 align-top text-gray-600"><div className="break-words leading-5">{nombrePerfil(p.responsable_id)}</div></td><td className="px-3 py-3 align-top text-gray-600"><div className="whitespace-normal break-words leading-5">{estadoTexto(p)}</div></td><td className="sticky right-0 z-10 whitespace-nowrap border-l border-gray-200 bg-white px-3 py-3 text-center group-hover:bg-gray-50"><a href={`/super/pedidos/${p.id}`} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 hover:border-red-300 hover:text-red-600"><svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z" stroke="currentColor" strokeWidth="1.7" /><circle cx="12" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.7" /></svg><span>Ver</span></a></td></tr>})}{filas.length===0&&<tr><td colSpan={11} className="px-4 py-10 text-center text-gray-500">No se encontraron Pedidos.</td></tr>}</tbody>
         </table></div></div>
 
-        <div className="space-y-3 md:hidden">{filas.map((p:any)=>{const tipo:any=tipoMap.get(String(p.tipo_pedido_id)); return <div key={p.id} className="rounded-2xl border border-gray-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-gray-900">Pedido #{p.id} · {p.codigo || 'Sin código'}</div><div className="mt-1 text-xs text-gray-500">{fechaArgentina(p.marca_temporal)}</div></div><span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">{tipo?.nombre || 'Pedido'}</span></div><div className="mt-4 space-y-2 text-sm text-gray-700"><div><b>ID:</b> #{p.id}</div><div><b>Fecha Gestión:</b> {fechaArgentina(p.fecha_gestion)}</div><div><b>DNI:</b> {p.dni || '-'}</div><div><b>Teléfono:</b> {p.telefono || '-'}</div><div><b>Vendedor:</b> {nombrePerfil(p.vendedor_id)}</div><div><b>Responsable:</b> {nombrePerfil(p.responsable_id)}</div><div><b>Estado:</b> {estadoTexto(p)}</div></div><div className="mt-4 border-t border-gray-100 pt-3 text-right"><a href={`/super/pedidos/${p.id}`} className="text-sm font-semibold text-red-600">Ver detalle</a></div></div>})}</div>
+
+        <div className="mt-3 flex flex-col items-center justify-between gap-3 text-sm text-gray-500 sm:flex-row">
+          <div>{filas.length === 0 ? 'Sin resultados' : `Mostrando ${inicio + 1} a ${fin} de ${filas.length} pedidos`}</div>
+          <div className="flex items-center gap-2">
+            <a href={hrefPagina(1)} className={`rounded-lg border px-3 py-2 ${pagina === 1 ? 'pointer-events-none text-gray-300' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>«</a>
+            <a href={hrefPagina(Math.max(1, pagina - 1))} className={`rounded-lg border px-3 py-2 ${pagina === 1 ? 'pointer-events-none text-gray-300' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>‹</a>
+            <span className="rounded-lg bg-red-600 px-3 py-2 font-semibold text-white">{pagina}</span>
+            <a href={hrefPagina(Math.min(totalPaginas, pagina + 1))} className={`rounded-lg border px-3 py-2 ${pagina === totalPaginas ? 'pointer-events-none text-gray-300' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>›</a>
+            <a href={hrefPagina(totalPaginas)} className={`rounded-lg border px-3 py-2 ${pagina === totalPaginas ? 'pointer-events-none text-gray-300' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>»</a>
+          </div>
+          <form method="get" className="flex items-center gap-2">
+            {params?.q && <input type="hidden" name="q" value={String(params.q)} />}
+            {filtroTipo && <input type="hidden" name="tipo" value={filtroTipo} />}
+            {filtroVendedor && <input type="hidden" name="vendedor" value={filtroVendedor} />}
+            {filtroResponsable && <input type="hidden" name="responsable" value={filtroResponsable} />}
+            {filtroEstado && <input type="hidden" name="estado" value={filtroEstado} />}
+            <span>Por página:</span>
+            <select name="por_pagina" defaultValue={String(porPagina)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700">
+              {opcionesPorPagina.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <button className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700">Aplicar</button>
+          </form>
+        </div>
+
+        <div className="space-y-3 md:hidden">{filasPagina.map((p:any)=>{const tipo:any=tipoMap.get(String(p.tipo_pedido_id)); return <div key={p.id} className="rounded-2xl border border-gray-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-gray-900">Pedido #{p.id} · {p.codigo || 'Sin código'}</div><div className="mt-1 text-xs text-gray-500">{fechaArgentina(p.marca_temporal)}</div></div><span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">{tipo?.nombre || 'Pedido'}</span></div><div className="mt-4 space-y-2 text-sm text-gray-700"><div><b>ID:</b> #{p.id}</div><div><b>Fecha Gestión:</b> {fechaArgentina(p.fecha_gestion)}</div><div><b>DNI:</b> {p.dni || '-'}</div><div><b>Teléfono:</b> {p.telefono || '-'}</div><div><b>Vendedor:</b> {nombrePerfil(p.vendedor_id)}</div><div><b>Responsable:</b> {nombrePerfil(p.responsable_id)}</div><div><b>Estado:</b> {estadoTexto(p)}</div></div><div className="mt-4 border-t border-gray-100 pt-3 text-right"><a href={`/super/pedidos/${p.id}`} className="text-sm font-semibold text-red-600">Ver detalle</a></div></div>})}</div>
       </div>
     </main>
   )

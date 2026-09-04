@@ -8,6 +8,8 @@ type SearchParams = Promise<{
   vendedor?: string
   responsable?: string
   estado?: string
+  pagina?: string
+  por_pagina?: string
 }>
 
 function fechaArgentina(fecha: string | null) {
@@ -104,6 +106,10 @@ export default async function SuperVentasPage({
   const filtroVendedor = String(params?.vendedor ?? '').trim()
   const filtroResponsable = String(params?.responsable ?? '').trim()
   const filtroEstado = String(params?.estado ?? '').trim()
+  const paginaSolicitada = Math.max(1, parseInt(String(params?.pagina ?? '1'), 10) || 1)
+  const opcionesPorPagina = [10, 20, 50]
+  const porPaginaSolicitado = parseInt(String(params?.por_pagina ?? '20'), 10) || 20
+  const porPagina = opcionesPorPagina.includes(porPaginaSolicitado) ? porPaginaSolicitado : 20
 
   const { data: operaciones, error } = await supabase
     .from('operaciones')
@@ -220,6 +226,25 @@ export default async function SuperVentasPage({
     return texto.includes(q)
   })
 
+
+  const totalPaginas = Math.max(1, Math.ceil(ventas.length / porPagina))
+  const pagina = Math.min(paginaSolicitada, totalPaginas)
+  const inicio = (pagina - 1) * porPagina
+  const fin = Math.min(inicio + porPagina, ventas.length)
+  const ventasPagina = ventas.slice(inicio, fin)
+
+  const hrefPagina = (n: number) => {
+    const qs = new URLSearchParams()
+    if (params?.q) qs.set('q', String(params.q))
+    if (filtroTipo) qs.set('tipo', filtroTipo)
+    if (filtroVendedor) qs.set('vendedor', filtroVendedor)
+    if (filtroResponsable) qs.set('responsable', filtroResponsable)
+    if (filtroEstado) qs.set('estado', filtroEstado)
+    qs.set('pagina', String(n))
+    qs.set('por_pagina', String(porPagina))
+    return `/super?${qs.toString()}`
+  }
+
   return (
     <main className="min-h-screen bg-gray-50">
       <AppHeader
@@ -227,7 +252,7 @@ export default async function SuperVentasPage({
         usuario={profile.nombre?.trim() || user.email || 'Usuario'}
         actual="SUPER"
       />
-      <div className="mx-auto max-w-7xl p-4 sm:p-8">
+      <div className="mx-auto max-w-[1500px] p-4 sm:p-6 lg:p-8">
 
 
         <div className="mb-6">
@@ -243,24 +268,30 @@ export default async function SuperVentasPage({
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <a
             href="/super"
-            className="rounded-2xl border border-red-200 bg-red-50 p-4 transition hover:border-red-300"
+            className="rounded-2xl border border-red-600 bg-red-600 text-white shadow-sm p-4 transition"
           >
-            <div className="text-sm font-semibold text-red-700">Ventas</div>
-            <div className="mt-1 text-xs text-gray-500">BAF, PORTA y Línea Nueva</div>
+            <div className="flex min-h-[60px] flex-col justify-center">
+              <div className="text-sm font-semibold text-white">Ventas</div>
+              <div className="mt-1 text-xs text-red-50">BAF, PORTA y Línea Nueva</div>
+            </div>
           </a>
           <a
             href="/super/consultas"
-            className="rounded-2xl border border-gray-200 bg-white p-4 transition hover:border-red-300"
+            className="rounded-2xl border border-gray-200 bg-gray-100 text-gray-900 hover:bg-gray-200 p-4 transition"
           >
-            <div className="text-sm font-semibold text-gray-900">Consultas</div>
-            <div className="mt-1 text-xs text-gray-500">Deuda y Cobertura</div>
+            <div className="flex min-h-[60px] flex-col justify-center">
+              <div className="text-sm font-semibold text-gray-900">Consultas</div>
+              <div className="mt-1 text-xs text-gray-500">Deuda y Cobertura</div>
+            </div>
           </a>
           <a
             href="/super/pedidos"
-            className="rounded-2xl border border-gray-200 bg-white p-4 transition hover:border-red-300"
+            className="rounded-2xl border border-gray-200 bg-gray-100 text-gray-900 hover:bg-gray-200 p-4 transition"
           >
-            <div className="text-sm font-semibold text-gray-900">Pedidos</div>
-            <div className="mt-1 text-xs text-gray-500">Acometida, Proyecto, Ampliación y Rellamado</div>
+            <div className="flex min-h-[60px] flex-col justify-center">
+              <div className="text-sm font-semibold text-gray-900">Pedidos</div>
+              <div className="mt-1 text-xs text-gray-500">Acometida, Proyecto, Ampliación y Rellamado</div>
+            </div>
           </a>
         </div>
 
@@ -309,67 +340,71 @@ export default async function SuperVentasPage({
         {/* DESKTOP */}
         <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white md:block">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full table-fixed text-left text-[13px]">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
-                  <th className="px-4 py-3">Fecha</th>
-                  <th className="px-4 py-3">Tipo</th>
-                  <th className="px-4 py-3">Cliente</th>
-                  <th className="px-4 py-3">DNI / CUIT</th>
-                  <th className="px-4 py-3">Producto / Plan</th>
-                  <th className="px-4 py-3">Vendedor</th>
-                  <th className="px-4 py-3">Responsable</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3 text-right">Acción</th>
+                  <th className="px-3 py-3">Fecha</th>
+                  <th className="px-3 py-3">Tipo</th>
+                  <th className="px-3 py-3">Cliente</th>
+                  <th className="px-3 py-3">DNI / CUIT</th>
+                  <th className="px-3 py-3">Producto / Plan</th>
+                  <th className="px-3 py-3">Vendedor</th>
+                  <th className="px-3 py-3">Responsable</th>
+                  <th className="px-3 py-3">Estado</th>
+                  <th className="sticky right-0 z-20 w-[94px] border-l border-gray-200 bg-gray-50 px-3 py-3 text-center">Acción</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-gray-100">
-                {ventas.map((operacion: any) => (
+                {ventasPagina.map((operacion: any) => (
                   <tr
                     key={operacion.id_operacion}
-                    className="hover:bg-gray-50"
+                    className="group hover:bg-gray-50"
                   >
-                    <td className="whitespace-nowrap px-4 py-3 text-gray-600">
+                    <td className="whitespace-nowrap px-3 py-3 text-gray-600">
                       {fechaArgentina(operacion.fecha_hora)}
                     </td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
                         {tipoVisible(operacion)}
                       </span>
                     </td>
 
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                    <td className="px-3 py-3 font-medium text-gray-900">
                       {nombreCliente(operacion.cliente)}
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3 text-gray-600">
+                    <td className="whitespace-nowrap px-3 py-3 text-gray-600">
                       {operacion.cliente?.tipo_documento
                         ? `${operacion.cliente.tipo_documento} `
                         : ''}
                       {operacion.cliente?.dni || '-'}
                     </td>
 
-                    <td className="px-4 py-3 text-gray-600">
+                    <td className="px-3 py-3 text-gray-600">
                       {productoVisible(operacion)}
                     </td>
 
-                    <td className="px-4 py-3 text-gray-600">{operacion.vendedor || '-'}</td>
-                    <td className="px-4 py-3 text-gray-600">{nombreResponsable(operacion)}</td>
+                    <td className="px-3 py-3 text-gray-600">{operacion.vendedor || '-'}</td>
+                    <td className="px-3 py-3 text-gray-600">{nombreResponsable(operacion)}</td>
 
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <span className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700">
                         {estadoVisible(operacion)}
                       </span>
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                    <td className="sticky right-0 z-10 whitespace-nowrap border-l border-gray-200 bg-white px-3 py-3 text-center group-hover:bg-gray-50">
                       <a
                         href={`/super/ventas/${encodeURIComponent(operacion.id_operacion)}`}
-                        className="font-medium text-red-600 hover:text-red-700"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 hover:border-red-300 hover:text-red-600"
                       >
-                        Ver detalle
+                        <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+                          <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z" stroke="currentColor" strokeWidth="1.7" />
+                          <circle cx="12" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.7" />
+                        </svg>
+                        Ver
                       </a>
                     </td>
                   </tr>
@@ -390,9 +425,33 @@ export default async function SuperVentasPage({
           </div>
         </div>
 
+
+        <div className="mt-3 flex flex-col items-center justify-between gap-3 text-sm text-gray-500 sm:flex-row">
+          <div>{ventas.length === 0 ? 'Sin resultados' : `Mostrando ${inicio + 1} a ${fin} de ${ventas.length} ventas`}</div>
+          <div className="flex items-center gap-2">
+            <a href={hrefPagina(1)} className={`rounded-lg border px-3 py-2 ${pagina === 1 ? 'pointer-events-none text-gray-300' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>«</a>
+            <a href={hrefPagina(Math.max(1, pagina - 1))} className={`rounded-lg border px-3 py-2 ${pagina === 1 ? 'pointer-events-none text-gray-300' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>‹</a>
+            <span className="rounded-lg bg-red-600 px-3 py-2 font-semibold text-white">{pagina}</span>
+            <a href={hrefPagina(Math.min(totalPaginas, pagina + 1))} className={`rounded-lg border px-3 py-2 ${pagina === totalPaginas ? 'pointer-events-none text-gray-300' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>›</a>
+            <a href={hrefPagina(totalPaginas)} className={`rounded-lg border px-3 py-2 ${pagina === totalPaginas ? 'pointer-events-none text-gray-300' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>»</a>
+          </div>
+          <form method="get" className="flex items-center gap-2">
+            {params?.q && <input type="hidden" name="q" value={String(params.q)} />}
+            {filtroTipo && <input type="hidden" name="tipo" value={filtroTipo} />}
+            {filtroVendedor && <input type="hidden" name="vendedor" value={filtroVendedor} />}
+            {filtroResponsable && <input type="hidden" name="responsable" value={filtroResponsable} />}
+            {filtroEstado && <input type="hidden" name="estado" value={filtroEstado} />}
+            <span>Por página:</span>
+            <select name="por_pagina" defaultValue={String(porPagina)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700">
+              {opcionesPorPagina.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <button className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700">Aplicar</button>
+          </form>
+        </div>
+
         {/* MOBILE */}
         <div className="space-y-3 md:hidden">
-          {ventas.map((operacion: any) => (
+          {ventasPagina.map((operacion: any) => (
             <div
               key={operacion.id_operacion}
               className="rounded-2xl border border-gray-200 bg-white p-4"

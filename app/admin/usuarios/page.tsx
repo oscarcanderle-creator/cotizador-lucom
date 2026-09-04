@@ -5,7 +5,7 @@ import { createClient } from '../../../utils/supabase/server'
 import { createAdminClient } from '../../../utils/supabase/admin'
 import AppHeader from '../../../components/AppHeader'
 
-type RolUsuario = 'ADMIN' | 'SUPERVISOR' | 'VENDEDOR' | 'BBOO'
+type RolUsuario = 'ADMIN' | 'SUPERVISOR' | 'VENDEDOR' | 'TERRENO' | 'BBOO'
 
 async function validarAdmin() {
   const supabase = await createClient()
@@ -45,6 +45,7 @@ function validarRol(valor: string): RolUsuario {
     valor !== 'ADMIN' &&
     valor !== 'SUPERVISOR' &&
     valor !== 'VENDEDOR' &&
+    valor !== 'TERRENO' &&
     valor !== 'BBOO'
   ) {
     throw new Error('Rol de usuario inválido.')
@@ -710,6 +711,10 @@ export default async function AdminUsuariosPage() {
                   Administrador
                 </option>
 
+                <option value="TERRENO">
+                  Terreno
+                </option>
+
                 <option value="BBOO">
                   BBOO
                 </option>
@@ -867,6 +872,10 @@ export default async function AdminUsuariosPage() {
 
                         <option value="ADMIN">
                           Administrador
+                        </option>
+
+                        <option value="TERRENO">
+                          Terreno
                         </option>
 
                         <option value="BBOO">

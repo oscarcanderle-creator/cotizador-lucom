@@ -49,7 +49,7 @@ export default async function AdminPage() {
           {/* REGLAS COMERCIALES */}
           <a
             href="/admin/reglas"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Reglas Comerciales
@@ -62,7 +62,7 @@ export default async function AdminPage() {
           {/* PROMOCIONES FLASH */}
           <a
             href="/admin/flash"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Promociones Flash
@@ -75,7 +75,7 @@ export default async function AdminPage() {
           {/* NOVEDADES */}
           <a
             href="/admin/novedades"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Novedades / Beneficios
@@ -86,7 +86,7 @@ export default async function AdminPage() {
           </a>
 
           {/* PRODUCTOS */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="bg-gray-100 border border-gray-200 rounded-xl p-5">
             <div className="text-lg font-semibold text-gray-900">
               Productos y Precios
             </div>
@@ -101,7 +101,7 @@ export default async function AdminPage() {
           {/* ZONAS BAF */}
           <a
             href="/admin/zonas"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Zonas BAF
@@ -114,7 +114,7 @@ export default async function AdminPage() {
           {/* ESTADOS BAF */}
           <a
             href="/admin/estados-baf"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Estados BAF
@@ -127,7 +127,7 @@ export default async function AdminPage() {
           {/* ESTADOS PORTA */}
           <a
             href="/admin/estados-porta"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Estados PORTA
@@ -140,7 +140,7 @@ export default async function AdminPage() {
           {/* MEDIOS DESPACHO CHIP */}
           <a
             href="/admin/medios-despacho-chip"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Medios despacho CHIP
@@ -153,7 +153,7 @@ export default async function AdminPage() {
           {/* TIPOS DE CONSULTA */}
           <a
             href="/admin/tipos-consulta"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Tipos de Consulta
@@ -166,7 +166,7 @@ export default async function AdminPage() {
           {/* ESTADOS DE CONSULTA */}
           <a
             href="/admin/estados-consulta"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Estados de Consulta
@@ -179,7 +179,7 @@ export default async function AdminPage() {
           {/* TIPOS DE PEDIDO */}
           <a
             href="/admin/tipos-pedido"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Tipos de Pedido
@@ -192,7 +192,7 @@ export default async function AdminPage() {
           {/* ESTADOS DE PEDIDO */}
           <a
             href="/admin/estados-pedido"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Estados de Pedido
@@ -205,7 +205,7 @@ export default async function AdminPage() {
           {/* USUARIOS */}
           <a
             href="/admin/usuarios"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Usuarios
@@ -218,7 +218,7 @@ export default async function AdminPage() {
           {/* VOLVER AL COTIZADOR */}
           <a
             href="/cotizador"
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-red-300 hover:shadow-sm transition"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
           >
             <div className="text-lg font-semibold text-gray-900">
               Volver al Cotizador

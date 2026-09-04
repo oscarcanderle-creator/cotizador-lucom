@@ -101,6 +101,10 @@ function emailValido(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
 }
 
+function nimValido(nim: string) {
+  return /^[1-49][0-9]{9}$/.test(nim.trim())
+}
+
 export default function Cotizador({
   productos,
   reglas,
@@ -112,6 +116,17 @@ export default function Cotizador({
 }: Props) {
   const propuestaRef = useRef<HTMLDivElement>(null)
   const [exportando, setExportando] = useState(false)
+
+  /*
+   * Cotizador anónimo:
+   * - TERRENO
+   * - VENDEDOR sin permiso de Gestión de Ventas
+   *
+   * ADMIN, SUPERVISOR y VENDEDOR gestor conservan el cotizador completo.
+   */
+  const cotizadorAnonimo =
+    rol === 'TERRENO' ||
+    (rol === 'VENDEDOR' && !puedeGestionarVentas)
 
   /*
    * =====================================================
@@ -142,16 +157,19 @@ export default function Cotizador({
   )
 
   const datosClienteCompletos =
-    datosCliente.nombre.trim() !== '' &&
-    datosCliente.apellido.trim() !== '' &&
-    datosCliente.dni.trim() !== '' &&
-    datosCliente.telefono.trim() !== '' &&
-    emailValido(datosCliente.email) &&
-    datosCliente.companiaActual.trim() !== '' &&
-    datosCliente.domicilio.trim() !== '' &&
-    datosCliente.entreCalles.trim() !== '' &&
-    datosCliente.localidad.trim() !== '' &&
-    datosCliente.observacionesDomicilio.trim() !== ''
+    cotizadorAnonimo ||
+    (
+      datosCliente.nombre.trim() !== '' &&
+      datosCliente.apellido.trim() !== '' &&
+      datosCliente.dni.trim() !== '' &&
+      datosCliente.telefono.trim() !== '' &&
+      emailValido(datosCliente.email) &&
+      datosCliente.companiaActual.trim() !== '' &&
+      datosCliente.domicilio.trim() !== '' &&
+      datosCliente.entreCalles.trim() !== '' &&
+      datosCliente.localidad.trim() !== '' &&
+      datosCliente.observacionesDomicilio.trim() !== ''
+    )
 
   function actualizarDatoCliente(
     campo: keyof DatosCliente,
@@ -422,7 +440,7 @@ export default function Cotizador({
       linea.tipo === 'LINEA NUEVA' ||
       (
         linea.portabilidades.length === 1 &&
-        linea.portabilidades[0].nim.trim() !== ''
+        nimValido(linea.portabilidades[0].nim)
       )
   )
 
@@ -671,7 +689,7 @@ export default function Cotizador({
 
     if (!portabilidadesCompletas) {
       window.alert(
-        'Completá el NIM y el origen PRE/POS de todas las portabilidades.'
+        'El NIM a portar debe tener 10 dígitos y no puede comenzar con 0, + ni 5.'
       )
       return false
     }
@@ -680,6 +698,10 @@ export default function Cotizador({
   }
 
   function nombreArchivo(extension: 'jpg' | 'pdf') {
+    if (cotizadorAnonimo) {
+      return `Propuesta-Claro-${fechaEmision.replace(/\//g, '-')}.${extension}`
+    }
+
     const cliente =
       `${datosCliente.apellido}-${datosCliente.nombre}`
         .trim()
@@ -753,6 +775,62 @@ async function compartirPropuesta() {
     return
   }
 
+  if (cotizadorAnonimo) {
+    try {
+      setExportando(true)
+
+      const dataUrl = await imagenPropuesta()
+      const respuesta = await fetch(dataUrl)
+      const blob = await respuesta.blob()
+
+      const archivo = new File(
+        [blob],
+        nombreArchivo('jpg'),
+        { type: 'image/png' }
+      )
+
+      const texto =
+        `Propuesta Comercial Claro por ${dinero(resultado.total)}. ` +
+        `Es válida únicamente durante el día ${fechaEmision}. ` +
+        'Por favor revisá los productos, beneficios e importes detallados.'
+
+      if (
+        navigator.share &&
+        navigator.canShare?.({ files: [archivo] })
+      ) {
+        await navigator.share({
+          title: 'Propuesta Comercial Claro',
+          text: texto,
+          files: [archivo],
+        })
+        return
+      }
+
+      const enlace = document.createElement('a')
+      enlace.download = nombreArchivo('jpg')
+      enlace.href = dataUrl
+      enlace.click()
+
+      window.alert(
+        'La propuesta se descargó como imagen para que puedas compartirla.'
+      )
+    } catch (error) {
+      if (
+        error instanceof DOMException &&
+        error.name === 'AbortError'
+      ) {
+        return
+      }
+
+      console.error(error)
+      window.alert('No se pudo compartir la propuesta.')
+    } finally {
+      setExportando(false)
+    }
+
+    return
+  }
+
   const telefono =
     datosCliente.telefono.replace(/\D/g, '')
 
@@ -770,7 +848,7 @@ async function compartirPropuesta() {
     '_blank',
     'noopener,noreferrer'
   )
-}  
+}
   /*
    * =====================================================
    * INTERFAZ
@@ -814,6 +892,8 @@ async function compartirPropuesta() {
               DATOS DEL CLIENTE
           ================================================== */}
 
+          {!cotizadorAnonimo && (
+            <>
           <div className="mb-4">
 
             <div className="flex items-start justify-between gap-3 mb-2">
@@ -1067,6 +1147,9 @@ async function compartirPropuesta() {
 
           </div>
 
+            </>
+          )}
+
           {/* CLIENTE CLARO */}
 
           <div className="mb-3">
@@ -1295,21 +1378,34 @@ async function compartirPropuesta() {
                   </div>
                   {linea.tipo !== 'LINEA NUEVA' && linea.portabilidades[0] && (
                     <div className="mt-1.5 pt-1.5 border-t border-gray-100">
+                      <div className="mb-1 text-xs font-medium text-gray-600">
+                        NIM a Portar
+                      </div>
+
                       <div className="grid grid-cols-[1fr_72px] gap-1.5 items-center">
                         <input
                           type="tel"
                           inputMode="numeric"
-                          placeholder="NIM · número a portar"
+                          maxLength={10}
+                          placeholder="10 dígitos"
                           value={linea.portabilidades[0].nim}
                           onChange={(e) =>
                             actualizarPortabilidad(
                               linea.id,
                               0,
                               'nim',
-                              e.target.value.replace(/\D/g, '')
+                              e.target.value
+                                .replace(/\D/g, '')
+                                .replace(/^[05]+/, '')
+                                .slice(0, 10)
                             )
                           }
-                          className="min-w-0 w-full border border-gray-300 rounded-md px-2 py-1 text-sm bg-white text-gray-900"
+                          className={`min-w-0 w-full border rounded-md px-2 py-1 text-sm bg-white text-gray-900 ${
+                            linea.portabilidades[0].nim !== '' &&
+                            !nimValido(linea.portabilidades[0].nim)
+                              ? 'border-red-400'
+                              : 'border-gray-300'
+                          }`}
                         />
 
                         <select
@@ -1328,6 +1424,13 @@ async function compartirPropuesta() {
                           <option value="POS">POS</option>
                         </select>
                       </div>
+
+                      {linea.portabilidades[0].nim !== '' &&
+                        !nimValido(linea.portabilidades[0].nim) && (
+                          <div className="mt-1 text-[11px] text-red-600">
+                            Debe tener 10 dígitos y no comenzar con 0 ni 5.
+                          </div>
+                        )}
                     </div>
                   )}
 
@@ -1658,6 +1761,37 @@ async function compartirPropuesta() {
 
           {/* DATOS DEL CLIENTE */}
 
+          {cotizadorAnonimo ? (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs sm:text-sm">
+                <div className="sm:col-span-2">
+                  <span className="text-gray-500">
+                    Vendedor:{' '}
+                  </span>
+                  <span className="font-medium">
+                    {usuario}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-gray-500">
+                    Emisión:{' '}
+                  </span>
+                  <span>{fechaEmision}</span>
+                </div>
+
+                <div>
+                  <span className="text-gray-500">
+                    Vigencia:{' '}
+                  </span>
+                  <span className="font-medium">
+                    {fechaEmision}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3">
 
             <div className="text-[10px] font-semibold text-gray-500 mb-1.5">
@@ -1778,6 +1912,9 @@ async function compartirPropuesta() {
             </div>
 
           </div>
+
+            </>
+          )}
 
           {/* MÓVILES */}
 
