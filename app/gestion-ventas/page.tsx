@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '../../utils/supabase/server'
 import { createAdminClient } from '../../utils/supabase/admin'
 import AppHeader from '../../components/AppHeader'
+import FiltrosAvanzadosVentas from '../../components/FiltrosAvanzadosVentas'
 
 type SearchParams = Promise<{
   q?: string
@@ -9,6 +10,25 @@ type SearchParams = Promise<{
   vendedor?: string
   responsable?: string
   estado?: string
+  f1_field?: string
+  f1_op?: string
+  f1_value?: string
+  f1_value2?: string
+  f2_join?: string
+  f2_field?: string
+  f2_op?: string
+  f2_value?: string
+  f2_value2?: string
+  f3_join?: string
+  f3_field?: string
+  f3_op?: string
+  f3_value?: string
+  f3_value2?: string
+  f4_join?: string
+  f4_field?: string
+  f4_op?: string
+  f4_value?: string
+  f4_value2?: string
 }>
 
 function fechaArgentina(fecha: string | null) {
@@ -22,6 +42,39 @@ function fechaArgentina(fecha: string | null) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(fecha))
+}
+
+function FechaDosLineas({ fecha }: { fecha: string | null }) {
+  if (!fecha) {
+    return <span>-</span>
+  }
+
+  const valor = new Date(fecha)
+
+  if (Number.isNaN(valor.getTime())) {
+    return <span>-</span>
+  }
+
+  const fechaTexto = new Intl.DateTimeFormat('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(valor)
+
+  const horaTexto = new Intl.DateTimeFormat('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(valor)
+
+  return (
+    <div className="leading-5">
+      <div className="whitespace-nowrap">{fechaTexto}</div>
+      <div className="whitespace-nowrap text-xs text-gray-500">{horaTexto}</div>
+    </div>
+  )
 }
 
 function nombreCliente(cliente: any) {
@@ -182,6 +235,7 @@ export default async function GestionVentasPage({
     gestionBafResultado,
     gestionPortaResultado,
     perfilesResultado,
+    mediosDespachoResultado,
   ] = await Promise.all([
     idsClientes.length > 0
       ? admin
@@ -206,7 +260,8 @@ export default async function GestionVentasPage({
             es_linea_nueva,
             gigas_acordados,
             compania_actual,
-            numero_linea
+            numero_linea,
+            tipo_sim
           `)
           .in('operacion_id', idsOperaciones)
       : Promise.resolve({ data: [], error: null }),
@@ -221,13 +276,18 @@ export default async function GestionVentasPage({
     idsOperaciones.length > 0
       ? admin
           .from('gestion_porta')
-          .select('operacion_id, responsable_id, updated_at, estado_porta_id')
+          .select('operacion_id, responsable_id, updated_at, estado_porta_id, medio_despacho_chip_id, fecha_carga_stl, fecha_porta, pin_lnva_nro, sim')
           .in('operacion_id', idsOperaciones)
       : Promise.resolve({ data: [], error: null }),
 
     admin
       .from('profiles')
       .select('id, nombre, vendedor')
+      .order('nombre', { ascending: true }),
+
+    admin
+      .from('medios_despacho_chip')
+      .select('id, nombre')
       .order('nombre', { ascending: true }),
   ])
 
@@ -264,6 +324,12 @@ export default async function GestionVentasPage({
   if (perfilesResultado.error) {
     throw new Error(
       `No se pudieron cargar los usuarios: ${perfilesResultado.error.message}`
+    )
+  }
+
+  if (mediosDespachoResultado.error) {
+    throw new Error(
+      `No se pudieron cargar los medios de despacho: ${mediosDespachoResultado.error.message}`
     )
   }
 
@@ -386,6 +452,20 @@ export default async function GestionVentasPage({
 
   const perfiles = perfilesResultado.data ?? []
 
+  const mediosDespacho = mediosDespachoResultado.data ?? []
+  const medioDespachoPorId = new Map(
+    mediosDespacho.map((m: any) => [m.id, m.nombre])
+  )
+
+  const companias = Array.from(
+    new Set(
+      (portaResultado.data ?? [])
+        .map((p: any) => String(p.compania_actual ?? '').trim())
+        .filter(Boolean)
+    )
+  ) as string[]
+  companias.sort((a, b) => a.localeCompare(b, 'es'))
+
   const nombreResponsable = (operacion: any) => {
     const responsableId =
       operacion.tipo === 'BAF'
@@ -441,6 +521,119 @@ export default async function GestionVentasPage({
   responsables.sort((a, b) => a.localeCompare(b, 'es'))
   estados.sort((a, b) => a.localeCompare(b, 'es'))
 
+  type FiltroAvanzado = {
+    campo: string
+    condicion: string
+    valor: string
+    valor2: string
+    conector: 'AND' | 'OR'
+  }
+
+  const filtrosAvanzados: FiltroAvanzado[] = [1, 2, 3, 4]
+    .map((numero) => {
+      const campo = String((params as any)[`f${numero}_field`] ?? '').trim()
+      const condicion = String((params as any)[`f${numero}_op`] ?? '').trim()
+      const valor = String((params as any)[`f${numero}_value`] ?? '').trim()
+      const valor2 = String((params as any)[`f${numero}_value2`] ?? '').trim()
+      const conector =
+        numero > 1 && String((params as any)[`f${numero}_join`] ?? 'AND') === 'OR'
+          ? 'OR'
+          : 'AND'
+
+      return { campo, condicion, valor, valor2, conector } as FiltroAvanzado
+    })
+    .filter((filtro) => filtro.campo && filtro.condicion)
+
+  const fechaSoloDiaArgentina = (valor: string | null | undefined) => {
+    if (!valor) return ''
+    const fecha = new Date(valor)
+    if (Number.isNaN(fecha.getTime())) return ''
+
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(fecha)
+  }
+
+  const valorCampoAvanzado = (operacion: any, campo: string) => {
+    const porta = operacion.operaciones_porta
+    const gestionPorta = operacion.gestion_porta
+
+    switch (campo) {
+      case 'estado':
+        return estadoVisible(operacion)
+      case 'tipo':
+        return tipoVisible(operacion)
+      case 'vendedor':
+        return String(operacion.vendedor ?? '')
+      case 'responsable':
+        return nombreResponsable(operacion) === 'Sin responsable'
+          ? ''
+          : nombreResponsable(operacion)
+      case 'medio_despacho':
+        return gestionPorta?.medio_despacho_chip_id
+          ? String(medioDespachoPorId.get(gestionPorta.medio_despacho_chip_id) ?? '')
+          : ''
+      case 'tipo_sim':
+        return porta?.tipo_sim === 'ESIM' ? 'eSIM' : String(porta?.tipo_sim ?? '')
+      case 'compania_actual':
+        return String(porta?.compania_actual ?? '')
+      case 'fecha_carga_stl':
+        return fechaSoloDiaArgentina(gestionPorta?.fecha_carga_stl)
+      case 'fecha_porta':
+        return fechaSoloDiaArgentina(gestionPorta?.fecha_porta)
+      case 'pin':
+        return String(gestionPorta?.pin_lnva_nro ?? '').trim()
+      case 'sim_operativo':
+        return String(gestionPorta?.sim ?? '').trim()
+      default:
+        return ''
+    }
+  }
+
+  const cumpleFiltroAvanzado = (operacion: any, filtro: FiltroAvanzado) => {
+    const actual = valorCampoAvanzado(operacion, filtro.campo).trim()
+    const esperado = filtro.valor.trim()
+
+    if (filtro.condicion === 'vacio') return actual === ''
+    if (filtro.condicion === 'no_vacio') return actual !== ''
+
+    if (['fecha_carga_stl', 'fecha_porta'].includes(filtro.campo)) {
+      if (!actual || !esperado) return false
+      if (filtro.condicion === 'es') return actual === esperado
+      if (filtro.condicion === 'antes') return actual < esperado
+      if (filtro.condicion === 'despues') return actual > esperado
+      if (filtro.condicion === 'entre') {
+        return Boolean(filtro.valor2) && actual >= esperado && actual <= filtro.valor2
+      }
+      return false
+    }
+
+    const actualNormalizado = actual.toLocaleLowerCase('es')
+    const esperadoNormalizado = esperado.toLocaleLowerCase('es')
+
+    if (filtro.condicion === 'es') return actualNormalizado === esperadoNormalizado
+    if (filtro.condicion === 'no_es') return actualNormalizado !== esperadoNormalizado
+
+    return true
+  }
+
+  const cumpleFiltrosAvanzados = (operacion: any) => {
+    if (filtrosAvanzados.length === 0) return true
+
+    let resultado = cumpleFiltroAvanzado(operacion, filtrosAvanzados[0])
+
+    for (let i = 1; i < filtrosAvanzados.length; i += 1) {
+      const filtro = filtrosAvanzados[i]
+      const cumple = cumpleFiltroAvanzado(operacion, filtro)
+      resultado = filtro.conector === 'OR' ? resultado || cumple : resultado && cumple
+    }
+
+    return resultado
+  }
+
   const ventas = operacionesCompletas.filter((operacion: any) => {
     const tipo = tipoVisible(operacion)
 
@@ -466,6 +659,8 @@ export default async function GestionVentasPage({
     ) {
       return false
     }
+
+    if (!cumpleFiltrosAvanzados(operacion)) return false
 
     if (!q) return true
 
@@ -604,12 +799,21 @@ export default async function GestionVentasPage({
             </select>
           </div>
 
+          <FiltrosAvanzadosVentas
+            estados={estados}
+            vendedores={vendedores}
+            responsables={responsables}
+            mediosDespacho={mediosDespacho.map((m: any) => String(m.nombre ?? '')).filter(Boolean)}
+            companias={companias}
+            iniciales={filtrosAvanzados}
+          />
+
           <div className="flex items-end gap-2 md:col-span-2 xl:col-span-6">
             <button
               type="submit"
               className="rounded-lg bg-red-600 px-5 py-2 font-semibold text-white hover:bg-red-700"
             >
-              Filtrar
+              Aplicar filtros
             </button>
             <a
               href="/gestion-ventas"
@@ -625,100 +829,143 @@ export default async function GestionVentasPage({
         </div>
 
         <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white md:block">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                <tr>
-                  <th className="px-4 py-3">Fecha</th>
-                  <th className="px-4 py-3">Vendedor</th>
-                  <th className="px-4 py-3">Tipo</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3">Responsable</th>
-                  <th className="px-4 py-3">Cliente</th>
-                  <th className="px-4 py-3">Línea</th>
-                  <th className="px-4 py-3">Producto / Plan</th>
-                  <th className="px-4 py-3">Últ. gestión</th>
-                  <th className="px-4 py-3 text-right">Acción</th>
-                </tr>
-              </thead>
+          <table className="w-full table-fixed text-left text-[13px]">
+            <colgroup>
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '6%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '7%' }} />
+            </colgroup>
 
-              <tbody className="divide-y divide-gray-100">
-                {ventas.map((operacion: any) => (
+            <thead className="bg-gray-50 text-[11px] uppercase text-gray-500">
+              <tr>
+                <th className="px-2 py-3">Fecha</th>
+                <th className="px-2 py-3">Vendedor</th>
+                <th className="px-2 py-3">Tipo</th>
+                <th className="px-2 py-3">Estado</th>
+                <th className="px-2 py-3">Responsable</th>
+                <th className="px-2 py-3">Cliente</th>
+                <th className="px-2 py-3">Línea</th>
+                <th className="px-2 py-3">Producto / Plan</th>
+                <th className="px-2 py-3">Últ. gestión</th>
+                <th className="px-2 py-3 text-right">Acción</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-gray-100">
+              {ventas.map((operacion: any) => {
+                const vendedor = operacion.vendedor || '-'
+                const responsable = nombreResponsable(operacion)
+                const cliente = nombreCliente(operacion.cliente)
+                const linea = lineaVisible(operacion, cantidadLineasGrupo)
+                const producto = productoVisible(operacion)
+                const estado = estadoVisible(operacion)
+
+                return (
                   <tr
                     key={operacion.id_operacion}
-                    className="hover:bg-gray-50"
+                    className="align-top hover:bg-gray-50"
                   >
-                    <td className="whitespace-nowrap px-4 py-3 text-gray-600">
-                      {fechaArgentina(operacion.fecha_hora)}
+                    <td className="px-2 py-3 text-gray-600">
+                      <FechaDosLineas fecha={operacion.fecha_hora} />
                     </td>
 
-                    <td className="px-4 py-3 font-bold text-gray-900">
-                      {operacion.vendedor || '-'}
+                    <td className="px-2 py-3 font-semibold text-gray-900">
+                      <div
+                        className="max-h-10 overflow-hidden break-words leading-5"
+                        title={vendedor}
+                      >
+                        {vendedor}
+                      </div>
                     </td>
 
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                    <td className="px-2 py-3">
+                      <span className="inline-block max-w-full rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
                         {tipoVisible(operacion)}
                       </span>
                     </td>
 
-                    <td className="px-4 py-3">
-                      <span className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700">
-                        {estadoVisible(operacion)}
+                    <td className="px-2 py-3">
+                      <span
+                        className="inline-block max-h-10 max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white px-2 py-0.5 text-[11px] leading-4 text-gray-700"
+                        title={estado}
+                      >
+                        {estado}
                       </span>
                     </td>
 
-                    <td className="px-4 py-3 text-gray-700">
-                      {nombreResponsable(operacion)}
+                    <td className="px-2 py-3 text-gray-700">
+                      <div
+                        className="max-h-10 overflow-hidden break-words leading-5"
+                        title={responsable}
+                      >
+                        {responsable}
+                      </div>
                     </td>
 
-                    <td className="px-4 py-3 text-gray-600">
-                      {nombreCliente(operacion.cliente)}
+                    <td className="px-2 py-3 text-gray-600">
+                      <div
+                        className="max-h-10 overflow-hidden break-words leading-5"
+                        title={cliente}
+                      >
+                        {cliente}
+                      </div>
                     </td>
 
-                    <td className="px-4 py-3 text-gray-600">
-                      {lineaVisible(
-                        operacion,
-                        cantidadLineasGrupo
-                      )}
+                    <td className="px-2 py-3 text-gray-600">
+                      <div
+                        className="max-h-10 overflow-hidden break-words leading-5"
+                        title={linea}
+                      >
+                        {linea}
+                      </div>
                     </td>
 
-                    <td className="px-4 py-3 text-gray-600">
-                      {productoVisible(operacion)}
+                    <td className="px-2 py-3 text-gray-600">
+                      <div
+                        className="max-h-10 overflow-hidden break-words leading-5"
+                        title={producto}
+                      >
+                        {producto}
+                      </div>
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3 text-gray-600">
-                      {fechaArgentina(
-                        fechaUltimaGestion(operacion)
-                      )}
+                    <td className="px-2 py-3 text-gray-600">
+                      <FechaDosLineas fecha={fechaUltimaGestion(operacion)} />
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                    <td className="px-2 py-3 text-right">
                       <a
                         href={`/gestion-ventas/${encodeURIComponent(
                           operacion.id_operacion
                         )}`}
-                        className="font-semibold text-red-600 hover:text-red-700"
+                        className="whitespace-nowrap font-semibold text-red-600 hover:text-red-700"
                       >
                         Gestionar
                       </a>
                     </td>
                   </tr>
-                ))}
+                )
+              })}
 
-                {ventas.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={10}
-                      className="px-4 py-10 text-center text-gray-500"
-                    >
-                      No se encontraron ventas.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              {ventas.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={10}
+                    className="px-4 py-10 text-center text-gray-500"
+                  >
+                    No se encontraron ventas.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
 
         <div className="space-y-3 md:hidden">
