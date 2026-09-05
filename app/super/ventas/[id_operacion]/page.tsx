@@ -354,6 +354,17 @@ export default async function SuperDetalleVentaPage({
     throw new Error(`No se pudieron cargar los Estados PORTA: ${estadosPortaError.message}`)
   }
 
+  const { data: planesPorta, error: planesPortaError } = await supabase
+    .from('catalogo_planes_porta')
+    .select('nombre, orden')
+    .eq('activo', true)
+    .order('orden', { ascending: true })
+    .order('nombre', { ascending: true })
+
+  if (planesPortaError) {
+    throw new Error(`No se pudieron cargar los planes PORTA/Línea Nueva: ${planesPortaError.message}`)
+  }
+
   const { data: mediosDespacho, error: mediosDespachoError } = await supabase
     .from('medios_despacho_chip')
     .select('id, nombre, orden')
@@ -1168,12 +1179,27 @@ export default async function SuperDetalleVentaPage({
 
                   <label className="block">
                     <span className="text-sm font-semibold text-gray-800">PLAN</span>
-                    <input
-                      type="text"
+                    <select
                       name="plan_cargado"
-                      defaultValue={gestionPorta?.plan_cargado ?? ''}
+                      defaultValue={gestionPorta?.plan_cargado || porta?.gigas_acordados || ''}
                       className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    />
+                    >
+                      <option value="">Seleccionar plan</option>
+                      {(() => {
+                        const actual = String(
+                          gestionPorta?.plan_cargado || porta?.gigas_acordados || ''
+                        ).trim()
+                        const activos = (planesPorta ?? []).map((plan: any) =>
+                          String(plan.nombre ?? '').trim()
+                        ).filter(Boolean)
+                        const opciones = actual && !activos.includes(actual)
+                          ? [actual, ...activos]
+                          : activos
+                        return opciones.map((nombre: string) => (
+                          <option key={nombre} value={nombre}>{nombre}</option>
+                        ))
+                      })()}
+                    </select>
                   </label>
 
                   <label className="block">

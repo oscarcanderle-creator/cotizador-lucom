@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '../../utils/supabase/server'
 import AppHeader from '../../components/AppHeader'
+import FiltrosAvanzadosVentas from '../../components/FiltrosAvanzadosVentas'
 
 type SearchParams = Promise<{
   q?: string
@@ -10,6 +11,25 @@ type SearchParams = Promise<{
   estado?: string
   pagina?: string
   por_pagina?: string
+  f1_field?: string
+  f1_op?: string
+  f1_value?: string
+  f1_value2?: string
+  f2_join?: string
+  f2_field?: string
+  f2_op?: string
+  f2_value?: string
+  f2_value2?: string
+  f3_join?: string
+  f3_field?: string
+  f3_op?: string
+  f3_value?: string
+  f3_value2?: string
+  f4_join?: string
+  f4_field?: string
+  f4_op?: string
+  f4_value?: string
+  f4_value2?: string
 }>
 
 function fechaArgentina(fecha: string | null) {
@@ -134,7 +154,8 @@ export default async function SuperVentasPage({
         nim,
         es_linea_nueva,
         gigas_acordados,
-        compania_actual
+        compania_actual,
+        tipo_sim
       ),
       gestion_baf (
         responsable_id,
@@ -146,6 +167,12 @@ export default async function SuperVentasPage({
       gestion_porta (
         responsable_id,
         estado_porta_id,
+        medio_despacho_chip_id,
+        fecha_carga_stl,
+        fecha_porta,
+        pin_lnva_nro,
+        sim,
+        numero_seguimiento,
         estados_porta (
           nombre
         )
@@ -166,6 +193,19 @@ export default async function SuperVentasPage({
   if (perfilesError) {
     throw new Error(`No se pudieron cargar los usuarios: ${perfilesError.message}`)
   }
+
+  const { data: mediosDespacho, error: mediosDespachoError } = await supabase
+    .from('medios_despacho_chip')
+    .select('id, nombre')
+    .order('nombre', { ascending: true })
+
+  if (mediosDespachoError) {
+    throw new Error(`No se pudieron cargar los medios de despacho: ${mediosDespachoError.message}`)
+  }
+
+  const medioDespachoPorId = new Map(
+    (mediosDespacho ?? []).map((medio: any) => [medio.id, medio.nombre])
+  )
 
   const nombreResponsable = (operacion: any) => {
     const responsableId = operacion.tipo === 'BAF'
@@ -193,6 +233,129 @@ export default async function SuperVentasPage({
   responsables.sort((a, b) => a.localeCompare(b, 'es'))
   estados.sort((a, b) => a.localeCompare(b, 'es'))
 
+  const companias = Array.from(new Set(
+    (operaciones ?? [])
+      .map((o: any) => String(o.operaciones_porta?.compania_actual ?? '').trim())
+      .filter(Boolean)
+  )) as string[]
+  companias.sort((a, b) => a.localeCompare(b, 'es'))
+
+  type FiltroAvanzado = {
+    campo: string
+    condicion: string
+    valor: string
+    valor2: string
+    conector: 'AND' | 'OR'
+  }
+
+  const filtrosAvanzados: FiltroAvanzado[] = [1, 2, 3, 4]
+    .map((numero) => {
+      const campo = String((params as any)[`f${numero}_field`] ?? '').trim()
+      const condicion = String((params as any)[`f${numero}_op`] ?? '').trim()
+      const valor = String((params as any)[`f${numero}_value`] ?? '').trim()
+      const valor2 = String((params as any)[`f${numero}_value2`] ?? '').trim()
+      const conector =
+        numero > 1 && String((params as any)[`f${numero}_join`] ?? 'AND') === 'OR'
+          ? 'OR'
+          : 'AND'
+
+      return { campo, condicion, valor, valor2, conector } as FiltroAvanzado
+    })
+    .filter((filtro) => filtro.campo && filtro.condicion)
+
+  const fechaSoloDiaArgentina = (valor: string | null | undefined) => {
+    if (!valor) return ''
+    const fecha = new Date(valor)
+    if (Number.isNaN(fecha.getTime())) return ''
+
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(fecha)
+  }
+
+  const valorCampoAvanzado = (operacion: any, campo: string) => {
+    const porta = operacion.operaciones_porta
+    const gestionPorta = operacion.gestion_porta
+
+    switch (campo) {
+      case 'estado':
+        return estadoVisible(operacion)
+      case 'tipo':
+        return tipoVisible(operacion)
+      case 'vendedor':
+        return String(operacion.vendedor ?? '')
+      case 'responsable':
+        return nombreResponsable(operacion) === 'Sin responsable'
+          ? ''
+          : nombreResponsable(operacion)
+      case 'medio_despacho':
+        return gestionPorta?.medio_despacho_chip_id
+          ? String(medioDespachoPorId.get(gestionPorta.medio_despacho_chip_id) ?? '')
+          : ''
+      case 'tipo_sim':
+        return porta?.tipo_sim === 'ESIM' ? 'eSIM' : String(porta?.tipo_sim ?? '')
+      case 'compania_actual':
+        return String(porta?.compania_actual ?? '')
+      case 'fecha_carga_stl':
+        return fechaSoloDiaArgentina(gestionPorta?.fecha_carga_stl)
+      case 'fecha_porta':
+        return fechaSoloDiaArgentina(gestionPorta?.fecha_porta)
+      case 'pin':
+        return String(gestionPorta?.pin_lnva_nro ?? '').trim()
+      case 'sim_operativo':
+        return String(gestionPorta?.sim ?? '').trim()
+      case 'numero_seguimiento':
+        return String(gestionPorta?.numero_seguimiento ?? '').trim()
+      default:
+        return ''
+    }
+  }
+
+  const cumpleFiltroAvanzado = (operacion: any, filtro: FiltroAvanzado) => {
+    const actual = valorCampoAvanzado(operacion, filtro.campo).trim()
+    const esperado = filtro.valor.trim()
+
+    if (filtro.condicion === 'vacio') return actual === ''
+    if (filtro.condicion === 'no_vacio') return actual !== ''
+
+    if (['fecha_carga_stl', 'fecha_porta'].includes(filtro.campo)) {
+      if (!actual || !esperado) return false
+      if (filtro.condicion === 'es') return actual === esperado
+      if (filtro.condicion === 'antes') return actual < esperado
+      if (filtro.condicion === 'despues') return actual > esperado
+      if (filtro.condicion === 'entre') {
+        return Boolean(filtro.valor2) && actual >= esperado && actual <= filtro.valor2
+      }
+      return false
+    }
+
+    const actualNormalizado = actual.toLocaleLowerCase('es')
+    const esperadoNormalizado = esperado.toLocaleLowerCase('es')
+
+    if (filtro.condicion === 'es') return actualNormalizado === esperadoNormalizado
+    if (filtro.condicion === 'no_es') return actualNormalizado !== esperadoNormalizado
+    if (filtro.condicion === 'contiene') return actualNormalizado.includes(esperadoNormalizado)
+
+    return true
+  }
+
+  const cumpleFiltrosAvanzados = (operacion: any) => {
+    if (filtrosAvanzados.length === 0) return true
+
+    let resultado = cumpleFiltroAvanzado(operacion, filtrosAvanzados[0])
+
+    for (let i = 1; i < filtrosAvanzados.length; i += 1) {
+      const filtro = filtrosAvanzados[i]
+      const cumple = cumpleFiltroAvanzado(operacion, filtro)
+      resultado = filtro.conector === 'OR' ? resultado || cumple : resultado && cumple
+    }
+
+    return resultado
+  }
+
   const ventas = (operaciones ?? []).filter((operacion: any) => {
     const tipo = tipoVisible(operacion)
 
@@ -200,6 +363,7 @@ export default async function SuperVentasPage({
     if (filtroVendedor && operacion.vendedor !== filtroVendedor) return false
     if (filtroResponsable && nombreResponsable(operacion) !== filtroResponsable) return false
     if (filtroEstado && estadoVisible(operacion) !== filtroEstado) return false
+    if (!cumpleFiltrosAvanzados(operacion)) return false
 
     if (!q) return true
 
@@ -240,6 +404,14 @@ export default async function SuperVentasPage({
     if (filtroVendedor) qs.set('vendedor', filtroVendedor)
     if (filtroResponsable) qs.set('responsable', filtroResponsable)
     if (filtroEstado) qs.set('estado', filtroEstado)
+    filtrosAvanzados.forEach((filtro, indice) => {
+      const numero = indice + 1
+      if (numero > 1) qs.set(`f${numero}_join`, filtro.conector)
+      qs.set(`f${numero}_field`, filtro.campo)
+      qs.set(`f${numero}_op`, filtro.condicion)
+      if (filtro.valor) qs.set(`f${numero}_value`, filtro.valor)
+      if (filtro.valor2) qs.set(`f${numero}_value2`, filtro.valor2)
+    })
     qs.set('pagina', String(n))
     qs.set('por_pagina', String(porPagina))
     return `/super?${qs.toString()}`
@@ -327,8 +499,17 @@ export default async function SuperVentasPage({
               {estados.map((e: string) => <option key={e} value={e}>{e}</option>)}
             </select>
           </div>
+          <FiltrosAvanzadosVentas
+            estados={estados}
+            vendedores={vendedores}
+            responsables={responsables}
+            mediosDespacho={(mediosDespacho ?? []).map((m: any) => String(m.nombre ?? '')).filter(Boolean)}
+            companias={companias}
+            iniciales={filtrosAvanzados}
+          />
+
           <div className="flex items-end gap-2 md:col-span-2 xl:col-span-6">
-            <button type="submit" className="rounded-lg bg-red-600 px-5 py-2 font-semibold text-white hover:bg-red-700">Filtrar</button>
+            <button type="submit" className="rounded-lg bg-red-600 px-5 py-2 font-semibold text-white hover:bg-red-700">Aplicar filtros</button>
             <a href="/super" className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50">Limpiar</a>
           </div>
         </form>
@@ -441,6 +622,18 @@ export default async function SuperVentasPage({
             {filtroVendedor && <input type="hidden" name="vendedor" value={filtroVendedor} />}
             {filtroResponsable && <input type="hidden" name="responsable" value={filtroResponsable} />}
             {filtroEstado && <input type="hidden" name="estado" value={filtroEstado} />}
+            {filtrosAvanzados.map((filtro, indice) => {
+              const numero = indice + 1
+              return (
+                <span key={`filtro-${numero}`} className="hidden">
+                  {numero > 1 && <input type="hidden" name={`f${numero}_join`} value={filtro.conector} />}
+                  <input type="hidden" name={`f${numero}_field`} value={filtro.campo} />
+                  <input type="hidden" name={`f${numero}_op`} value={filtro.condicion} />
+                  {filtro.valor && <input type="hidden" name={`f${numero}_value`} value={filtro.valor} />}
+                  {filtro.valor2 && <input type="hidden" name={`f${numero}_value2`} value={filtro.valor2} />}
+                </span>
+              )
+            })}
             <span>Por página:</span>
             <select name="por_pagina" defaultValue={String(porPagina)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700">
               {opcionesPorPagina.map(n => <option key={n} value={n}>{n}</option>)}

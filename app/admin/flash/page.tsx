@@ -223,6 +223,52 @@ export default async function AdminFlashPage() {
 
   /*
    * =====================================================
+   * ELIMINAR PROMOCIÓN
+   * =====================================================
+   */
+
+  async function eliminarPromocion(
+    formData: FormData
+  ) {
+    'use server'
+
+    const { supabase } =
+      await validarAdmin()
+
+    const id =
+      Number(
+        formData.get('id')
+      )
+
+    if (!id) {
+      throw new Error(
+        'No se pudo identificar la promoción.'
+      )
+    }
+
+    const { error } =
+      await supabase
+        .from('promociones_flash')
+        .delete()
+        .eq('id', id)
+
+    if (error) {
+      throw new Error(
+        error.message
+      )
+    }
+
+    revalidatePath(
+      '/admin/flash'
+    )
+
+    revalidatePath(
+      '/cotizador'
+    )
+  }
+
+  /*
+   * =====================================================
    * ACTUALIZAR PROMOCIÓN
    * =====================================================
    */
@@ -594,7 +640,7 @@ export default async function AdminFlashPage() {
 
                   </div>
 
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
                     <label className="flex items-center gap-2 text-sm text-gray-700">
 
@@ -609,6 +655,14 @@ export default async function AdminFlashPage() {
                       Activa
 
                     </label>
+
+                    <button
+                      type="submit"
+                      formAction={eliminarPromocion}
+                      className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                    >
+                      Eliminar
+                    </button>
 
                   </div>
 

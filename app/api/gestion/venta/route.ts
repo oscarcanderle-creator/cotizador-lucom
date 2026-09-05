@@ -129,7 +129,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Venta inválida.' }, { status: 400 })
   }
 
-  const { data: operacion, error: operacionError } = await supabase
+  // La identidad se valida con la sesión del usuario, pero la lectura de la
+  // operación se hace con adminClient porque BBOO puede estar autorizado para
+  // gestionar una venta aunque las RLS de operaciones no le permitan leerla
+  // directamente con el cliente de sesión.
+  const { data: operacion, error: operacionError } = await adminClient
     .from('operaciones')
     .select('id_operacion,tipo,usuario_id,vendedor,grupo_operacion')
     .eq('id_operacion', operacionId)
@@ -263,18 +267,30 @@ export async function POST(request: Request) {
         )
       }
     }
-  } else if (body.responsable_id !== undefined) {
-    for (const idObjetivo of idsObjetivo) {
-      const { error } = await supabase.rpc('gestor_asignar_responsable_venta', {
-        p_operacion_id: idObjetivo,
-        p_responsable_id: body.responsable_id ?? null,
-      })
+  } else if (
+    body.responsable_id !== undefined &&
+    String(actorProfilePermisos.rol) !== 'BBOO'
+  ) {
+    const responsableSolicitadoId = body.responsable_id ?? null
 
-      if (error) {
-        return NextResponse.json(
-          { error: `No se pudo guardar el Responsable de ${idObjetivo}: ${error.message}` },
-          { status: 400 }
-        )
+    // Para VENDEDOR gestor / otros actores autorizados, solo ejecutar una
+    // reasignación si el Responsable realmente cambió.
+    //
+    // BBOO queda excluido de esta rama: al gestionar una venta debe conservar
+    // el Responsable existente y solamente registrarse en gestion_porta.bboo_id.
+    if (responsableSolicitadoId !== responsableAnteriorId) {
+      for (const idObjetivo of idsObjetivo) {
+        const { error } = await supabase.rpc('gestor_asignar_responsable_venta', {
+          p_operacion_id: idObjetivo,
+          p_responsable_id: responsableSolicitadoId,
+        })
+
+        if (error) {
+          return NextResponse.json(
+            { error: `No se pudo guardar el Responsable de ${idObjetivo}: ${error.message}` },
+            { status: 400 }
+          )
+        }
       }
     }
   }
@@ -283,7 +299,7 @@ export async function POST(request: Request) {
   let tipoVisible = tipo === 'BAF' ? 'BAF' : 'PORTA'
 
   if (tipo === 'BAF') {
-    const { data: anterior, error: anteriorError } = await supabase
+    const { data: anterior, error: anteriorError } = await adminClient
       .from('gestion_baf')
       .select(`
         estado_baf_id,
@@ -320,7 +336,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: rpcError.message }, { status: 400 })
     }
 
-    const { data: posterior, error: posteriorError } = await supabase
+    const { data: posterior, error: posteriorError } = await adminClient
       .from('gestion_baf')
       .select(`
         estado_baf_id,
@@ -412,7 +428,7 @@ export async function POST(request: Request) {
         .select('es_linea_nueva')
         .eq('operacion_id', operacionId)
         .maybeSingle(),
-      supabase
+      adminClient
         .from('gestion_porta')
         .select(`
           estado_porta_id,
@@ -461,7 +477,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: rpcError.message }, { status: 400 })
     }
 
-    const { data: posterior, error: posteriorError } = await supabase
+    const { data: posterior, error: posteriorError } = await adminClient
       .from('gestion_porta')
       .select(`
         estado_porta_id,

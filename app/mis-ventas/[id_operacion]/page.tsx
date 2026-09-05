@@ -338,6 +338,17 @@ export default async function DetalleVentaPage({
     throw new Error(`No se pudieron cargar los Estados PORTA: ${estadosPortaError.message}`)
   }
 
+  const { data: planesPorta, error: planesPortaError } = await supabase
+    .from('catalogo_planes_porta')
+    .select('nombre, orden')
+    .eq('activo', true)
+    .order('orden', { ascending: true })
+    .order('nombre', { ascending: true })
+
+  if (planesPortaError) {
+    throw new Error(`No se pudieron cargar los planes PORTA/Línea Nueva: ${planesPortaError.message}`)
+  }
+
   const { data: mediosDespacho, error: mediosDespachoError } = await supabase
     .from('medios_despacho_chip')
     .select('id, nombre, orden')
@@ -568,6 +579,10 @@ export default async function DetalleVentaPage({
 
   const responsableActual = (responsables ?? []).find(
     (responsable: any) => responsable.id === responsableActualId
+  )
+
+  const bbooActual = (usuariosBboo ?? []).find(
+    (bboo: any) => bboo.id === gestionPorta?.bboo_id
   )
 
   return (
@@ -1066,18 +1081,22 @@ export default async function DetalleVentaPage({
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       BBOO
                     </label>
-                    <select
+
+                    <input
+                      type="hidden"
                       name="bboo_id"
-                      defaultValue={gestionPorta?.bboo_id ?? ''}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    >
-                      <option value="">Sin BBOO asignado</option>
-                      {(usuariosBboo ?? []).map((bboo: any) => (
-                        <option key={bboo.id} value={bboo.id}>
-                          {bboo.vendedor || bboo.nombre || bboo.id}
-                        </option>
-                      ))}
-                    </select>
+                      value={gestionPorta?.bboo_id ?? ''}
+                    />
+
+                    <div className="w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700">
+                      {bbooActual?.vendedor ||
+                        bbooActual?.nombre ||
+                        (gestionPorta?.bboo_id ? 'BBOO asignado' : 'Sin BBOO asignado')}
+                    </div>
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      El Vendedor no modifica la asignación BBOO desde esta gestión.
+                    </p>
                   </div>
 
                   <div>
@@ -1115,12 +1134,27 @@ export default async function DetalleVentaPage({
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       PLAN
                     </label>
-                    <input
-                      type="text"
+                    <select
                       name="plan_cargado"
-                      defaultValue={gestionPorta?.plan_cargado ?? ''}
+                      defaultValue={gestionPorta?.plan_cargado || porta?.gigas_acordados || ''}
                       className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    />
+                    >
+                      <option value="">Seleccionar plan</option>
+                      {(() => {
+                        const actual = String(
+                          gestionPorta?.plan_cargado || porta?.gigas_acordados || ''
+                        ).trim()
+                        const activos = (planesPorta ?? []).map((plan: any) =>
+                          String(plan.nombre ?? '').trim()
+                        ).filter(Boolean)
+                        const opciones = actual && !activos.includes(actual)
+                          ? [actual, ...activos]
+                          : activos
+                        return opciones.map((nombre: string) => (
+                          <option key={nombre} value={nombre}>{nombre}</option>
+                        ))
+                      })()}
+                    </select>
                   </div>
 
                   <div>

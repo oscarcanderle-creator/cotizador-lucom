@@ -2,8 +2,16 @@ import { redirect } from 'next/navigation'
 import { createClient } from '../../../utils/supabase/server'
 import { createAdminClient } from '../../../utils/supabase/admin'
 import AppHeader from '../../../components/AppHeader'
+import FiltrosAvanzadosSuper from '../../../components/FiltrosAvanzadosSuper'
 
-type SearchParams = Promise<{ q?: string; tipo?: string; vendedor?: string; responsable?: string; estado?: string; pagina?: string; por_pagina?: string }>
+type SearchParams = Promise<{
+  q?: string; tipo?: string; vendedor?: string; responsable?: string; estado?: string
+  pagina?: string; por_pagina?: string
+  f1_field?: string; f1_op?: string; f1_value?: string; f1_value2?: string
+  f2_join?: string; f2_field?: string; f2_op?: string; f2_value?: string; f2_value2?: string
+  f3_join?: string; f3_field?: string; f3_op?: string; f3_value?: string; f3_value2?: string
+  f4_join?: string; f4_field?: string; f4_op?: string; f4_value?: string; f4_value2?: string
+}>
 
 function fechaArgentina(fecha: string | null) {
   if (!fecha) return '-'
@@ -72,6 +80,72 @@ export default async function SuperPedidosPage({ searchParams }: { searchParams:
   const responsables = Array.from(new Set((pedidos ?? []).map((p:any)=>nombrePerfil(p.responsable_id)))).sort((a,b)=>a.localeCompare(b,'es'))
   const estadosFiltro = Array.from(new Set((pedidos ?? []).map((p:any)=>estadoTexto(p)))).sort((a,b)=>a.localeCompare(b,'es'))
 
+  type FiltroAvanzado = { campo:string; condicion:string; valor:string; valor2:string; conector:'AND'|'OR' }
+  const filtrosAvanzados: FiltroAvanzado[] = [1,2,3,4].map((n) => ({
+    campo: String((params as any)[`f${n}_field`] ?? '').trim(),
+    condicion: String((params as any)[`f${n}_op`] ?? '').trim(),
+    valor: String((params as any)[`f${n}_value`] ?? '').trim(),
+    valor2: String((params as any)[`f${n}_value2`] ?? '').trim(),
+    conector: (n > 1 && String((params as any)[`f${n}_join`] ?? 'AND') === 'OR' ? 'OR' : 'AND') as 'AND'|'OR',
+  })).filter(f => f.campo && f.condicion)
+
+  const fechaSoloDia = (valor:string|null|undefined) => {
+    if (!valor) return ''
+    const d = new Date(valor)
+    if (Number.isNaN(d.getTime())) return ''
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone:'America/Argentina/Buenos_Aires', year:'numeric', month:'2-digit', day:'2-digit'
+    }).format(d)
+  }
+
+  const valorAvanzado = (x:any, campo:string) => {
+    const tipo:any = tipoMap.get(String(x.tipo_pedido_id))
+    switch(campo) {
+      case 'tipo': return tipo?.nombre || ''
+      case 'vendedor': return nombrePerfil(x.vendedor_id)
+      case 'responsable': return x.responsable_id ? nombrePerfil(x.responsable_id) : ''
+      case 'estado': return estadoTexto(x)
+      case 'codigo': return String(x.codigo ?? '')
+      case 'dni': return String(x.dni ?? '')
+      case 'telefono': return String(x.telefono ?? '')
+      case 'domicilio': return String(x.domicilio ?? '')
+      case 'wo': return String(x.wo ?? '')
+      case 'fecha': return fechaSoloDia(x.marca_temporal)
+      case 'fecha_gestion': return fechaSoloDia(x.fecha_gestion)
+      case 'fecha_ok': return fechaSoloDia(x.fecha_ok)
+      default: return ''
+    }
+  }
+  const cumpleUno = (x:any, f:FiltroAvanzado) => {
+    const actual = valorAvanzado(x, f.campo).trim()
+    const esperado = f.valor.trim()
+    if (f.condicion === 'vacio') return actual === ''
+    if (f.condicion === 'no_vacio') return actual !== ''
+    if (['fecha','fecha_gestion','fecha_ok'].includes(f.campo)) {
+      if (!actual || !esperado) return false
+      if (f.condicion === 'es') return actual === esperado
+      if (f.condicion === 'antes') return actual < esperado
+      if (f.condicion === 'despues') return actual > esperado
+      if (f.condicion === 'entre') return Boolean(f.valor2) && actual >= esperado && actual <= f.valor2
+      return false
+    }
+    const a=actual.toLocaleLowerCase('es'), e=esperado.toLocaleLowerCase('es')
+    if (f.condicion === 'es') return a === e
+    if (f.condicion === 'no_es') return a !== e
+    if (f.condicion === 'contiene') return a.includes(e)
+    return true
+  }
+
+  const cumpleAvanzados = (x:any) => {
+    if (!filtrosAvanzados.length) return true
+    let resultado = cumpleUno(x, filtrosAvanzados[0])
+    for (let i=1;i<filtrosAvanzados.length;i++) {
+      const f=filtrosAvanzados[i], ok=cumpleUno(x,f)
+      resultado = f.conector === 'OR' ? resultado || ok : resultado && ok
+    }
+    return resultado
+  }
+
   const filas = (pedidos ?? []).filter((p:any)=>{
     const tipo:any = tipoMap.get(String(p.tipo_pedido_id))
     const vendedor=nombrePerfil(p.vendedor_id), responsable=nombrePerfil(p.responsable_id), estado=estadoTexto(p)
@@ -97,10 +171,32 @@ export default async function SuperPedidosPage({ searchParams }: { searchParams:
     if (filtroVendedor) qs.set('vendedor', filtroVendedor)
     if (filtroResponsable) qs.set('responsable', filtroResponsable)
     if (filtroEstado) qs.set('estado', filtroEstado)
+    filtrosAvanzados.forEach((f,i) => {
+      const n=i+1
+      if (n>1) qs.set(`f${n}_join`, f.conector)
+      qs.set(`f${n}_field`, f.campo); qs.set(`f${n}_op`, f.condicion)
+      if (f.valor) qs.set(`f${n}_value`, f.valor)
+      if (f.valor2) qs.set(`f${n}_value2`, f.valor2)
+    })
     qs.set('pagina', String(n))
     qs.set('por_pagina', String(porPagina))
     return `/super/pedidos?${qs.toString()}`
   }
+
+  const camposAvanzados = [
+    { valor:'tipo', etiqueta:'Tipo', tipo:'lista' as const, opciones:(tipos ?? []).map((t:any)=>({valor:t.nombre,etiqueta:t.nombre})) },
+    { valor:'vendedor', etiqueta:'Vendedor', tipo:'lista' as const, opciones:vendedores.map(v=>({valor:v,etiqueta:v})) },
+    { valor:'responsable', etiqueta:'Responsable', tipo:'lista' as const, opciones:responsables.filter(r=>r!=='Sin responsable').map(r=>({valor:r,etiqueta:r})) },
+    { valor:'estado', etiqueta:'Estado', tipo:'lista' as const, opciones:estadosFiltro.map(e=>({valor:e,etiqueta:e})) },
+    { valor:'codigo', etiqueta:'Código', tipo:'texto' as const },
+    { valor:'dni', etiqueta:'DNI', tipo:'texto' as const },
+    { valor:'telefono', etiqueta:'Teléfono', tipo:'texto' as const },
+    { valor:'domicilio', etiqueta:'Domicilio', tipo:'texto' as const },
+    { valor:'wo', etiqueta:'WO', tipo:'texto' as const },
+    { valor:'fecha', etiqueta:'Fecha creación', tipo:'fecha' as const },
+    { valor:'fecha_gestion', etiqueta:'Fecha gestión', tipo:'fecha' as const },
+    { valor:'fecha_ok', etiqueta:'Fecha OK', tipo:'fecha' as const },
+  ]
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -143,6 +239,7 @@ export default async function SuperPedidosPage({ searchParams }: { searchParams:
           <div><label className="mb-1 block text-xs font-medium text-gray-500">Vendedor</label><select name="vendedor" defaultValue={filtroVendedor} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"><option value="">Todos</option>{vendedores.map(v=><option key={v} value={v}>{v}</option>)}</select></div>
           <div><label className="mb-1 block text-xs font-medium text-gray-500">Responsable</label><select name="responsable" defaultValue={filtroResponsable} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"><option value="">Todos</option>{responsables.map(r=><option key={r} value={r}>{r}</option>)}</select></div>
           <div><label className="mb-1 block text-xs font-medium text-gray-500">Estado</label><select name="estado" defaultValue={filtroEstado} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"><option value="">Todos</option>{estadosFiltro.map(e=><option key={e} value={e}>{e}</option>)}</select></div>
+          <FiltrosAvanzadosSuper campos={camposAvanzados} iniciales={filtrosAvanzados} />
           <div className="flex items-end gap-2 md:col-span-2 xl:col-span-6"><button className="rounded-lg bg-red-600 px-5 py-2 font-semibold text-white hover:bg-red-700">Filtrar</button><a href="/super/pedidos" className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50">Limpiar</a></div>
         </form>
 
@@ -168,6 +265,13 @@ export default async function SuperPedidosPage({ searchParams }: { searchParams:
             {filtroVendedor && <input type="hidden" name="vendedor" value={filtroVendedor} />}
             {filtroResponsable && <input type="hidden" name="responsable" value={filtroResponsable} />}
             {filtroEstado && <input type="hidden" name="estado" value={filtroEstado} />}
+            {filtrosAvanzados.map((f,i) => { const n=i+1; return <span key={n} className="hidden">
+              {n>1 && <input type="hidden" name={`f${n}_join`} value={f.conector} />}
+              <input type="hidden" name={`f${n}_field`} value={f.campo} />
+              <input type="hidden" name={`f${n}_op`} value={f.condicion} />
+              {f.valor && <input type="hidden" name={`f${n}_value`} value={f.valor} />}
+              {f.valor2 && <input type="hidden" name={`f${n}_value2`} value={f.valor2} />}
+            </span> })}
             <span>Por página:</span>
             <select name="por_pagina" defaultValue={String(porPagina)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700">
               {opcionesPorPagina.map(n => <option key={n} value={n}>{n}</option>)}

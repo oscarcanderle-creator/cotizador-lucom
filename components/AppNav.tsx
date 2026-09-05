@@ -17,11 +17,11 @@ type Props = {
 }
 
 const items = [
-  { key: 'VENTAS', label: 'Ventas', href: '/ventas', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN'] },
-  { key: 'MIS_VENTAS', label: 'Mis Ventas', href: '/mis-ventas', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN'] },
+  { key: 'VENTAS', label: 'Ventas', href: '/ventas', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN', 'BBOO'] },
+  { key: 'MIS_VENTAS', label: 'Mis Ventas', href: '/mis-ventas', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN', 'BBOO'] },
   { key: 'MIS_CONSULTAS', label: 'Mis Consultas', href: '/mis-consultas', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN'] },
-  { key: 'COTIZADOR', label: 'Cotizador', href: '/cotizador', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN'] },
-  { key: 'GESTION_VENTAS', label: 'Gestión de Ventas', href: '/gestion-ventas', roles: ['VENDEDOR'] },
+  { key: 'COTIZADOR', label: 'Cotizador', href: '/cotizador', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN', 'BBOO'] },
+  { key: 'GESTION_VENTAS', label: 'Gestión de Ventas', href: '/gestion-ventas', roles: ['VENDEDOR', 'BBOO'] },
   { key: 'SUPER', label: 'Super', href: '/super', roles: ['SUPERVISOR', 'ADMIN'] },
   { key: 'ADMIN', label: 'Admin', href: '/admin', roles: ['ADMIN'] },
 ] as const
@@ -37,6 +37,7 @@ export default function AppNav({
     if (!rolPermitido) return false
 
     if (item.key === 'GESTION_VENTAS') {
+      if (rol === 'BBOO') return true
       return rol === 'VENDEDOR' && puedeGestionarVentas
     }
 
