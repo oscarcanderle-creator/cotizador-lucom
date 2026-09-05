@@ -85,18 +85,18 @@ export default async function AdminPage() {
             </div>
           </a>
 
-          {/* PRODUCTOS */}
-          <div className="bg-gray-100 border border-gray-200 rounded-xl p-5">
+          {/* LISTA DE PRECIOS */}
+          <a
+            href="/admin/precios"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
+          >
             <div className="text-lg font-semibold text-gray-900">
-              Productos y Precios
+              Lista de Precios
             </div>
             <div className="text-sm text-gray-500 mt-2">
-              Los precios se administran desde la tabla maestra de Google Sheets.
+              Administrá precios, planes, packs y descuentos por compañía.
             </div>
-            <div className="text-xs text-gray-400 mt-3">
-              Sin edición directa desde ADMIN.
-            </div>
-          </div>
+          </a>
 
           {/* ZONAS BAF */}
           <a
