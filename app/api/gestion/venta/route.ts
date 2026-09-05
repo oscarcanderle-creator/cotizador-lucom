@@ -15,6 +15,12 @@ type Cambio = {
 type BodyGestionVenta = {
   tipo: 'BAF' | 'PORTA'
   operacion_id: string
+  recurso_clave: string
+  sesion_token: string
+
+  responsable_id?: string | null
+  vendedor_id?: string | null
+  motivo_vendedor?: string | null
 
   estado_baf_id?: number | null
   prospector?: string | null
@@ -125,7 +131,7 @@ export async function POST(request: Request) {
 
   const { data: operacion, error: operacionError } = await supabase
     .from('operaciones')
-    .select('id_operacion,tipo,usuario_id,vendedor')
+    .select('id_operacion,tipo,usuario_id,vendedor,grupo_operacion')
     .eq('id_operacion', operacionId)
     .single()
 
@@ -141,6 +147,136 @@ export async function POST(request: Request) {
       { error: 'El tipo de gestión no corresponde a la Venta.' },
       { status: 400 }
     )
+  }
+
+  const recursoClaveCanonico =
+    operacion.tipo === 'PORTA' && operacion.grupo_operacion
+      ? String(operacion.grupo_operacion)
+      : String(operacion.id_operacion)
+  const recursoClave = String(body.recurso_clave ?? '').trim()
+  const sesionToken = String(body.sesion_token ?? '').trim()
+
+  if (!recursoClave || !sesionToken || recursoClave !== recursoClaveCanonico) {
+    return NextResponse.json(
+      { error: 'La sesión de gestión no corresponde a esta Venta.' },
+      { status: 409 }
+    )
+  }
+
+  const { data: bloqueoValido, error: bloqueoError } = await supabase.rpc(
+    'validar_bloqueo_gestion',
+    {
+      p_tipo_recurso: 'VENTA',
+      p_recurso_clave: recursoClaveCanonico,
+      p_sesion_token: sesionToken,
+    }
+  )
+
+  if (bloqueoError || bloqueoValido !== true) {
+    return NextResponse.json(
+      { error: 'No se puede guardar: esta sesión ya no posee el bloqueo de gestión de la Venta.' },
+      { status: 409 }
+    )
+  }
+
+  const liberarBloqueo = async () => {
+    const { error } = await supabase.rpc('liberar_bloqueo_gestion', {
+      p_tipo_recurso: 'VENTA',
+      p_recurso_clave: recursoClaveCanonico,
+      p_sesion_token: sesionToken,
+      p_motivo: 'GUARDADO',
+    })
+    if (error) console.error('La venta se guardó pero no se pudo liberar el bloqueo:', error)
+  }
+
+  const { data: actorProfilePermisos, error: actorProfilePermisosError } = await adminClient
+    .from('profiles')
+    .select('rol,activo,puede_gestionar_ventas')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (actorProfilePermisosError || !actorProfilePermisos?.activo) {
+    return NextResponse.json(
+      { error: 'No se pudo validar el perfil del usuario.' },
+      { status: 403 }
+    )
+  }
+
+  const tablaGestion = tipo === 'BAF' ? 'gestion_baf' : 'gestion_porta'
+  const { data: asignacionAnterior } = await adminClient
+    .from(tablaGestion)
+    .select('responsable_id')
+    .eq('operacion_id', operacionId)
+    .maybeSingle()
+
+  const responsableAnteriorId = asignacionAnterior?.responsable_id ?? null
+  const vendedorAnteriorId = operacion.usuario_id ?? null
+  const vendedorAnteriorNombre = operacion.vendedor ?? null
+
+  const { data: operacionesGrupo, error: operacionesGrupoError } =
+    tipo === 'PORTA' && operacion.grupo_operacion
+      ? await adminClient
+          .from('operaciones')
+          .select('id_operacion')
+          .eq('grupo_operacion', operacion.grupo_operacion)
+          .eq('tipo', 'PORTA')
+      : { data: [{ id_operacion: operacionId }], error: null }
+
+  if (operacionesGrupoError) {
+    return NextResponse.json(
+      { error: `No se pudieron identificar las líneas relacionadas: ${operacionesGrupoError.message}` },
+      { status: 400 }
+    )
+  }
+
+  const idsObjetivo = (operacionesGrupo ?? []).map((item: any) => String(item.id_operacion))
+  if (idsObjetivo.length === 0) idsObjetivo.push(operacionId)
+
+  // Vendedor y Responsable forman parte de la misma confirmación de Guardar.
+  // SUPER/ADMIN usan la RPC de reasignación; los demás gestores solo pueden
+  // actualizar Responsable mediante la RPC ya existente para gestores.
+  if (body.vendedor_id !== undefined) {
+    if (!['ADMIN', 'SUPERVISOR'].includes(String(actorProfilePermisos.rol))) {
+      return NextResponse.json(
+        { error: 'No tiene permisos para cambiar el Vendedor de esta Venta.' },
+        { status: 403 }
+      )
+    }
+
+    const vendedorId = String(body.vendedor_id ?? '').trim()
+    if (!vendedorId) {
+      return NextResponse.json({ error: 'El Vendedor es obligatorio.' }, { status: 400 })
+    }
+
+    for (const idObjetivo of idsObjetivo) {
+      const { error } = await supabase.rpc('super_reasignar_venta', {
+        p_operacion_id: idObjetivo,
+        p_vendedor_id: vendedorId,
+        p_responsable_id: body.responsable_id ?? null,
+        p_motivo_vendedor: body.motivo_vendedor ?? null,
+      })
+
+      if (error) {
+        return NextResponse.json(
+          { error: `No se pudieron guardar las asignaciones de ${idObjetivo}: ${error.message}` },
+          { status: 400 }
+        )
+      }
+    }
+  } else if (body.responsable_id !== undefined) {
+    for (const idObjetivo of idsObjetivo) {
+      const { error } = await supabase.rpc('gestor_asignar_responsable_venta', {
+        p_operacion_id: idObjetivo,
+        p_responsable_id: body.responsable_id ?? null,
+      })
+
+      if (error) {
+        return NextResponse.json(
+          { error: `No se pudo guardar el Responsable de ${idObjetivo}: ${error.message}` },
+          { status: 400 }
+        )
+      }
+    }
   }
 
   const cambios: Cambio[] = []
@@ -206,6 +342,7 @@ export async function POST(request: Request) {
         posteriorError
       )
 
+      await liberarBloqueo()
       return NextResponse.json({
         ok: true,
         cambios: 0,
@@ -350,6 +487,7 @@ export async function POST(request: Request) {
         posteriorError
       )
 
+      await liberarBloqueo()
       return NextResponse.json({
         ok: true,
         cambios: 0,
@@ -487,7 +625,67 @@ export async function POST(request: Request) {
     )
   }
 
+  const [{ data: operacionAsignada }, { data: gestionAsignada }] = await Promise.all([
+    adminClient
+      .from('operaciones')
+      .select('usuario_id,vendedor')
+      .eq('id_operacion', operacionId)
+      .maybeSingle(),
+    adminClient
+      .from(tablaGestion)
+      .select('responsable_id')
+      .eq('operacion_id', operacionId)
+      .maybeSingle(),
+  ])
+
+  const responsablePosteriorId = gestionAsignada?.responsable_id ?? null
+  const vendedorPosteriorId = operacionAsignada?.usuario_id ?? null
+  const vendedorPosteriorNombre = operacionAsignada?.vendedor ?? null
+
+  const idsPerfilesAsignacion = Array.from(
+    new Set(
+      [responsableAnteriorId, responsablePosteriorId]
+        .filter((id): id is string => Boolean(id))
+    )
+  )
+  const nombresResponsables = new Map<string, string>()
+
+  if (idsPerfilesAsignacion.length > 0) {
+    const { data: perfilesAsignacion } = await adminClient
+      .from('profiles')
+      .select('id,nombre,vendedor')
+      .in('id', idsPerfilesAsignacion)
+
+    for (const perfil of perfilesAsignacion || []) {
+      nombresResponsables.set(
+        perfil.id,
+        perfil.vendedor?.trim() || perfil.nombre?.trim() || perfil.id
+      )
+    }
+  }
+
+  const nombreResponsable = (id: string | null) =>
+    id ? nombresResponsables.get(id) || id : 'Sin asignar'
+
+  agregarCambio(
+    cambios,
+    'Responsable',
+    responsableAnteriorId,
+    responsablePosteriorId,
+    nombreResponsable
+  )
+
+  if (vendedorAnteriorId !== vendedorPosteriorId || vendedorAnteriorNombre !== vendedorPosteriorNombre) {
+    agregarCambio(
+      cambios,
+      'Vendedor',
+      vendedorAnteriorNombre || vendedorAnteriorId,
+      vendedorPosteriorNombre || vendedorPosteriorId
+    )
+  }
+
   if (cambios.length === 0) {
+    await liberarBloqueo()
     return NextResponse.json({
       ok: true,
       cambios: 0,
@@ -522,6 +720,7 @@ export async function POST(request: Request) {
       operacionPosteriorError
     )
 
+    await liberarBloqueo()
     return NextResponse.json({
       ok: true,
       cambios: cambios.length,
@@ -608,6 +807,7 @@ export async function POST(request: Request) {
       notificacionError
     )
 
+    await liberarBloqueo()
     return NextResponse.json({
       ok: true,
       cambios: cambios.length,
@@ -617,6 +817,7 @@ export async function POST(request: Request) {
   }
 
   if (errorDestinatario || !destinatario) {
+    await liberarBloqueo()
     return NextResponse.json({
       ok: true,
       cambios: cambios.length,
@@ -654,6 +855,7 @@ export async function POST(request: Request) {
       )
     }
 
+    await liberarBloqueo()
     return NextResponse.json({
       ok: true,
       cambios: cambios.length,
@@ -680,6 +882,7 @@ export async function POST(request: Request) {
       )
     }
 
+    await liberarBloqueo()
     return NextResponse.json({
       ok: true,
       cambios: cambios.length,

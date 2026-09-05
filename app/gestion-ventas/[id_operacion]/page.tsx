@@ -4,9 +4,15 @@ import { headers } from 'next/headers'
 import { createAdminClient } from '../../../utils/supabase/admin'
 import { createClient } from '../../../utils/supabase/server'
 import AppHeader from '../../../components/AppHeader'
+import GestionBloqueoControls from '../../../components/GestionBloqueoControls'
 
 type Params = Promise<{
   id_operacion: string
+}>
+
+type SearchParams = Promise<{
+  editar?: string
+  lock?: string
 }>
 
 function mostrar(valor: unknown) {
@@ -58,97 +64,6 @@ function Campo({
   )
 }
 
-
-async function guardarResponsable(formData: FormData) {
-  'use server'
-
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('rol, activo, puede_gestionar_ventas')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  const esUsuarioGestion =
-    profile?.activo === true &&
-    (
-      (profile?.rol === 'VENDEDOR' && profile?.puede_gestionar_ventas === true) ||
-      profile?.rol === 'BBOO'
-    )
-
-  if (!esUsuarioGestion) {
-    throw new Error('No tiene permisos para asignar responsables.')
-  }
-
-  const idOperacion = String(formData.get('id_operacion') ?? '').trim()
-  const responsableId = String(formData.get('responsable_id') ?? '').trim()
-  const tipo = String(formData.get('tipo') ?? '').trim()
-
-  if (!idOperacion || !['BAF', 'PORTA'].includes(tipo)) {
-    throw new Error('Datos de operación inválidos.')
-  }
-
-  const { data: operacionBase, error: operacionBaseError } = await supabase
-    .from('operaciones')
-    .select('id_operacion, grupo_operacion, tipo')
-    .eq('id_operacion', idOperacion)
-    .maybeSingle()
-
-  if (operacionBaseError || !operacionBase) {
-    throw new Error(
-      `No se pudo identificar la operación: ${operacionBaseError?.message || 'Operación inexistente.'}`
-    )
-  }
-
-  let idsObjetivo = [idOperacion]
-
-  if (operacionBase.tipo === 'PORTA' && operacionBase.grupo_operacion) {
-    const { data: hermanas, error: hermanasError } = await supabase
-      .from('operaciones')
-      .select('id_operacion')
-      .eq('grupo_operacion', operacionBase.grupo_operacion)
-      .eq('tipo', 'PORTA')
-
-    if (hermanasError) {
-      throw new Error(`No se pudieron cargar las líneas relacionadas: ${hermanasError.message}`)
-    }
-
-    idsObjetivo = (hermanas ?? []).map((item: any) => item.id_operacion)
-
-    if (idsObjetivo.length === 0) {
-      idsObjetivo = [idOperacion]
-    }
-  }
-
-  for (const idObjetivo of idsObjetivo) {
-    const { error } = await supabase.rpc('gestor_asignar_responsable_venta', {
-      p_operacion_id: idObjetivo,
-      p_responsable_id: responsableId || null,
-    })
-
-    if (error) {
-      throw new Error(
-        `No se pudo guardar el Responsable de ${idObjetivo}: ${error.message}`
-      )
-    }
-
-    revalidatePath(`/gestion-ventas/${encodeURIComponent(idObjetivo)}`)
-    revalidatePath(`/super/ventas/${encodeURIComponent(idObjetivo)}`)
-    revalidatePath(`/mis-ventas/${encodeURIComponent(idObjetivo)}`)
-  }
-
-  revalidatePath('/gestion-ventas')
-  revalidatePath('/super')
-  revalidatePath('/mis-ventas')
-  redirect(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
-}
 
 async function guardarGestionBaf(formData: FormData) {
   'use server'
@@ -205,6 +120,9 @@ async function guardarGestionBaf(formData: FormData) {
     body: JSON.stringify({
       tipo: 'BAF',
       operacion_id: idOperacion,
+      recurso_clave: String(formData.get('recurso_clave') ?? ''),
+      sesion_token: String(formData.get('sesion_token') ?? ''),
+      responsable_id: texto('responsable_id'),
       estado_baf_id: estadoBafId,
       prospector: texto('prospector'),
       cia_celular: texto('cia_celular'),
@@ -315,6 +233,9 @@ async function guardarGestionPorta(formData: FormData) {
     body: JSON.stringify({
       tipo: 'PORTA',
       operacion_id: idOperacion,
+      recurso_clave: String(formData.get('recurso_clave') ?? ''),
+      sesion_token: String(formData.get('sesion_token') ?? ''),
+      responsable_id: texto('responsable_id'),
       estado_porta_id: estadoPortaId,
       bboo_id: bbooIdRaw || null,
       sim: texto('sim'),
@@ -343,13 +264,15 @@ async function guardarGestionPorta(formData: FormData) {
   revalidatePath('/gestion-ventas')
   revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
   revalidatePath('/super')
-  redirect(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
+  redirect('/gestion-ventas')
 }
 
 export default async function DetalleVentaPage({
   params,
+  searchParams,
 }: {
   params: Params
+  searchParams: SearchParams
 }) {
   const supabase = await createClient()
 
@@ -546,6 +469,48 @@ export default async function DetalleVentaPage({
   if (!operacion) notFound()
 
   const op: any = operacion
+
+  const query = await searchParams
+  const sesionTokenSolicitado = String(query?.lock ?? '').trim() || null
+  const solicitaEdicion = query?.editar === '1' && !!sesionTokenSolicitado
+  const recursoClave =
+    op.tipo === 'PORTA' && op.grupo_operacion
+      ? String(op.grupo_operacion)
+      : String(op.id_operacion)
+
+  const { data: bloqueoActual, error: bloqueoError } = await supabase.rpc(
+    'obtener_bloqueo_gestion',
+    {
+      p_tipo_recurso: 'VENTA',
+      p_recurso_clave: recursoClave,
+    }
+  )
+
+  if (bloqueoError) {
+    console.error('ERROR AL CONSULTAR BLOQUEO:', bloqueoError)
+
+    throw new Error(
+      `No se pudo comprobar el bloqueo de esta venta: ${bloqueoError.message}`
+    )
+  }
+
+  const bloqueo: any = bloqueoActual ?? { bloqueado: false }
+  const bloqueoVigente = bloqueo?.bloqueado === true
+  const bloqueoPropio = bloqueoVigente && bloqueo?.usuario_id === user.id
+  const puedeEditar =
+    solicitaEdicion &&
+    bloqueoPropio &&
+    bloqueo?.sesion_token === sesionTokenSolicitado
+
+  let usuarioBloqueo: string | null = null
+  if (bloqueoVigente && bloqueo?.usuario_id) {
+    const { data: perfilBloqueo } = await admin
+      .from('profiles')
+      .select('nombre,vendedor')
+      .eq('id', bloqueo.usuario_id)
+      .maybeSingle()
+    usuarioBloqueo = perfilBloqueo?.vendedor || perfilBloqueo?.nombre || null
+  }
 
   // Para el Vendedor Gestor no dependemos de los joins embebidos de PostgREST:
   // primero autorizamos la operación con su sesión y luego leemos directamente,
@@ -752,11 +717,20 @@ export default async function DetalleVentaPage({
           </a>
         </div>
 
+        <GestionBloqueoControls
+          tipoRecurso="VENTA"
+          recursoClave={recursoClave}
+          idOperacion={op.id_operacion}
+          editando={puedeEditar}
+          sesionToken={puedeEditar ? sesionTokenSolicitado : null}
+          bloqueado={bloqueoVigente}
+          bloqueoPropio={bloqueoPropio}
+          usuarioBloqueo={usuarioBloqueo}
+          bloqueadoDesde={bloqueo?.bloqueado_desde ?? null}
+        />
+
         <div className="space-y-5">
-            <form
-              action={guardarResponsable}
-              className="rounded-2xl border border-red-100 bg-red-50/40 p-5"
-            >
+            <div className="rounded-2xl border border-red-100 bg-red-50/40 p-5">
               <div className="mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Responsable</h2>
                 {esPorta && lineasGrupo.length > 1 && (
@@ -765,8 +739,7 @@ export default async function DetalleVentaPage({
                   </p>
                 )}
               </div>
-              <input type="hidden" name="id_operacion" value={op.id_operacion} />
-              <input type="hidden" name="tipo" value={op.tipo} />
+              <fieldset disabled={!puedeEditar}>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                 <div>
@@ -780,6 +753,7 @@ export default async function DetalleVentaPage({
                   <select
                     id="responsable_id"
                     name="responsable_id"
+                    form="gestion-unificada"
                     defaultValue={responsableActualId ?? ''}
                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                   >
@@ -796,13 +770,6 @@ export default async function DetalleVentaPage({
                     Solo aparecen usuarios activos habilitados para gestionar ventas.
                   </p>
                 </div>
-
-                <button
-                  type="submit"
-                  className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
-                >
-                  Guardar responsable
-                </button>
               </div>
 
               <div className="mt-3 text-xs text-gray-500">
@@ -813,7 +780,8 @@ export default async function DetalleVentaPage({
                     (responsableActualId ? 'Usuario no disponible' : 'Sin asignar')}
                 </span>
               </div>
-            </form>
+            </fieldset>
+            </div>
 
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
@@ -1005,10 +973,14 @@ export default async function DetalleVentaPage({
 
             {esBaf ? (
               <form
+                id="gestion-unificada"
                 action={guardarGestionBaf}
                 className="rounded-xl border border-gray-200 bg-gray-50/50 p-4"
               >
                 <input type="hidden" name="id_operacion" value={op.id_operacion} />
+              <input type="hidden" name="recurso_clave" value={recursoClave} />
+              <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
+              <fieldset disabled={!puedeEditar}>
 
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -1167,16 +1139,21 @@ export default async function DetalleVentaPage({
                     type="submit"
                     className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
                   >
-                    Guardar gestión BAF
+                    Guardar
                   </button>
                 </div>
-              </form>
+              </fieldset>
+            </form>
             ) : esPorta ? (
               <form
+                id="gestion-unificada"
                 action={guardarGestionPorta}
                 className="rounded-xl border border-gray-200 bg-gray-50/50 p-4"
               >
                 <input type="hidden" name="id_operacion" value={op.id_operacion} />
+              <input type="hidden" name="recurso_clave" value={recursoClave} />
+              <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
+              <fieldset disabled={!puedeEditar}>
 
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                   <div className="w-full">
@@ -1384,10 +1361,11 @@ export default async function DetalleVentaPage({
                     type="submit"
                     className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
                   >
-                    Guardar gestión {porta?.es_linea_nueva ? 'Línea Nueva' : 'PORTA'}
+                    Guardar
                   </button>
                 </div>
-              </form>
+              </fieldset>
+            </form>
             ) : (
               <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
                 Esta venta todavía no tiene datos de gestión.

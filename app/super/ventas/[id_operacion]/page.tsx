@@ -3,10 +3,16 @@ import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { createClient } from '../../../../utils/supabase/server'
 import AppHeader from '../../../../components/AppHeader'
+import GestionBloqueoControls from '../../../../components/GestionBloqueoControls'
 import AsignacionesSuperForm from './AsignacionesSuperForm'
 
 type Params = Promise<{
   id_operacion: string
+}>
+
+type SearchParams = Promise<{
+  editar?: string
+  lock?: string
 }>
 
 function mostrar(valor: unknown) {
@@ -59,89 +65,6 @@ function Campo({
 }
 
 
-async function guardarAsignacionesSuper(formData: FormData) {
-  'use server'
-
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: actor } = await supabase
-    .from('profiles')
-    .select('rol, activo')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (!actor?.activo || !['ADMIN', 'SUPERVISOR'].includes(actor.rol)) {
-    throw new Error('No tiene permisos para modificar esta operación.')
-  }
-
-  const idOperacion = String(formData.get('id_operacion') ?? '').trim()
-  const vendedorId = String(formData.get('vendedor_id') ?? '').trim()
-  const responsableId = String(formData.get('responsable_id') ?? '').trim()
-  const motivoVendedor = String(formData.get('motivo_vendedor') ?? '').trim()
-
-  if (!idOperacion || !vendedorId) {
-    throw new Error('Datos de operación inválidos.')
-  }
-
-  const { data: operacionBase, error: operacionBaseError } = await supabase
-    .from('operaciones')
-    .select('id_operacion, grupo_operacion, tipo')
-    .eq('id_operacion', idOperacion)
-    .maybeSingle()
-
-  if (operacionBaseError || !operacionBase) {
-    throw new Error(
-      `No se pudo identificar la operación: ${operacionBaseError?.message || 'Operación inexistente.'}`
-    )
-  }
-
-  let idsObjetivo = [idOperacion]
-
-  if (operacionBase.tipo === 'PORTA' && operacionBase.grupo_operacion) {
-    const { data: hermanas, error: hermanasError } = await supabase
-      .from('operaciones')
-      .select('id_operacion')
-      .eq('grupo_operacion', operacionBase.grupo_operacion)
-      .eq('tipo', 'PORTA')
-
-    if (hermanasError) {
-      throw new Error(`No se pudieron cargar las líneas relacionadas: ${hermanasError.message}`)
-    }
-
-    idsObjetivo = (hermanas ?? []).map((item: any) => item.id_operacion)
-
-    if (idsObjetivo.length === 0) {
-      idsObjetivo = [idOperacion]
-    }
-  }
-
-  for (const idObjetivo of idsObjetivo) {
-    const { error } = await supabase.rpc('super_reasignar_venta', {
-      p_operacion_id: idObjetivo,
-      p_vendedor_id: vendedorId,
-      p_responsable_id: responsableId || null,
-      p_motivo_vendedor: motivoVendedor || null,
-    })
-
-    if (error) {
-      throw new Error(
-        `No se pudieron guardar las asignaciones de ${idObjetivo}: ${error.message}`
-      )
-    }
-
-    revalidatePath(`/super/ventas/${encodeURIComponent(idObjetivo)}`)
-    revalidatePath(`/gestion-ventas/${encodeURIComponent(idObjetivo)}`)
-    revalidatePath(`/mis-ventas/${encodeURIComponent(idObjetivo)}`)
-  }
-
-  revalidatePath('/super')
-  revalidatePath('/gestion-ventas')
-  revalidatePath('/mis-ventas')
-  redirect(`/super/ventas/${encodeURIComponent(idOperacion)}`)
-}
-
 async function guardarGestionBaf(formData: FormData) {
   'use server'
 
@@ -155,8 +78,10 @@ async function guardarGestionBaf(formData: FormData) {
 
   const idOperacion = String(formData.get('id_operacion') ?? '').trim()
   const estadoBafIdRaw = String(formData.get('estado_baf_id') ?? '').trim()
+  const recursoClave = String(formData.get('recurso_clave') ?? '').trim()
+  const sesionToken = String(formData.get('sesion_token') ?? '').trim()
 
-  if (!idOperacion) {
+  if (!idOperacion || !recursoClave || !sesionToken) {
     throw new Error('Operación inválida.')
   }
 
@@ -203,6 +128,11 @@ async function guardarGestionBaf(formData: FormData) {
     body: JSON.stringify({
       tipo: 'BAF',
       operacion_id: idOperacion,
+      recurso_clave: recursoClave,
+      sesion_token: sesionToken,
+      responsable_id: texto('responsable_id'),
+      vendedor_id: texto('vendedor_id'),
+      motivo_vendedor: texto('motivo_vendedor'),
       estado_baf_id: estadoBafId,
       prospector: texto('prospector'),
       cia_celular: texto('cia_celular'),
@@ -250,8 +180,10 @@ async function guardarGestionPorta(formData: FormData) {
   const medioDespachoIdRaw = String(
     formData.get('medio_despacho_chip_id') ?? ''
   ).trim()
+  const recursoClave = String(formData.get('recurso_clave') ?? '').trim()
+  const sesionToken = String(formData.get('sesion_token') ?? '').trim()
 
-  if (!idOperacion) {
+  if (!idOperacion || !recursoClave || !sesionToken) {
     throw new Error('Operación inválida.')
   }
 
@@ -319,6 +251,11 @@ async function guardarGestionPorta(formData: FormData) {
     body: JSON.stringify({
       tipo: 'PORTA',
       operacion_id: idOperacion,
+      recurso_clave: recursoClave,
+      sesion_token: sesionToken,
+      responsable_id: texto('responsable_id'),
+      vendedor_id: texto('vendedor_id'),
+      motivo_vendedor: texto('motivo_vendedor'),
       estado_porta_id: estadoPortaId,
       bboo_id: bbooIdRaw || null,
       sim: texto('sim'),
@@ -347,13 +284,15 @@ async function guardarGestionPorta(formData: FormData) {
   revalidatePath('/super')
   revalidatePath('/mis-ventas')
   revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
-  redirect(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  redirect('/super')
 }
 
 export default async function SuperDetalleVentaPage({
   params,
+  searchParams,
 }: {
   params: Params
+  searchParams: SearchParams
 }) {
   const supabase = await createClient()
 
@@ -571,6 +510,39 @@ export default async function SuperDetalleVentaPage({
   }
 
   const op: any = operacion
+
+  const query = await searchParams
+  const sesionTokenSolicitado = String(query?.lock ?? '').trim() || null
+  const solicitaEdicion = query?.editar === '1' && !!sesionTokenSolicitado
+  const recursoClave =
+    op.tipo === 'PORTA' && op.grupo_operacion
+      ? String(op.grupo_operacion)
+      : String(op.id_operacion)
+
+  const { data: bloqueoActual } = await supabase.rpc('obtener_bloqueo_gestion', {
+    p_tipo_recurso: 'VENTA',
+    p_recurso_clave: recursoClave,
+  })
+
+  const bloqueo: any = bloqueoActual ?? { bloqueado: false }
+  const bloqueoVigente = bloqueo?.bloqueado === true
+  const bloqueoPropio = bloqueoVigente && bloqueo?.usuario_id === user.id
+  const puedeEditar =
+    solicitaEdicion &&
+    bloqueoPropio &&
+    bloqueo?.sesion_token === sesionTokenSolicitado
+
+  let usuarioBloqueo: string | null = null
+  if (bloqueoVigente && bloqueo?.usuario_id) {
+    const { data: perfilBloqueo } = await supabase
+      .from('profiles')
+      .select('nombre,vendedor')
+      .eq('id', bloqueo.usuario_id)
+      .maybeSingle()
+
+    usuarioBloqueo = perfilBloqueo?.vendedor || perfilBloqueo?.nombre || null
+  }
+
   const cliente = op.cliente
   const domicilio = op.domicilio
   const baf = op.operaciones_baf
@@ -690,6 +662,19 @@ export default async function SuperDetalleVentaPage({
       />
 
       <div className="mx-auto max-w-6xl p-4 sm:p-8">
+        <GestionBloqueoControls
+          tipoRecurso="VENTA"
+          recursoClave={recursoClave}
+          idOperacion={op.id_operacion}
+          editando={puedeEditar}
+          sesionToken={puedeEditar ? sesionTokenSolicitado : null}
+          bloqueado={bloqueoVigente}
+          bloqueoPropio={bloqueoPropio}
+          usuarioBloqueo={usuarioBloqueo}
+          bloqueadoDesde={bloqueo?.bloqueado_desde ?? null}
+          basePath="/super/ventas"
+          listPath="/super"
+        />
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="mb-2">
@@ -720,7 +705,7 @@ export default async function SuperDetalleVentaPage({
             <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Operación</h2>
               <span className="text-xs font-medium text-amber-700">
-                SUPER · Vendedor y Responsable editables
+                {puedeEditar ? 'SUPER · Vendedor y Responsable editables' : 'SUPER · Solo consulta'}
               </span>
             </div>
 
@@ -731,8 +716,9 @@ export default async function SuperDetalleVentaPage({
               <Campo label="Tipo" value={tipoVisible} />
             </div>
 
-            <AsignacionesSuperForm
-              action={guardarAsignacionesSuper}
+            <fieldset disabled={!puedeEditar}>
+              <AsignacionesSuperForm
+              formId="gestion-unificada"
               idOperacion={op.id_operacion}
               tipo={op.tipo}
               vendedorActualId={op.usuario_id ?? ''}
@@ -751,7 +737,8 @@ export default async function SuperDetalleVentaPage({
                 id: responsable.id,
                 nombre: responsable.vendedor || responsable.nombre,
               }))}
-            />
+              />
+            </fieldset>
           </section>
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
@@ -921,14 +908,17 @@ export default async function SuperDetalleVentaPage({
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-semibold text-gray-900">Gestión</h2>
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                Supervisor · editable
+                {puedeEditar ? 'Supervisor · editable' : 'Supervisor · solo consulta'}
               </span>
             </div>
 
             {esBaf ? (
-              <form action={guardarGestionBaf}>
+              <form id="gestion-unificada" action={guardarGestionBaf}>
                 <input type="hidden" name="id_operacion" value={op.id_operacion} />
+                <input type="hidden" name="recurso_clave" value={recursoClave} />
+                <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
 
+                <fieldset disabled={!puedeEditar}>
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <label className="block">
                     <span className="text-sm font-semibold text-gray-800">Estado BAF</span>
@@ -1063,14 +1053,18 @@ export default async function SuperDetalleVentaPage({
                     type="submit"
                     className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
                   >
-                    Guardar gestión BAF
+                    Guardar
                   </button>
                 </div>
+                </fieldset>
               </form>
             ) : esPorta ? (
-              <form action={guardarGestionPorta}>
+              <form id="gestion-unificada" action={guardarGestionPorta}>
                 <input type="hidden" name="id_operacion" value={op.id_operacion} />
+                <input type="hidden" name="recurso_clave" value={recursoClave} />
+                <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
 
+                <fieldset disabled={!puedeEditar}>
                 <div
                   className={
                     porta?.es_linea_nueva
@@ -1294,9 +1288,10 @@ export default async function SuperDetalleVentaPage({
                     type="submit"
                     className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
                   >
-                    Guardar gestión {porta?.es_linea_nueva ? 'Línea Nueva' : 'PORTA'}
+                    Guardar
                   </button>
                 </div>
+                </fieldset>
               </form>
             ) : (
               <div className="text-sm text-gray-500">Esta venta todavía no tiene datos de gestión.</div>

@@ -8,7 +8,7 @@ type Opcion = {
 }
 
 type Props = {
-  action: (formData: FormData) => void | Promise<void>
+  formId: string
   idOperacion: string
   tipo: string
   vendedorActualId: string
@@ -20,7 +20,7 @@ type Props = {
 }
 
 export default function AsignacionesSuperForm({
-  action,
+  formId,
   idOperacion,
   tipo,
   vendedorActualId,
@@ -31,103 +31,82 @@ export default function AsignacionesSuperForm({
   responsables,
 }: Props) {
   const [vendedorId, setVendedorId] = useState(vendedorActualId)
-
-  const cambiaVendedor =
-    Boolean(vendedorId) && vendedorId !== vendedorActualId
+  const vendedorCambia = vendedorId !== vendedorActualId
 
   return (
-    <form
-      action={action}
-      className="rounded-xl border border-amber-200 bg-amber-50 p-4"
-    >
-      <input type="hidden" name="id_operacion" value={idOperacion} />
-      <input type="hidden" name="tipo" value={tipo} />
+    <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+      <input form={formId} type="hidden" name="id_operacion_asignacion" value={idOperacion} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-sm font-semibold text-gray-800">Vendedor</span>
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Vendedor
+          </label>
           <select
+            form={formId}
             name="vendedor_id"
             value={vendedorId}
-            onChange={(e) => setVendedorId(e.target.value)}
-            required
-            className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+            onChange={(event) => setVendedorId(event.target.value)}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
           >
-            <option value="" disabled>Seleccionar vendedor</option>
+            {vendedorActualId && !vendedores.some((item) => item.id === vendedorActualId) && (
+              <option value={vendedorActualId}>{vendedorActualNombre} (actual)</option>
+            )}
             {vendedores.map((vendedor) => (
               <option key={vendedor.id} value={vendedor.id}>
                 {vendedor.nombre}
               </option>
             ))}
           </select>
-          <span className="mt-1 block text-xs text-gray-500">
-            Actual: {vendedorActualNombre}
-          </span>
-        </label>
+          <p className="mt-1 text-xs text-gray-500">Actual: {vendedorActualNombre}</p>
+        </div>
 
-        <label className="block">
-          <span className="text-sm font-semibold text-gray-800">Responsable</span>
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Responsable
+          </label>
           <select
+            form={formId}
             name="responsable_id"
             defaultValue={responsableActualId}
-            className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
           >
-            <option value="">Sin asignar</option>
+            <option value="">Sin responsable asignado</option>
+            {responsableActualId && !responsables.some((item) => item.id === responsableActualId) && (
+              <option value={responsableActualId}>{responsableActualNombre} (actual)</option>
+            )}
             {responsables.map((responsable) => (
               <option key={responsable.id} value={responsable.id}>
                 {responsable.nombre}
               </option>
             ))}
           </select>
-          <span className="mt-1 block text-xs text-gray-500">
-            Actual: {responsableActualNombre}
-          </span>
-        </label>
+          <p className="mt-1 text-xs text-gray-500">Actual: {responsableActualNombre}</p>
+        </div>
       </div>
 
-      <div className="mt-4">
-        <label className="block">
-          <span className="text-sm font-semibold text-gray-800">
-            Motivo del cambio de vendedor
-          </span>
+      {vendedorCambia && (
+        <div className="mt-4">
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Motivo del cambio de Vendedor
+          </label>
           <textarea
+            form={formId}
             name="motivo_vendedor"
+            required
             rows={3}
-            required={cambiaVendedor}
-            disabled={!cambiaVendedor}
-            placeholder={
-              cambiaVendedor
-                ? 'Indique el motivo del cambio de vendedor'
-                : 'Se habilita únicamente al cambiar el vendedor'
-            }
-            className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm text-gray-900 ${
-              cambiaVendedor
-                ? 'border-amber-400 bg-white'
-                : 'border-gray-200 bg-gray-100'
-            }`}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+            placeholder="Indique el motivo de la reasignación"
           />
-          <span
-            className={`mt-1 block text-xs ${
-              cambiaVendedor
-                ? 'font-semibold text-amber-700'
-                : 'text-gray-500'
-            }`}
-          >
-            {cambiaVendedor
-              ? 'Obligatorio: está cambiando el vendedor de la operación.'
-              : 'No es necesario para cambios de Responsable.'}
-          </span>
-        </label>
-      </div>
+          <p className="mt-1 text-xs text-gray-500">El motivo es obligatorio cuando cambia el Vendedor.</p>
+        </div>
+      )}
 
-      <div className="mt-4 flex justify-end">
-        <button
-          type="submit"
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
-        >
-          Guardar asignaciones
-        </button>
-      </div>
-    </form>
+      {tipo === 'PORTA' && (
+        <p className="mt-3 text-xs text-gray-500">
+          En operaciones móviles agrupadas, Vendedor y Responsable se aplican a todas las líneas relacionadas al confirmar Guardar.
+        </p>
+      )}
+    </div>
   )
 }
