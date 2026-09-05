@@ -173,6 +173,7 @@ async function guardarGestionPorta(formData: FormData) {
 
   const idOperacion = String(formData.get('id_operacion') ?? '').trim()
   const estadoPortaIdRaw = String(formData.get('estado_porta_id') ?? '').trim()
+  const estadoBbooIdRaw = String(formData.get('estado_bboo_id') ?? '').trim()
   const bbooIdRaw = String(formData.get('bboo_id') ?? '').trim()
   const medioDespachoIdRaw = String(
     formData.get('medio_despacho_chip_id') ?? ''
@@ -194,6 +195,18 @@ async function guardarGestionPorta(formData: FormData) {
     }
 
     estadoPortaId = valor
+  }
+
+  let estadoBbooId: number | null = null
+
+  if (estadoBbooIdRaw) {
+    const valor = Number(estadoBbooIdRaw)
+
+    if (!Number.isInteger(valor)) {
+      throw new Error('Estado BBOO inválido.')
+    }
+
+    estadoBbooId = valor
   }
 
   let medioDespachoId: number | null = null
@@ -252,11 +265,11 @@ async function guardarGestionPorta(formData: FormData) {
       sesion_token: sesionToken,
       responsable_id: texto('responsable_id'),
       estado_porta_id: estadoPortaId,
+      estado_bboo_id: estadoBbooId,
       bboo_id: bbooIdRaw || null,
       sim: texto('sim'),
       plan_cargado: texto('plan_cargado'),
       sds: texto('sds'),
-      spn: texto('spn'),
       pin_lnva_nro: texto('pin_lnva_nro'),
       documentacion_dni: booleano('documentacion_dni'),
       medio_despacho_chip_id: medioDespachoId,
@@ -336,6 +349,17 @@ export default async function DetalleVentaPage({
 
   if (estadosPortaError) {
     throw new Error(`No se pudieron cargar los Estados PORTA: ${estadosPortaError.message}`)
+  }
+
+  const { data: estadosBboo, error: estadosBbooError } = await supabase
+    .from('estados_bboo')
+    .select('id, codigo, nombre, orden')
+    .eq('activo', true)
+    .order('orden', { ascending: true })
+    .order('nombre', { ascending: true })
+
+  if (estadosBbooError) {
+    throw new Error(`No se pudieron cargar los Estados BBOO: ${estadosBbooError.message}`)
   }
 
   const { data: planesPorta, error: planesPortaError } = await supabase
@@ -461,7 +485,11 @@ export default async function DetalleVentaPage({
         numero_seguimiento,
         observaciones_gestion,
         estado_porta_id,
+        estado_bboo_id,
         estados_porta (
+          nombre
+        ),
+        estados_bboo (
           nombre
         ),
         medios_despacho_chip (
@@ -528,6 +556,16 @@ export default async function DetalleVentaPage({
       : esPorta
         ? 'Portabilidad'
         : op.tipo
+
+  const puedeEditarEstadoVendedor =
+    puedeEditar &&
+    (profile.rol === 'ADMIN' ||
+      profile.rol === 'SUPERVISOR' ||
+      (profile.rol === 'VENDEDOR' && profile.puede_gestionar_ventas === true))
+
+  const puedeEditarEstadoBboo =
+    puedeEditar &&
+    (profile.rol === 'ADMIN' || profile.rol === 'SUPERVISOR' || profile.rol === 'BBOO')
 
 
   // Líneas móviles hermanas del mismo grupo.
@@ -1047,26 +1085,44 @@ export default async function DetalleVentaPage({
 
                 <fieldset disabled={!puedeEditar}>
 
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">
-                      Gestión {porta?.es_linea_nueva ? 'Línea Nueva' : 'PORTA'}
+                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div
+                    className={
+                      porta?.es_linea_nueva
+                        ? 'rounded-xl bg-green-600 px-4 py-3 text-white'
+                        : 'rounded-xl bg-blue-600 px-4 py-3 text-white'
+                    }
+                  >
+                    <div className="text-xs font-semibold uppercase tracking-wide text-white/80">
+                      Tipo de venta
+                    </div>
+                    <h3 className="mt-1 font-semibold">
+                      {porta?.es_linea_nueva ? 'Línea Nueva' : 'Portabilidad'}
                     </h3>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Las fechas automáticas se registran una sola vez al alcanzar el estado correspondiente.
-                    </p>
                   </div>
+
+                  <div className="rounded-xl bg-green-600 px-4 py-3 text-white">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-white/80">
+                      BBOO
+                    </div>
+                    <div className="mt-1 font-semibold">
+                      {bbooActual?.vendedor || bbooActual?.nombre || (gestionPorta?.bboo_id ? 'BBOO asignado' : 'Sin BBOO asignado')}
+                    </div>
+                  </div>
+
+                  <input type="hidden" name="bboo_id" value={gestionPorta?.bboo_id ?? ''} />
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Estado
+                      Estado Vendedor
                     </label>
                     <select
                       name="estado_porta_id"
                       defaultValue={gestionPorta?.estado_porta_id ?? ''}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      disabled={!puedeEditarEstadoVendedor}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
                     >
                       <option value="">Sin estado</option>
                       {(estadosPorta ?? []).map((estado: any) => (
@@ -1079,42 +1135,42 @@ export default async function DetalleVentaPage({
 
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      BBOO
+                      Estado BBOO
                     </label>
-
-                    <input
-                      type="hidden"
-                      name="bboo_id"
-                      value={gestionPorta?.bboo_id ?? ''}
-                    />
-
-                    <div className="w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700">
-                      {bbooActual?.vendedor ||
-                        bbooActual?.nombre ||
-                        (gestionPorta?.bboo_id ? 'BBOO asignado' : 'Sin BBOO asignado')}
-                    </div>
-
-                    <p className="mt-1 text-xs text-gray-500">
-                      El Vendedor no modifica la asignación BBOO desde esta gestión.
-                    </p>
+                    <select
+                      name="estado_bboo_id"
+                      defaultValue={gestionPorta?.estado_bboo_id ?? ''}
+                      disabled={!puedeEditarEstadoBboo}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+                    >
+                      <option value="">Sin estado</option>
+                      {(estadosBboo ?? []).map((estado: any) => (
+                        <option key={estado.id} value={estado.id}>
+                          {estado.nombre}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Fecha Carga STL
-                    </label>
-                    <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
-                      {fechaArgentina(gestionPorta?.fecha_carga_stl)}
+                  <div className="sm:col-span-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Fecha Carga STL
+                      </label>
+                      <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
+                        {fechaArgentina(gestionPorta?.fecha_carga_stl)}
+                      </div>
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Fecha PORTA
-                    </label>
-                    <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
-                      {fechaArgentina(gestionPorta?.fecha_porta)}
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Fecha PORTA
+                      </label>
+                      <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
+                        {fechaArgentina(gestionPorta?.fecha_porta)}
+                      </div>
                     </div>
+
                   </div>
 
                   <div>
@@ -1165,18 +1221,6 @@ export default async function DetalleVentaPage({
                       type="text"
                       name="sds"
                       defaultValue={gestionPorta?.sds ?? ''}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      SPN
-                    </label>
-                    <input
-                      type="text"
-                      name="spn"
-                      defaultValue={gestionPorta?.spn ?? ''}
                       className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
                   </div>
@@ -1242,6 +1286,15 @@ export default async function DetalleVentaPage({
                       placeholder="Ej.: código Andreani / Cadetería"
                       className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Gestión Chip
+                    </label>
+                    <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+                      Pendiente de definición
+                    </div>
                   </div>
 
                   <div className="sm:col-span-2">

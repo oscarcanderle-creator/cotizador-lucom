@@ -33,6 +33,7 @@ type BodyGestionVenta = {
   motivo_estado?: string | null
 
   estado_porta_id?: number | null
+  estado_bboo_id?: number | null
   bboo_id?: string | null
   sim?: string | null
   plan_cargado?: string | null
@@ -432,6 +433,7 @@ export async function POST(request: Request) {
         .from('gestion_porta')
         .select(`
           estado_porta_id,
+          estado_bboo_id,
           bboo_id,
           fecha_carga_stl,
           sim,
@@ -458,14 +460,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: anteriorError.message }, { status: 400 })
     }
 
+    const rolActor = String(actorProfilePermisos.rol)
+
+    const estadoPortaEfectivo =
+      rolActor === 'BBOO'
+        ? anterior?.estado_porta_id ?? null
+        : body.estado_porta_id ?? null
+
+    const estadoBbooEfectivo =
+      rolActor === 'VENDEDOR'
+        ? anterior?.estado_bboo_id ?? null
+        : body.estado_bboo_id ?? null
+
+    // La identificación BBOO es automática: BBOO se registra a sí mismo.
+    // Los demás roles conservan la asignación BBOO ya existente.
+    const bbooIdEfectivo =
+      rolActor === 'BBOO' ? user.id : anterior?.bboo_id ?? null
+
+    // SPN ya no se edita desde la interfaz, pero aún existe en la base.
+    // Se conserva sin cambios hasta decidir su eliminación definitiva.
+    const spnEfectivo = anterior?.spn ?? null
+
     const { error: rpcError } = await supabase.rpc('super_guardar_gestion_porta', {
       p_operacion_id: operacionId,
-      p_estado_porta_id: body.estado_porta_id ?? null,
-      p_bboo_id: body.bboo_id ?? null,
+      p_estado_porta_id: estadoPortaEfectivo,
+      p_estado_bboo_id: estadoBbooEfectivo,
+      p_bboo_id: bbooIdEfectivo,
       p_sim: body.sim ?? null,
       p_plan_cargado: body.plan_cargado ?? null,
       p_sds: body.sds ?? null,
-      p_spn: body.spn ?? null,
+      p_spn: spnEfectivo,
       p_pin_lnva_nro: body.pin_lnva_nro ?? null,
       p_documentacion_dni: body.documentacion_dni ?? null,
       p_medio_despacho_chip_id: body.medio_despacho_chip_id ?? null,
@@ -481,6 +505,7 @@ export async function POST(request: Request) {
       .from('gestion_porta')
       .select(`
         estado_porta_id,
+        estado_bboo_id,
         bboo_id,
         fecha_carga_stl,
         sim,
@@ -512,9 +537,16 @@ export async function POST(request: Request) {
       })
     }
 
-    const idsEstado = Array.from(
+    const idsEstadoVendedor = Array.from(
       new Set(
         [anterior?.estado_porta_id, posterior.estado_porta_id].filter(
+          (id): id is number => id != null
+        )
+      )
+    )
+    const idsEstadoBboo = Array.from(
+      new Set(
+        [anterior?.estado_bboo_id, posterior.estado_bboo_id].filter(
           (id): id is number => id != null
         )
       )
@@ -534,26 +566,35 @@ export async function POST(request: Request) {
       )
     )
 
-    const nombresEstado = new Map<number, string>()
+    const nombresEstadoVendedor = new Map<number, string>()
+    const nombresEstadoBboo = new Map<number, string>()
     const nombresBboo = new Map<string, string>()
     const nombresMedio = new Map<number, string>()
 
-    const [estadosResult, perfilesResult, mediosResult] = await Promise.all([
-      idsEstado.length > 0
-        ? adminClient.from('estados_porta').select('id,nombre').in('id', idsEstado)
-        : Promise.resolve({ data: [] as Array<{ id: number; nombre: string }> }),
-      idsBboo.length > 0
-        ? adminClient.from('profiles').select('id,nombre,vendedor').in('id', idsBboo)
-        : Promise.resolve({
-            data: [] as Array<{ id: string; nombre: string | null; vendedor: string | null }>,
-          }),
-      idsMedio.length > 0
-        ? adminClient.from('medios_despacho_chip').select('id,nombre').in('id', idsMedio)
-        : Promise.resolve({ data: [] as Array<{ id: number; nombre: string }> }),
-    ])
+    const [estadosVendedorResult, estadosBbooResult, perfilesResult, mediosResult] =
+      await Promise.all([
+        idsEstadoVendedor.length > 0
+          ? adminClient.from('estados_porta').select('id,nombre').in('id', idsEstadoVendedor)
+          : Promise.resolve({ data: [] as Array<{ id: number; nombre: string }> }),
+        idsEstadoBboo.length > 0
+          ? adminClient.from('estados_bboo').select('id,nombre').in('id', idsEstadoBboo)
+          : Promise.resolve({ data: [] as Array<{ id: number; nombre: string }> }),
+        idsBboo.length > 0
+          ? adminClient.from('profiles').select('id,nombre,vendedor').in('id', idsBboo)
+          : Promise.resolve({
+              data: [] as Array<{ id: string; nombre: string | null; vendedor: string | null }>,
+            }),
+        idsMedio.length > 0
+          ? adminClient.from('medios_despacho_chip').select('id,nombre').in('id', idsMedio)
+          : Promise.resolve({ data: [] as Array<{ id: number; nombre: string }> }),
+      ])
 
-    for (const estado of estadosResult.data || []) {
-      nombresEstado.set(Number(estado.id), estado.nombre)
+    for (const estado of estadosVendedorResult.data || []) {
+      nombresEstadoVendedor.set(Number(estado.id), estado.nombre)
+    }
+
+    for (const estado of estadosBbooResult.data || []) {
+      nombresEstadoBboo.set(Number(estado.id), estado.nombre)
     }
 
     for (const perfil of perfilesResult.data || []) {
@@ -567,8 +608,15 @@ export async function POST(request: Request) {
       nombresMedio.set(Number(medio.id), medio.nombre)
     }
 
-    const nombreEstado = (id: number | null) =>
-      id == null ? 'Sin estado' : nombresEstado.get(Number(id)) || `Estado #${id}`
+    const nombreEstadoVendedor = (id: number | null) =>
+      id == null
+        ? 'Sin estado'
+        : nombresEstadoVendedor.get(Number(id)) || `Estado #${id}`
+
+    const nombreEstadoBboo = (id: number | null) =>
+      id == null
+        ? 'Sin estado'
+        : nombresEstadoBboo.get(Number(id)) || `Estado #${id}`
 
     const nombreBboo = (id: string | null) =>
       id == null ? 'Sin asignar' : nombresBboo.get(id) || id
@@ -578,10 +626,17 @@ export async function POST(request: Request) {
 
     agregarCambio(
       cambios,
-      'Estado',
+      'Estado Vendedor',
       anterior?.estado_porta_id,
       posterior.estado_porta_id,
-      nombreEstado
+      nombreEstadoVendedor
+    )
+    agregarCambio(
+      cambios,
+      'Estado BBOO',
+      anterior?.estado_bboo_id,
+      posterior.estado_bboo_id,
+      nombreEstadoBboo
     )
     agregarCambio(cambios, 'BBOO', anterior?.bboo_id, posterior.bboo_id, nombreBboo)
     agregarCambio(
@@ -599,7 +654,6 @@ export async function POST(request: Request) {
       posterior.plan_cargado
     )
     agregarCambio(cambios, 'SDS', anterior?.sds, posterior.sds)
-    agregarCambio(cambios, 'SPN', anterior?.spn, posterior.spn)
     agregarCambio(
       cambios,
       'PIN / LNVA NRO',

@@ -12,6 +12,7 @@
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "googleapis": "^176.0.0",
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
