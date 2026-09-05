@@ -18,19 +18,20 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const {
-      data,
-      error: loginError,
-    } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password,
-    })
+    try {
+      const {
+        data,
+        error: loginError,
+      } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      })
 
-    if (loginError || !data.user) {
-      setError('Usuario o contraseña incorrectos.')
-      setLoading(false)
-      return
-    }
+      if (loginError || !data.user) {
+        setError('Usuario o contraseña incorrectos. Verificá los datos e intentá nuevamente.')
+        setLoading(false)
+        return
+      }
 
     const {
       data: profile,
@@ -61,8 +62,12 @@ export default function LoginPage() {
       return
     }
 
-    router.push('/ventas')
-    router.refresh()
+      router.push('/ventas')
+      router.refresh()
+    } catch {
+      setError('No se pudo iniciar sesión. Intentá nuevamente.')
+      setLoading(false)
+    }
   }
 
   return (
@@ -113,7 +118,11 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <div className="text-red-600 text-sm">
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+            >
               {error}
             </div>
           )}
