@@ -44,6 +44,53 @@ function Icono({ tipo }: { tipo: Actual }) {
   return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.13.37.34.7.6 1 .3.28.68.42 1.1.4H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z"/></svg>
 }
 
+function abrirVentanaAuxiliar(key: Actual, href: string) {
+  const nombre =
+    key === 'COTIZADOR'
+      ? 'lucom-cotizador'
+      : 'lucom-portal'
+
+  const margen = 60
+
+  const anchoDisponible = window.screen.availWidth || 1440
+  const altoDisponible = window.screen.availHeight || 900
+
+  const ancho = Math.min(1500, Math.max(900, anchoDisponible - margen * 2))
+  const alto = Math.min(1000, Math.max(700, altoDisponible - margen * 2))
+
+  const izquierda = Math.max(0, Math.round((anchoDisponible - ancho) / 2))
+  const arriba = Math.max(0, Math.round((altoDisponible - alto) / 2))
+
+  const ventana = window.open(
+    href,
+    nombre,
+    [
+      `width=${ancho}`,
+      `height=${alto}`,
+      `left=${izquierda}`,
+      `top=${arriba}`,
+      'resizable=yes',
+      'scrollbars=yes',
+      'toolbar=no',
+      'location=no',
+      'menubar=no',
+      'status=no',
+    ].join(',')
+  )
+
+  if (ventana) {
+    ventana.focus()
+    return
+  }
+
+  // Respaldo si el navegador bloquea la ventana emergente.
+  window.location.href = href
+}
+
+function esVentanaAuxiliar(key: Actual) {
+  return key === 'COTIZADOR' || key === 'PORTAL'
+}
+
 export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarVentas = false, modo = 'desktop' }: Props) {
   const [abierto, setAbierto] = useState(false)
   const visibles = items.filter((item) => {
@@ -90,8 +137,34 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
               <nav aria-label="Navegación principal móvil" className="flex-1 space-y-1 overflow-y-auto p-3">
                 {visibles.map((item) => {
                   const activo = actual === item.key
+                  const clases = activo
+                    ? 'flex w-full items-center gap-3 rounded-lg bg-white/10 px-3 py-3 text-left text-sm font-bold text-white'
+                    : 'flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold text-white/75 hover:bg-white/8 hover:text-white'
+
+                  if (esVentanaAuxiliar(item.key)) {
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => {
+                          setAbierto(false)
+                          abrirVentanaAuxiliar(item.key, item.href)
+                        }}
+                        className={clases}
+                      >
+                        <Icono tipo={item.key} />
+                        {item.label}
+                      </button>
+                    )
+                  }
+
                   return (
-                    <Link key={item.key} href={item.href} onClick={() => setAbierto(false)} className={activo ? 'flex items-center gap-3 rounded-lg bg-white/10 px-3 py-3 text-sm font-bold text-white' : 'flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold text-white/75 hover:bg-white/8 hover:text-white'}>
+                    <Link
+                      key={item.key}
+                      href={item.href}
+                      onClick={() => setAbierto(false)}
+                      className={clases}
+                    >
                       <Icono tipo={item.key} />
                       {item.label}
                     </Link>
@@ -119,6 +192,21 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
           : activo
             ? 'flex shrink-0 items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700'
             : 'flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+        if (esVentanaAuxiliar(item.key)) {
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => abrirVentanaAuxiliar(item.key, item.href)}
+              className={clases}
+              title={`Abrir ${item.label} en ventana auxiliar`}
+            >
+              {variante === 'rojo' && <Icono tipo={item.key} />}
+              {item.label}
+            </button>
+          )
+        }
+
         return (
           <Link key={item.key} href={item.href} className={clases}>
             {variante === 'rojo' && <Icono tipo={item.key} />}
