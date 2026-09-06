@@ -1,11 +1,25 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '../../../../utils/supabase/server'
+import { createAdminClient } from '../../../../utils/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Cache-Control': 'no-store',
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: CORS_HEADERS,
+  })
+}
+
 export async function GET() {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const [
       { data: productos, error: errorProductos },
@@ -54,7 +68,10 @@ export async function GET() {
           ok: false,
           error: 'No fue posible obtener la lista de precios.',
         },
-        { status: 500 }
+        {
+          status: 500,
+          headers: CORS_HEADERS,
+        }
       )
     }
 
@@ -69,7 +86,10 @@ export async function GET() {
           ok: false,
           error: 'No fue posible obtener las reglas comerciales.',
         },
-        { status: 500 }
+        {
+          status: 500,
+          headers: CORS_HEADERS,
+        }
       )
     }
 
@@ -82,9 +102,7 @@ export async function GET() {
       },
       {
         status: 200,
-        headers: {
-          'Cache-Control': 'no-store',
-        },
+        headers: CORS_HEADERS,
       }
     )
   } catch (error) {
@@ -98,7 +116,10 @@ export async function GET() {
         ok: false,
         error: 'Error interno al obtener precios y reglas comerciales.',
       },
-      { status: 500 }
+      {
+        status: 500,
+        headers: CORS_HEADERS,
+      }
     )
   }
 }
