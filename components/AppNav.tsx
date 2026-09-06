@@ -12,6 +12,7 @@ type Actual =
   | 'GESTION_VENTAS'
   | 'SUPER'
   | 'ADMIN'
+  | 'PORTAL'
 
 type Props = {
   rol: string
@@ -26,6 +27,7 @@ const items = [
   { key: 'MIS_VENTAS', label: 'Mis Ventas', href: '/mis-ventas', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN', 'BBOO'] },
   { key: 'MIS_CONSULTAS', label: 'Mis Consultas', href: '/mis-consultas', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN'] },
   { key: 'COTIZADOR', label: 'Cotizador', href: '/cotizador', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN', 'BBOO'] },
+  { key: 'PORTAL', label: 'Portal', href: '/portal', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN', 'BBOO', 'TERRENO'] },
   { key: 'GESTION_VENTAS', label: 'Gestión de Ventas', href: '/gestion-ventas', roles: ['VENDEDOR', 'BBOO'] },
   { key: 'SUPER', label: 'SUPER', href: '/super', roles: ['SUPERVISOR', 'ADMIN'] },
   { key: 'ADMIN', label: 'ADMIN', href: '/admin', roles: ['ADMIN'] },
