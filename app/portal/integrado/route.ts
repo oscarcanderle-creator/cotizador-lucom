@@ -11,7 +11,7 @@ const ROLES_PORTAL = [
   'VENDEDOR',
 ]
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient()
 
   const {
@@ -20,7 +20,7 @@ export async function GET() {
 
   if (!user) {
     return NextResponse.redirect(
-      new URL('/login', 'http://localhost:3000')
+      new URL('/login', request.url)
     )
   }
 
