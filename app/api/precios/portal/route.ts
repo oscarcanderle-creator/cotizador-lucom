@@ -7,26 +7,47 @@ export async function GET() {
   try {
     const supabase = await createClient()
 
-    const { data, error } = await supabase
-      .from('productos')
-      .select(`
-        id,
-        producto,
-        origen,
-        plan,
-        precio_lista,
-        descuento_normal,
-        precio_cliente,
-        beneficios,
-        activo,
-        orden
-      `)
-      .eq('activo', true)
-      .order('orden', { ascending: true })
-      .order('id', { ascending: true })
+    const [
+      { data: productos, error: errorProductos },
+      { data: reglas, error: errorReglas },
+    ] = await Promise.all([
+      supabase
+        .from('productos')
+        .select(`
+          id,
+          producto,
+          origen,
+          plan,
+          precio_lista,
+          descuento_normal,
+          precio_cliente,
+          beneficios,
+          activo,
+          orden
+        `)
+        .eq('activo', true)
+        .order('orden', { ascending: true })
+        .order('id', { ascending: true }),
 
-    if (error) {
-      console.error('Error obteniendo precios para Portal Lucom:', error)
+      supabase
+        .from('reglas_comerciales')
+        .select(`
+          codigo,
+          nombre,
+          tipo,
+          valor,
+          activo,
+          updated_at
+        `)
+        .eq('activo', true)
+        .order('id', { ascending: true }),
+    ])
+
+    if (errorProductos) {
+      console.error(
+        'Error obteniendo precios para Portal Lucom:',
+        errorProductos
+      )
 
       return NextResponse.json(
         {
@@ -37,11 +58,27 @@ export async function GET() {
       )
     }
 
+    if (errorReglas) {
+      console.error(
+        'Error obteniendo reglas comerciales para Portal Lucom:',
+        errorReglas
+      )
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'No fue posible obtener las reglas comerciales.',
+        },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json(
       {
         ok: true,
         actualizado: new Date().toISOString(),
-        productos: data ?? [],
+        productos: productos ?? [],
+        reglas: reglas ?? [],
       },
       {
         status: 200,
@@ -51,12 +88,15 @@ export async function GET() {
       }
     )
   } catch (error) {
-    console.error('Error inesperado en /api/precios/portal:', error)
+    console.error(
+      'Error inesperado en /api/precios/portal:',
+      error
+    )
 
     return NextResponse.json(
       {
         ok: false,
-        error: 'Error interno al obtener la lista de precios.',
+        error: 'Error interno al obtener precios y reglas comerciales.',
       },
       { status: 500 }
     )

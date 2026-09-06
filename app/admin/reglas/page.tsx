@@ -15,6 +15,10 @@ function unidadRegla(
     return '$'
   }
 
+  if (codigo.startsWith('MESES_')) {
+    return 'meses'
+  }
+
   if (
     tipo === 'CANTIDAD' ||
     codigo === 'DECO_MAXIMO'
