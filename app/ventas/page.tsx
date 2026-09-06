@@ -7,6 +7,17 @@ import { createAdminClient } from '../../utils/supabase/admin'
 
 import FormularioVentas from './FormularioVentas'
 
+/*
+ * ETAPA 0 - DESACOPLE GOOGLE SHEETS
+ *
+ * BAF y PORTA se guardan únicamente en Supabase.
+ * El código histórico de sincronización se conserva temporalmente
+ * como referencia durante la migración a la nueva arquitectura CRM.
+ *
+ * Factibilidad no se modifica en esta etapa.
+ */
+const SINCRONIZAR_BAF_PORTA_CON_SHEETS = false
+
 function texto(formData: FormData, campo: string) {
   return String(formData.get(campo) ?? '').trim()
 }
@@ -769,8 +780,9 @@ export default async function VentasPage() {
               linea
             )
 
-          try {
-            const sync = await agregarPortaTesting(
+          if (SINCRONIZAR_BAF_PORTA_CON_SHEETS) {
+            try {
+              const sync = await agregarPortaTesting(
               formDataLinea,
               marca.isoArgentina,
               vendedor
@@ -813,6 +825,7 @@ export default async function VentasPage() {
                 mensajeSheet,
               idOperacion: idLinea,
             }
+            }
           }
         }
 
@@ -820,8 +833,8 @@ export default async function VentasPage() {
           ok: true,
           mensaje:
             lineas.length === 1
-              ? 'PORTA guardada y sincronizada correctamente.'
-              : `${lineas.length} líneas PORTA guardadas y sincronizadas correctamente.`,
+              ? 'PORTA guardada correctamente en Supabase.'
+              : `${lineas.length} líneas PORTA guardadas correctamente en Supabase.`,
           idOperacion: grupoOperacion,
         }
       }
@@ -863,8 +876,9 @@ export default async function VentasPage() {
 
         if (error) throw error
 
-        try {
-          const sync = await agregarBafTesting(
+        if (SINCRONIZAR_BAF_PORTA_CON_SHEETS) {
+          try {
+            const sync = await agregarBafTesting(
             formData,
             marca.isoArgentina,
             vendedor
@@ -899,6 +913,7 @@ export default async function VentasPage() {
               mensajeSheet,
             idOperacion,
           }
+        }
         }
       }
 
