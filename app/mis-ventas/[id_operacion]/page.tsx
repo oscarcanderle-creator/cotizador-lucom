@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { createClient } from '../../../utils/supabase/server'
+import { createAdminClient } from '../../../utils/supabase/admin'
 import AppHeader from '../../../components/AppHeader'
 import GestionBloqueoControls from '../../../components/GestionBloqueoControls'
 
@@ -303,6 +304,7 @@ export default async function DetalleVentaPage({
   searchParams: SearchParams
 }) {
   const supabase = await createClient()
+  const admin = createAdminClient()
 
   const {
     data: { user },
@@ -508,6 +510,211 @@ export default async function DetalleVentaPage({
   if (!operacion) notFound()
 
   const op: any = operacion
+
+  // ================================================================
+  // NUEVA ARQUITECTURA MULTIPRODUCTO
+  // Lectura con admin SOLO después de validar que el usuario puede abrir
+  // esta operación. Esto evita que RLS o policies todavía no migradas
+  // oculten operacion_productos a roles como BBOO durante la transición.
+  // Si la operación posee filas en operacion_productos, dejamos de
+  // interpretarla por el campo legacy operaciones.tipo. Las ventas
+  // históricas continúan por el flujo original que está más abajo.
+  // ================================================================
+  const { data: productosNuevos, error: productosNuevosError } = await admin
+    .from('operacion_productos')
+    .select(`
+      id,
+      producto_id,
+      tipo_producto,
+      responsable_id,
+      orden,
+      activo,
+      producto_snapshot,
+      origen_snapshot,
+      plan_snapshot,
+      precio_lista_snapshot,
+      descuento_snapshot,
+      precio_cliente_snapshot,
+      beneficios_snapshot
+    `)
+    .eq('operacion_id', id)
+    .eq('activo', true)
+    .order('orden', { ascending: true })
+
+  if (productosNuevosError) {
+    throw new Error(`No se pudieron cargar los productos de la operación: ${productosNuevosError.message}`)
+  }
+
+  if ((productosNuevos ?? []).length > 0) {
+    const idsProductos = (productosNuevos ?? []).map((p: any) => p.id)
+
+    const [detalleBafRes, detalleMovilRes, gestionBafNuevaRes, gestionMovilNuevaRes, contextoRes] =
+      await Promise.all([
+        admin.from('operacion_producto_baf').select('*').in('producto_operacion_id', idsProductos),
+        admin.from('operacion_producto_movil').select('*').in('producto_operacion_id', idsProductos),
+        admin.from('gestion_producto_baf').select('*').in('producto_operacion_id', idsProductos),
+        admin.from('gestion_producto_movil').select('*').in('producto_operacion_id', idsProductos),
+        admin.from('operacion_contexto_comercial').select('*').eq('operacion_id', id).maybeSingle(),
+      ])
+
+    const errorNueva =
+      detalleBafRes.error || detalleMovilRes.error || gestionBafNuevaRes.error ||
+      gestionMovilNuevaRes.error || contextoRes.error
+    if (errorNueva) {
+      throw new Error(`No se pudo cargar el detalle multiproducto: ${errorNueva.message}`)
+    }
+
+    const detalleBafPorProducto = new Map((detalleBafRes.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
+    const detalleMovilPorProducto = new Map((detalleMovilRes.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
+    const gestionBafPorProducto = new Map((gestionBafNuevaRes.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
+    const gestionMovilPorProducto = new Map((gestionMovilNuevaRes.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
+
+    const habilitaciones = new Map<number, any>()
+    for (const producto of productosNuevos ?? []) {
+      if (producto.tipo_producto === 'PORTA' || producto.tipo_producto === 'LINEA_NUEVA') {
+        const { data: h, error: hError } = await admin.rpc('evaluar_habilitacion_producto_movil', {
+          p_producto_operacion_id: producto.id,
+        })
+        if (hError) throw new Error(`No se pudo evaluar la habilitación móvil: ${hError.message}`)
+        habilitaciones.set(producto.id, Array.isArray(h) ? h[0] : h)
+      }
+    }
+
+    const contexto: any = contextoRes.data
+    const clienteNuevo: any = op.cliente
+    const domicilioNuevo: any = op.domicilio
+
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <AppHeader
+          rol={profile.rol}
+          usuario={profile.nombre?.trim() || user.email || 'Usuario'}
+          actual="MIS_VENTAS"
+          puedeGestionarVentas={profile.puede_gestionar_ventas === true}
+        />
+        <div className="mx-auto max-w-6xl p-4 sm:p-8">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="mb-2 flex flex-wrap gap-2">
+                <span className="rounded-full bg-gray-900 px-3 py-1 text-xs font-semibold text-white">MULTIPRODUCTO</span>
+                {contexto?.es_conexion_full === true && (
+                  <span className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white">CONEXIÓN FULL</span>
+                )}
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900">Detalle de Venta</h1>
+              <p className="mt-1 break-all text-sm text-gray-500">Operación: {op.id_operacion}</p>
+            </div>
+            <a href="/mis-ventas" className="text-sm font-medium text-gray-600 hover:text-gray-900">Volver a Mis Ventas</a>
+          </div>
+
+          <div className="space-y-5">
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Operación</h2>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Campo label="Fecha / Hora" value={fechaArgentina(op.fecha_hora)} />
+                <Campo label="Vendedor" value={op.vendedor} />
+                <Campo label="Origen del dato" value={op.origen_dato} />
+                <Campo label="Cantidad de productos" value={(productosNuevos ?? []).length} />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Cliente</h2>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Campo label="Apellido y Nombre" value={[clienteNuevo?.apellido, clienteNuevo?.nombre].filter(Boolean).join(', ')} />
+                <Campo label="Documento" value={`${clienteNuevo?.tipo_documento ? `${clienteNuevo.tipo_documento} ` : ''}${clienteNuevo?.dni || ''}`} />
+                <Campo label="Teléfono" value={clienteNuevo?.telefono} />
+                <Campo label="Correo electrónico" value={clienteNuevo?.email} />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Domicilio</h2>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Campo label="Calle / Número" value={domicilioNuevo?.calle_nro} />
+                <Campo label="Piso / Dpto" value={[domicilioNuevo?.piso, domicilioNuevo?.dpto].filter(Boolean).join(' / ')} />
+                <Campo label="Barrio" value={domicilioNuevo?.barrio} />
+                <Campo label="Localidad" value={domicilioNuevo?.localidad} />
+              </div>
+            </section>
+
+            {contexto?.es_conexion_full === true && (
+              <section className="rounded-2xl border border-red-200 bg-red-50 p-5">
+                <h2 className="text-lg font-semibold text-red-900">Conexión Full</h2>
+                <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <Campo label="Modalidad" value={contexto.modalidad_conexion_full} />
+                  <Campo label="Servicios convergentes" value={contexto.cantidad_servicios} />
+                  <Campo label="Referencia habilitante" value={contexto.tipo_referencia_habilitante} />
+                  <Campo label="Referencia" value={contexto.referencia_habilitante} />
+                  <Campo label="Descuento convergencia" value={contexto.descuento_convergencia != null ? `$ ${Number(contexto.descuento_convergencia).toLocaleString('es-AR')}` : null} />
+                </div>
+              </section>
+            )}
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Servicios nuevos contratados</h2>
+              <div className="space-y-4">
+                {(productosNuevos ?? []).map((producto: any) => {
+                  const esBafNuevo = producto.tipo_producto === 'BAF'
+                  const detalle: any = esBafNuevo ? detalleBafPorProducto.get(producto.id) : detalleMovilPorProducto.get(producto.id)
+                  const gestion: any = esBafNuevo ? gestionBafPorProducto.get(producto.id) : gestionMovilPorProducto.get(producto.id)
+                  const habilitacion: any = habilitaciones.get(producto.id)
+                  const bloqueadoMovil = !esBafNuevo && habilitacion?.habilitado === false
+                  return (
+                    <div key={producto.id} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{producto.tipo_producto === 'LINEA_NUEVA' ? 'Línea Nueva' : producto.tipo_producto}</div>
+                          <div className="mt-1 text-lg font-semibold text-gray-900">{producto.producto_snapshot || producto.plan_snapshot || 'Producto'}</div>
+                          {producto.plan_snapshot && <div className="mt-1 text-sm text-gray-600">Plan: {producto.plan_snapshot}</div>}
+                        </div>
+                        {bloqueadoMovil ? (
+                          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Pendiente de habilitación</span>
+                        ) : (
+                          <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">Habilitado</span>
+                        )}
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        {esBafNuevo ? (
+                          <>
+                            <Campo label="Modalidad" value={detalle?.modalidad_plan} />
+                            <Campo label="Tipo domicilio" value={detalle?.tipo_domicilio} />
+                            <Campo label="Zona" value={detalle?.zona} />
+                            <Campo label="Orden de Trabajo" value={gestion?.orden_trabajo} />
+                          </>
+                        ) : (
+                          <>
+                            <Campo label="NIM" value={detalle?.nim} />
+                            <Campo label="Compañía actual" value={detalle?.compania_actual} />
+                            <Campo label="PRE / POS" value={detalle?.prepago_pospago} />
+                            <Campo label="Tipo SIM" value={detalle?.tipo_sim} />
+                          </>
+                        )}
+                      </div>
+
+                      {bloqueadoMovil && (
+                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                          <div className="font-semibold">Gestión móvil bloqueada</div>
+                          <div className="mt-1">Falta la OT válida de 8 dígitos del BAF nuevo. La PORTA/Línea Nueva se habilitará cuando esa referencia esté cargada.</div>
+                          <div className="mt-2 text-xs">Motivo técnico: {habilitacion?.motivo || 'BAF_NUEVO_PENDIENTE_OT'}</div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+              <h2 className="font-semibold text-blue-900">Gestión multiproducto</h2>
+              <p className="mt-2 text-sm text-blue-800">Esta operación ya utiliza la nueva arquitectura. En esta etapa el detalle es de consulta segura: no se habilitan los formularios legacy para evitar escribir en gestion_baf/gestion_porta. El próximo paso es conectar la edición de cada tarjeta con gestion_producto_baf y gestion_producto_movil.</p>
+            </section>
+          </div>
+        </div>
+      </main>
+    )
+  }
 
   const query = await searchParams
   const sesionTokenSolicitado = String(query?.lock ?? '').trim() || null

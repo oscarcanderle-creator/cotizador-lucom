@@ -15,6 +15,7 @@ type Cambio = {
 type BodyGestionVenta = {
   tipo: 'BAF' | 'PORTA'
   operacion_id: string
+  producto_operacion_id?: number | null
   recurso_clave: string
   sesion_token: string
 
@@ -145,6 +146,532 @@ export async function POST(request: Request) {
       { error: operacionError?.message || 'No se encontró la Venta.' },
       { status: 404 }
     )
+  }
+
+  // ================================================================
+  // NUEVA ARQUITECTURA MULTIPRODUCTO
+  // Si llega producto_operacion_id, la gestión se resuelve por producto y
+  // NO por operaciones.tipo. El flujo legacy queda intacto más abajo.
+  // ================================================================
+  const productoOperacionId = Number(body.producto_operacion_id ?? 0)
+
+  if (Number.isInteger(productoOperacionId) && productoOperacionId > 0) {
+    const { data: productoOperacion, error: productoOperacionError } = await adminClient
+      .from('operacion_productos')
+      .select('id,operacion_id,tipo_producto,responsable_id,producto_snapshot,plan_snapshot')
+      .eq('id', productoOperacionId)
+      .eq('operacion_id', operacionId)
+      .eq('activo', true)
+      .maybeSingle()
+
+    if (productoOperacionError || !productoOperacion) {
+      return NextResponse.json(
+        { error: productoOperacionError?.message || 'No se encontró el producto de la Venta.' },
+        { status: 404 }
+      )
+    }
+
+    const tipoProducto = String(productoOperacion.tipo_producto ?? '').toUpperCase()
+    const esBafProducto = tipoProducto === 'BAF'
+    const esMovilProducto = ['PORTA', 'LINEA_NUEVA'].includes(tipoProducto)
+
+    if (!esBafProducto && !esMovilProducto) {
+      return NextResponse.json(
+        { error: `El producto ${tipoProducto || 'sin tipo'} todavía no tiene gestión implementada.` },
+        { status: 400 }
+      )
+    }
+
+    if ((esBafProducto && tipo !== 'BAF') || (esMovilProducto && tipo !== 'PORTA')) {
+      return NextResponse.json(
+        { error: 'El tipo de gestión no corresponde al producto seleccionado.' },
+        { status: 400 }
+      )
+    }
+
+    // En el modelo multiproducto el bloqueo pertenece a la operación comercial completa.
+    const recursoClaveCanonicoProducto = String(operacion.id_operacion)
+    const recursoClaveProducto = String(body.recurso_clave ?? '').trim()
+    const sesionTokenProducto = String(body.sesion_token ?? '').trim()
+
+    if (
+      !recursoClaveProducto ||
+      !sesionTokenProducto ||
+      recursoClaveProducto !== recursoClaveCanonicoProducto
+    ) {
+      return NextResponse.json(
+        { error: 'La sesión de gestión no corresponde a esta Venta.' },
+        { status: 409 }
+      )
+    }
+
+    const { data: bloqueoValidoProducto, error: bloqueoProductoError } = await supabase.rpc(
+      'validar_bloqueo_gestion',
+      {
+        p_tipo_recurso: 'VENTA',
+        p_recurso_clave: recursoClaveCanonicoProducto,
+        p_sesion_token: sesionTokenProducto,
+      }
+    )
+
+    if (bloqueoProductoError || bloqueoValidoProducto !== true) {
+      return NextResponse.json(
+        { error: 'No se puede guardar: esta sesión ya no posee el bloqueo de gestión de la Venta.' },
+        { status: 409 }
+      )
+    }
+
+    const liberarBloqueoProducto = async () => {
+      const { error } = await supabase.rpc('liberar_bloqueo_gestion', {
+        p_tipo_recurso: 'VENTA',
+        p_recurso_clave: recursoClaveCanonicoProducto,
+        p_sesion_token: sesionTokenProducto,
+        p_motivo: 'GUARDADO',
+      })
+      if (error) console.error('La venta multiproducto se guardó pero no se pudo liberar el bloqueo:', error)
+    }
+
+    const { data: actorProducto, error: actorProductoError } = await adminClient
+      .from('profiles')
+      .select('rol,activo,puede_gestionar_ventas,nombre,vendedor')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (actorProductoError || !actorProducto?.activo) {
+      return NextResponse.json({ error: 'No se pudo validar el perfil del usuario.' }, { status: 403 })
+    }
+
+    const rolActor = String(actorProducto.rol ?? '')
+    const autorizado =
+      ['ADMIN', 'SUPERVISOR', 'BBOO'].includes(rolActor) ||
+      (rolActor === 'VENDEDOR' && actorProducto.puede_gestionar_ventas === true)
+
+    if (!autorizado) {
+      return NextResponse.json({ error: 'No tiene permisos para gestionar esta Venta.' }, { status: 403 })
+    }
+
+    // PORTA/LN: la regla de habilitación se valida también en backend.
+    if (esMovilProducto) {
+      const { error: habilitacionError } = await adminClient.rpc(
+        'validar_habilitacion_producto_movil',
+        { p_producto_operacion_id: productoOperacionId }
+      )
+
+      if (habilitacionError) {
+        return NextResponse.json(
+          { error: habilitacionError.message },
+          { status: 409 }
+        )
+      }
+    }
+
+    const tablaGestionProducto = esBafProducto
+      ? 'gestion_producto_baf'
+      : 'gestion_producto_movil'
+
+    const { data: anteriorProducto, error: anteriorProductoError } = await adminClient
+      .from(tablaGestionProducto)
+      .select('*')
+      .eq('producto_operacion_id', productoOperacionId)
+      .maybeSingle()
+
+    if (anteriorProductoError) {
+      return NextResponse.json({ error: anteriorProductoError.message }, { status: 400 })
+    }
+
+    const responsableAnterior = productoOperacion.responsable_id ?? null
+    let responsableNuevo = responsableAnterior
+
+    // BBOO conserva el Responsable comercial; el resto de los gestores puede cambiarlo.
+    if (body.responsable_id !== undefined && rolActor !== 'BBOO') {
+      responsableNuevo = body.responsable_id ? String(body.responsable_id) : null
+    }
+
+    const ahora = new Date().toISOString()
+    let payloadGestion: Record<string, unknown>
+    let tipoVisibleProducto = tipoProducto === 'LINEA_NUEVA' ? 'Línea Nueva' : tipoProducto
+
+    if (esBafProducto) {
+      const ot = body.orden_trabajo == null ? null : String(body.orden_trabajo).trim() || null
+      if (ot && !/^\d{8}$/.test(ot)) {
+        return NextResponse.json(
+          { error: 'La Orden de Trabajo debe contener exactamente 8 dígitos.' },
+          { status: 400 }
+        )
+      }
+
+      payloadGestion = {
+        responsable_id: responsableNuevo,
+        fecha_gestion: ahora,
+        prospector: body.prospector ?? null,
+        cia_celular: body.cia_celular ?? null,
+        sds: body.sds ?? null,
+        orden_trabajo: ot,
+        linea_fija: body.linea_fija ?? null,
+        fecha_instalacion: body.fecha_instalacion ?? null,
+        ciclo_cuenta: body.ciclo_cuenta ?? null,
+        motivo_estado: body.motivo_estado ?? null,
+        estado_baf_id: body.estado_baf_id ?? null,
+        updated_at: ahora,
+        updated_by: user.id,
+      }
+    } else {
+      const estadoPortaEfectivo =
+        rolActor === 'BBOO'
+          ? anteriorProducto?.estado_porta_id ?? null
+          : body.estado_porta_id ?? null
+
+      const estadoBbooEfectivo =
+        rolActor === 'VENDEDOR'
+          ? anteriorProducto?.estado_bboo_id ?? null
+          : body.estado_bboo_id ?? null
+
+      const bbooIdEfectivo =
+        rolActor === 'BBOO' ? user.id : anteriorProducto?.bboo_id ?? null
+
+      // Fechas automáticas de gestión móvil.
+      // Se registran una sola vez: cambiar posteriormente de estado no borra
+      // ni reemplaza la primera fecha alcanzada.
+      let fechaCargaStlEfectiva = anteriorProducto?.fecha_carga_stl ?? null
+      let fechaPortaEfectiva = anteriorProducto?.fecha_porta ?? null
+
+      if (estadoPortaEfectivo != null) {
+        const { data: estadoPortaSeleccionado, error: estadoPortaSeleccionadoError } =
+          await adminClient
+            .from('estados_porta')
+            .select('codigo,nombre')
+            .eq('id', estadoPortaEfectivo)
+            .maybeSingle()
+
+        if (estadoPortaSeleccionadoError) {
+          return NextResponse.json(
+            { error: `No se pudo validar el Estado Vendedor: ${estadoPortaSeleccionadoError.message}` },
+            { status: 400 }
+          )
+        }
+
+        const codigoEstadoVendedor = String(estadoPortaSeleccionado?.codigo ?? '').trim().toUpperCase()
+
+        if (codigoEstadoVendedor === 'CARGADO_STL' && !fechaCargaStlEfectiva) {
+          fechaCargaStlEfectiva = ahora
+        }
+      }
+
+      // Fecha PORTA depende del Estado BBOO, no del Estado Vendedor.
+      // Se registra solamente la primera vez que BBOO llega a ACTIVA NRO PORTADO.
+      if (estadoBbooEfectivo != null) {
+        const { data: estadoBbooSeleccionado, error: estadoBbooSeleccionadoError } =
+          await adminClient
+            .from('estados_bboo')
+            .select('codigo,nombre')
+            .eq('id', estadoBbooEfectivo)
+            .maybeSingle()
+
+        if (estadoBbooSeleccionadoError) {
+          return NextResponse.json(
+            { error: `No se pudo validar el Estado BBOO: ${estadoBbooSeleccionadoError.message}` },
+            { status: 400 }
+          )
+        }
+
+        const normalizarEstado = (valor: unknown) =>
+          String(valor ?? '')
+            .trim()
+            .toUpperCase()
+            .replace(/[_-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+
+        const codigoBboo = normalizarEstado(estadoBbooSeleccionado?.codigo)
+        const nombreBboo = normalizarEstado(estadoBbooSeleccionado?.nombre)
+
+        if (
+          (codigoBboo === 'ACTIVA NRO PORTADO' || nombreBboo === 'ACTIVA NRO PORTADO') &&
+          !fechaPortaEfectiva
+        ) {
+          fechaPortaEfectiva = ahora
+        }
+      }
+
+      payloadGestion = {
+        responsable_id: responsableNuevo,
+        bboo_id: bbooIdEfectivo,
+        fecha_carga_stl: fechaCargaStlEfectiva,
+        sim: body.sim ?? null,
+        plan_cargado: body.plan_cargado ?? null,
+        sds: body.sds ?? null,
+        spn: anteriorProducto?.spn ?? null,
+        pin_lnva_nro: body.pin_lnva_nro ?? null,
+        documentacion_dni: body.documentacion_dni ?? null,
+        medio_despacho_chip_id: body.medio_despacho_chip_id ?? null,
+        fecha_porta: fechaPortaEfectiva,
+        numero_seguimiento: body.numero_seguimiento ?? null,
+        observaciones_gestion: body.observaciones_gestion ?? null,
+        estado_porta_id: estadoPortaEfectivo,
+        estado_bboo_id: estadoBbooEfectivo,
+        updated_at: ahora,
+        updated_by: user.id,
+      }
+    }
+
+    let guardarError: any = null
+    if (anteriorProducto?.id) {
+      const resultado = await adminClient
+        .from(tablaGestionProducto)
+        .update(payloadGestion)
+        .eq('producto_operacion_id', productoOperacionId)
+      guardarError = resultado.error
+    } else {
+      const resultado = await adminClient
+        .from(tablaGestionProducto)
+        .insert({ producto_operacion_id: productoOperacionId, ...payloadGestion })
+      guardarError = resultado.error
+    }
+
+    if (guardarError) {
+      return NextResponse.json({ error: guardarError.message }, { status: 400 })
+    }
+
+    if (responsableNuevo !== responsableAnterior) {
+      const { error: responsableError } = await adminClient
+        .from('operacion_productos')
+        .update({ responsable_id: responsableNuevo, updated_at: ahora, updated_by: user.id })
+        .eq('id', productoOperacionId)
+
+      if (responsableError) {
+        return NextResponse.json(
+          { error: `La gestión se guardó, pero no se pudo actualizar el Responsable: ${responsableError.message}` },
+          { status: 400 }
+        )
+      }
+    }
+
+    const { data: posteriorProducto, error: posteriorProductoError } = await adminClient
+      .from(tablaGestionProducto)
+      .select('*')
+      .eq('producto_operacion_id', productoOperacionId)
+      .single()
+
+    if (posteriorProductoError || !posteriorProducto) {
+      await liberarBloqueoProducto()
+      return NextResponse.json({
+        ok: true,
+        cambios: 0,
+        notificacion: 'ERROR',
+        aviso: 'La gestión se guardó, pero no se pudo releer para auditarla.',
+      })
+    }
+
+    const cambiosProducto: Cambio[] = []
+    const camposProducto = esBafProducto
+      ? [
+          ['responsable_id', 'Responsable'],
+          ['estado_baf_id', 'Estado BAF'],
+          ['prospector', 'Prospector'],
+          ['cia_celular', 'CIA Celular'],
+          ['sds', 'SDS'],
+          ['orden_trabajo', 'Orden Trabajo'],
+          ['linea_fija', 'Línea Fija'],
+          ['fecha_instalacion', 'Fecha Instalación'],
+          ['ciclo_cuenta', 'Ciclo Cuenta'],
+          ['motivo_estado', 'Motivo Estado'],
+        ]
+      : [
+          ['responsable_id', 'Responsable'],
+          ['estado_porta_id', 'Estado Vendedor'],
+          ['estado_bboo_id', 'Estado BBOO'],
+          ['bboo_id', 'BBOO'],
+          ['fecha_carga_stl', 'Fecha Carga STL'],
+          ['sim', 'SIM'],
+          ['plan_cargado', 'Plan cargado'],
+          ['sds', 'SDS'],
+          ['pin_lnva_nro', 'PIN / LNVA NRO'],
+          ['documentacion_dni', 'Documentación DNI'],
+          ['medio_despacho_chip_id', 'Medio de despacho CHIP'],
+          ['fecha_porta', 'Fecha PORTA'],
+          ['numero_seguimiento', 'Número de seguimiento'],
+          ['observaciones_gestion', 'Observaciones gestión'],
+        ]
+
+    for (const [campo, etiqueta] of camposProducto) {
+      const anteriorValor = campo === 'responsable_id'
+        ? responsableAnterior
+        : anteriorProducto?.[campo] ?? null
+      const nuevoValor = campo === 'responsable_id'
+        ? responsableNuevo
+        : posteriorProducto?.[campo] ?? null
+      agregarCambio(cambiosProducto, etiqueta, anteriorValor, nuevoValor,
+        campo === 'documentacion_dni' ? booleano : texto)
+    }
+
+    if (cambiosProducto.length > 0) {
+      const filasHistorial = cambiosProducto.map((cambio) => ({
+        producto_operacion_id: productoOperacionId,
+        tipo_accion: 'MODIFICACION',
+        campo: cambio.campo,
+        etiqueta: cambio.campo,
+        valor_anterior: cambio.anterior,
+        valor_nuevo: cambio.nuevo,
+        usuario_id: user.id,
+        rol_actor: rolActor,
+      }))
+
+      const { error: historialError } = await adminClient
+        .from('historial_producto')
+        .insert(filasHistorial)
+
+      if (historialError) {
+        console.error('Gestión guardada, pero no se pudo registrar historial_producto:', historialError)
+      }
+    }
+
+    // Historial específico de estados por producto.
+    const estadoAnterior = esBafProducto
+      ? anteriorProducto?.estado_baf_id ?? null
+      : `${anteriorProducto?.estado_porta_id ?? ''}|${anteriorProducto?.estado_bboo_id ?? ''}`
+    const estadoNuevo = esBafProducto
+      ? posteriorProducto?.estado_baf_id ?? null
+      : `${posteriorProducto?.estado_porta_id ?? ''}|${posteriorProducto?.estado_bboo_id ?? ''}`
+
+    if (String(estadoAnterior ?? '') !== String(estadoNuevo ?? '')) {
+      const { error: historialEstadoError } = await adminClient
+        .from('historial_estados_producto')
+        .insert({
+          producto_operacion_id: productoOperacionId,
+          tipo_producto: tipoProducto,
+          estado_anterior: estadoAnterior == null ? null : String(estadoAnterior),
+          estado_nuevo: estadoNuevo == null ? 'SIN_ESTADO' : String(estadoNuevo),
+          usuario_id: user.id,
+          observacion: 'Cambio registrado desde Gestión de Ventas',
+        })
+
+      if (historialEstadoError) {
+        console.error('No se pudo registrar historial_estados_producto:', historialEstadoError)
+      }
+    }
+
+    if (cambiosProducto.length === 0) {
+      await liberarBloqueoProducto()
+      return NextResponse.json({ ok: true, cambios: 0, notificacion: 'NO_CAMBIOS' })
+    }
+
+    // Notificación al Vendedor originante. El guardado nunca se revierte si el email falla.
+    const vendedorId = operacion.usuario_id
+    const responsableNombre =
+      actorProducto.vendedor?.trim() || actorProducto.nombre?.trim() || user.email || 'Usuario'
+    const asunto = `Notificación de Gestión ${tipoVisibleProducto}`
+    const referencia = `Operación: ${operacionId} · Producto: ${productoOperacionId}`
+    const mensaje = [
+      asunto,
+      '',
+      referencia,
+      `Producto: ${productoOperacion.producto_snapshot || tipoVisibleProducto} · ${productoOperacion.plan_snapshot || ''}`.trim(),
+      `Vendedor: ${operacion.vendedor || '—'}`,
+      `Fecha de gestión: ${fechaArgentina(new Date())}`,
+      `Responsable: ${responsableNombre}`,
+      '',
+      'Cambios realizados:',
+      ...cambiosProducto.map((cambio) => `${cambio.campo}: ${cambio.anterior} → ${cambio.nuevo}`),
+    ].join('\n')
+
+    let destinatario: string | null = null
+    let errorDestinatario: string | null = null
+
+    if (vendedorId) {
+      try {
+        const { data: vendedorAuth, error: vendedorAuthError } =
+          await adminClient.auth.admin.getUserById(vendedorId)
+        if (vendedorAuthError) throw vendedorAuthError
+        destinatario = vendedorAuth.user?.email?.trim().toLowerCase() || null
+        if (!destinatario) throw new Error('El Vendedor no tiene email configurado en Supabase Auth.')
+      } catch (error) {
+        errorDestinatario = mensajeError(error)
+      }
+    } else {
+      errorDestinatario = 'La Venta no tiene Vendedor asignado.'
+    }
+
+    const { data: notificacion, error: notificacionError } = await adminClient
+      .from('notificaciones')
+      .insert({
+        operacion_id: operacionId,
+        usuario_id: vendedorId,
+        canal: 'EMAIL',
+        asunto,
+        mensaje,
+        destinatario,
+        estado: errorDestinatario ? 'ERROR' : 'PENDIENTE',
+        error_envio: errorDestinatario,
+        tipo_gestion: 'VENTA',
+        registro_id: String(productoOperacionId),
+        referencia,
+        cambios: cambiosProducto,
+        responsable_id: user.id,
+        responsable_nombre: responsableNombre,
+        intentos: errorDestinatario ? 1 : 0,
+      })
+      .select('id')
+      .single()
+
+    if (notificacionError || !notificacion) {
+      console.error('Gestión guardada, pero no se pudo registrar la notificación:', notificacionError)
+      await liberarBloqueoProducto()
+      return NextResponse.json({
+        ok: true,
+        cambios: cambiosProducto.length,
+        notificacion: 'ERROR',
+        aviso: 'La gestión se guardó, pero no se pudo registrar la notificación.',
+      })
+    }
+
+    if (errorDestinatario || !destinatario) {
+      await liberarBloqueoProducto()
+      return NextResponse.json({
+        ok: true,
+        cambios: cambiosProducto.length,
+        notificacion: 'ERROR',
+        aviso: errorDestinatario || 'No hay destinatario para la notificación.',
+      })
+    }
+
+    try {
+      await enviarEmailGmail({ destinatario, asunto, mensaje })
+      await adminClient
+        .from('notificaciones')
+        .update({
+          estado: 'ENVIADA',
+          fecha_envio: new Date().toISOString(),
+          error_envio: null,
+          intentos: 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', notificacion.id)
+
+      await liberarBloqueoProducto()
+      return NextResponse.json({
+        ok: true,
+        cambios: cambiosProducto.length,
+        notificacion: 'ENVIADA',
+      })
+    } catch (error) {
+      const detalleError = mensajeError(error)
+      await adminClient
+        .from('notificaciones')
+        .update({
+          estado: 'ERROR',
+          error_envio: detalleError,
+          intentos: 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', notificacion.id)
+
+      await liberarBloqueoProducto()
+      return NextResponse.json({
+        ok: true,
+        cambios: cambiosProducto.length,
+        notificacion: 'ERROR',
+        aviso: 'La gestión se guardó, pero no se pudo enviar el email.',
+      })
+    }
   }
 
   if (operacion.tipo !== tipo) {

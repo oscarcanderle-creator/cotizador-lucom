@@ -1,10 +1,10 @@
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
+import { createAdminClient } from '../../../../utils/supabase/admin'
 import { createClient } from '../../../../utils/supabase/server'
 import AppHeader from '../../../../components/AppHeader'
 import GestionBloqueoControls from '../../../../components/GestionBloqueoControls'
-import AsignacionesSuperForm from './AsignacionesSuperForm'
 
 type Params = Promise<{
   id_operacion: string
@@ -68,20 +68,12 @@ function Campo({
 async function guardarGestionBaf(formData: FormData) {
   'use server'
 
-  const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) redirect('/login')
 
   const idOperacion = String(formData.get('id_operacion') ?? '').trim()
   const estadoBafIdRaw = String(formData.get('estado_baf_id') ?? '').trim()
-  const recursoClave = String(formData.get('recurso_clave') ?? '').trim()
-  const sesionToken = String(formData.get('sesion_token') ?? '').trim()
 
-  if (!idOperacion || !recursoClave || !sesionToken) {
+  if (!idOperacion) {
     throw new Error('Operación inválida.')
   }
 
@@ -128,11 +120,9 @@ async function guardarGestionBaf(formData: FormData) {
     body: JSON.stringify({
       tipo: 'BAF',
       operacion_id: idOperacion,
-      recurso_clave: recursoClave,
-      sesion_token: sesionToken,
+      recurso_clave: String(formData.get('recurso_clave') ?? ''),
+      sesion_token: String(formData.get('sesion_token') ?? ''),
       responsable_id: texto('responsable_id'),
-      vendedor_id: texto('vendedor_id'),
-      motivo_vendedor: texto('motivo_vendedor'),
       estado_baf_id: estadoBafId,
       prospector: texto('prospector'),
       cia_celular: texto('cia_celular'),
@@ -157,8 +147,8 @@ async function guardarGestionBaf(formData: FormData) {
 
   revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
   revalidatePath('/super')
-  revalidatePath('/mis-ventas')
-  revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/super')
   redirect(`/super/ventas/${encodeURIComponent(idOperacion)}`)
 }
 
@@ -166,13 +156,7 @@ async function guardarGestionBaf(formData: FormData) {
 async function guardarGestionPorta(formData: FormData) {
   'use server'
 
-  const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) redirect('/login')
 
   const idOperacion = String(formData.get('id_operacion') ?? '').trim()
   const estadoPortaIdRaw = String(formData.get('estado_porta_id') ?? '').trim()
@@ -181,10 +165,8 @@ async function guardarGestionPorta(formData: FormData) {
   const medioDespachoIdRaw = String(
     formData.get('medio_despacho_chip_id') ?? ''
   ).trim()
-  const recursoClave = String(formData.get('recurso_clave') ?? '').trim()
-  const sesionToken = String(formData.get('sesion_token') ?? '').trim()
 
-  if (!idOperacion || !recursoClave || !sesionToken) {
+  if (!idOperacion) {
     throw new Error('Operación inválida.')
   }
 
@@ -264,11 +246,9 @@ async function guardarGestionPorta(formData: FormData) {
     body: JSON.stringify({
       tipo: 'PORTA',
       operacion_id: idOperacion,
-      recurso_clave: recursoClave,
-      sesion_token: sesionToken,
+      recurso_clave: String(formData.get('recurso_clave') ?? ''),
+      sesion_token: String(formData.get('sesion_token') ?? ''),
       responsable_id: texto('responsable_id'),
-      vendedor_id: texto('vendedor_id'),
-      motivo_vendedor: texto('motivo_vendedor'),
       estado_porta_id: estadoPortaId,
       estado_bboo_id: estadoBbooId,
       bboo_id: bbooIdRaw || null,
@@ -295,9 +275,108 @@ async function guardarGestionPorta(formData: FormData) {
 
   revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
   revalidatePath('/super')
-  revalidatePath('/mis-ventas')
-  revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/super')
   redirect('/super')
+}
+
+async function guardarGestionProducto(formData: FormData) {
+  'use server'
+
+  const idOperacion = String(formData.get('id_operacion') ?? '').trim()
+  const productoOperacionId = Number(formData.get('producto_operacion_id') ?? 0)
+  const tipoProducto = String(formData.get('tipo_producto') ?? '').trim().toUpperCase()
+
+  if (!idOperacion || !Number.isInteger(productoOperacionId) || productoOperacionId <= 0) {
+    throw new Error('Producto de operación inválido.')
+  }
+
+  const texto = (nombre: string) => {
+    const valor = String(formData.get(nombre) ?? '').trim()
+    return valor || null
+  }
+
+  const numero = (nombre: string) => {
+    const valor = String(formData.get(nombre) ?? '').trim()
+    if (!valor) return null
+    const n = Number(valor)
+    if (!Number.isInteger(n)) throw new Error(`${nombre} inválido.`)
+    return n
+  }
+
+  const booleano = (nombre: string) => {
+    const valor = String(formData.get(nombre) ?? '').trim()
+    if (valor === 'SI') return true
+    if (valor === 'NO') return false
+    return null
+  }
+
+  const requestHeaders = await headers()
+  const host = requestHeaders.get('x-forwarded-host') || requestHeaders.get('host')
+  if (!host) throw new Error('No se pudo determinar el host de la aplicación.')
+
+  const protocol =
+    requestHeaders.get('x-forwarded-proto') ||
+    (host.includes('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https')
+  const cookie = requestHeaders.get('cookie') || ''
+
+  const esBaf = tipoProducto === 'BAF'
+  const body: Record<string, unknown> = {
+    tipo: esBaf ? 'BAF' : 'PORTA',
+    operacion_id: idOperacion,
+    producto_operacion_id: productoOperacionId,
+    recurso_clave: String(formData.get('recurso_clave') ?? ''),
+    sesion_token: String(formData.get('sesion_token') ?? ''),
+    responsable_id: texto('responsable_id'),
+  }
+
+  if (esBaf) {
+    Object.assign(body, {
+      estado_baf_id: numero('estado_baf_id'),
+      prospector: texto('prospector'),
+      cia_celular: texto('cia_celular'),
+      sds: texto('sds'),
+      orden_trabajo: texto('orden_trabajo'),
+      linea_fija: texto('linea_fija'),
+      fecha_instalacion: texto('fecha_instalacion'),
+      ciclo_cuenta: texto('ciclo_cuenta'),
+      motivo_estado: texto('motivo_estado'),
+    })
+  } else {
+    Object.assign(body, {
+      estado_porta_id: numero('estado_porta_id'),
+      estado_bboo_id: numero('estado_bboo_id'),
+      bboo_id: texto('bboo_id'),
+      sim: texto('sim'),
+      plan_cargado: texto('plan_cargado'),
+      sds: texto('sds'),
+      pin_lnva_nro: texto('pin_lnva_nro'),
+      documentacion_dni: booleano('documentacion_dni'),
+      medio_despacho_chip_id: numero('medio_despacho_chip_id'),
+      numero_seguimiento: texto('numero_seguimiento'),
+      observaciones_gestion: texto('observaciones_gestion'),
+    })
+  }
+
+  const response = await fetch(`${protocol}://${host}/api/gestion/venta`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  })
+
+  const resultado = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(resultado?.error || `No se pudo guardar la gestión. Código HTTP ${response.status}.`)
+  }
+
+  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/super')
+  revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/mis-ventas')
+  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/super')
+  redirect(`/super/ventas/${encodeURIComponent(idOperacion)}`)
 }
 
 export default async function SuperDetalleVentaPage({
@@ -322,17 +401,12 @@ export default async function SuperDetalleVentaPage({
     .single()
 
   if (!profile?.activo) redirect('/login')
+
   if (!['ADMIN', 'SUPERVISOR'].includes(profile.rol)) redirect('/ventas')
 
-  const { data: vendedores, error: vendedoresError } = await supabase
-    .from('profiles')
-    .select('id, nombre, vendedor, rol')
-    .eq('activo', true)
-    .order('nombre', { ascending: true })
-
-  if (vendedoresError) {
-    throw new Error(`No se pudieron cargar los vendedores: ${vendedoresError.message}`)
-  }
+  // SUPER usa cliente administrativo del lado servidor después de validar rol,
+  // para conservar la visión global de todas las operaciones y productos.
+  const admin = createAdminClient()
 
   const { data: responsables, error: responsablesError } = await supabase
     .from('profiles')
@@ -367,7 +441,9 @@ export default async function SuperDetalleVentaPage({
     throw new Error(`No se pudieron cargar los Estados PORTA: ${estadosPortaError.message}`)
   }
 
-  const { data: estadosBboo, error: estadosBbooError } = await supabase
+  // Estados BBOO se leen con el cliente administrativo después de autenticar
+  // al usuario. La tabla puede tener RLS que no exponga el catálogo al rol BBOO.
+  const { data: estadosBboo, error: estadosBbooError } = await admin
     .from('estados_bboo')
     .select('id, codigo, nombre, orden')
     .eq('activo', true)
@@ -414,7 +490,7 @@ export default async function SuperDetalleVentaPage({
   const { id_operacion } = await params
   const id = decodeURIComponent(id_operacion)
 
-  const { data: operacion, error } = await supabase
+  const { data: operacion, error } = await admin
     .from('operaciones')
     .select(`
       id_operacion,
@@ -428,6 +504,8 @@ export default async function SuperDetalleVentaPage({
       fila_sheet,
       error_sync,
       usuario_id,
+      cliente_id,
+      domicilio_id,
       cliente:clientes (
         dni,
         tipo_documento,
@@ -522,32 +600,6 @@ export default async function SuperDetalleVentaPage({
 
   if (!operacion) notFound()
 
-  // Historial general de cambios de la operación.
-  // En SUPER se muestra únicamente en modo lectura.
-  const { data: historial, error: historialError } = await supabase
-    .from('historial_operacion')
-    .select(`
-      id,
-      fecha_hora,
-      tipo_accion,
-      campo,
-      etiqueta,
-      valor_anterior,
-      valor_nuevo,
-      rol_actor,
-      observacion,
-      usuario:profiles (
-        nombre,
-        vendedor
-      )
-    `)
-    .eq('operacion_id', id)
-    .order('fecha_hora', { ascending: false })
-
-  if (historialError) {
-    throw new Error(`No se pudo cargar el historial de la operación: ${historialError.message}`)
-  }
-
   const op: any = operacion
 
   const query = await searchParams
@@ -558,10 +610,21 @@ export default async function SuperDetalleVentaPage({
       ? String(op.grupo_operacion)
       : String(op.id_operacion)
 
-  const { data: bloqueoActual } = await supabase.rpc('obtener_bloqueo_gestion', {
-    p_tipo_recurso: 'VENTA',
-    p_recurso_clave: recursoClave,
-  })
+  const { data: bloqueoActual, error: bloqueoError } = await supabase.rpc(
+    'obtener_bloqueo_gestion',
+    {
+      p_tipo_recurso: 'VENTA',
+      p_recurso_clave: recursoClave,
+    }
+  )
+
+  if (bloqueoError) {
+    console.error('ERROR AL CONSULTAR BLOQUEO:', bloqueoError)
+
+    throw new Error(
+      `No se pudo comprobar el bloqueo de esta venta: ${bloqueoError.message}`
+    )
+  }
 
   const bloqueo: any = bloqueoActual ?? { bloqueado: false }
   const bloqueoVigente = bloqueo?.bloqueado === true
@@ -573,42 +636,430 @@ export default async function SuperDetalleVentaPage({
 
   let usuarioBloqueo: string | null = null
   if (bloqueoVigente && bloqueo?.usuario_id) {
-    const { data: perfilBloqueo } = await supabase
+    const { data: perfilBloqueo } = await admin
       .from('profiles')
       .select('nombre,vendedor')
       .eq('id', bloqueo.usuario_id)
       .maybeSingle()
-
     usuarioBloqueo = perfilBloqueo?.vendedor || perfilBloqueo?.nombre || null
   }
 
-  const cliente = op.cliente
-  const domicilio = op.domicilio
-  const baf = op.operaciones_baf
-  const porta = op.operaciones_porta
+  // ================================================================
+  // NUEVA ARQUITECTURA MULTIPRODUCTO
+  // Si la operación posee operacion_productos, esta rama es la fuente de verdad.
+  // Las ventas históricas continúan por el flujo legacy de más abajo.
+  // ================================================================
+  const { data: productosMultiproducto, error: productosMultiproductoError } = await admin
+    .from('operacion_productos')
+    .select('*')
+    .eq('operacion_id', id)
+    .eq('activo', true)
+    .order('orden', { ascending: true })
+
+  if (productosMultiproductoError) {
+    throw new Error(`No se pudieron cargar los productos de la operación: ${productosMultiproductoError.message}`)
+  }
+
+  if ((productosMultiproducto ?? []).length > 0) {
+    const productos = productosMultiproducto ?? []
+    const idsProductos = productos.map((p: any) => Number(p.id))
+
+    const [
+      bafDetalleResult,
+      movilDetalleResult,
+      bafGestionResult,
+      movilGestionResult,
+      contextoResult,
+    ] = await Promise.all([
+      admin.from('operacion_producto_baf').select('*').in('producto_operacion_id', idsProductos),
+      admin.from('operacion_producto_movil').select('*').in('producto_operacion_id', idsProductos),
+      admin.from('gestion_producto_baf').select('*').in('producto_operacion_id', idsProductos),
+      admin.from('gestion_producto_movil').select('*').in('producto_operacion_id', idsProductos),
+      admin.from('operacion_contexto_comercial').select('*').eq('operacion_id', id).maybeSingle(),
+    ])
+
+    for (const resultado of [bafDetalleResult, movilDetalleResult, bafGestionResult, movilGestionResult, contextoResult]) {
+      if (resultado.error) {
+        throw new Error(`No se pudo cargar la gestión multiproducto: ${resultado.error.message}`)
+      }
+    }
+
+    const bafDetalle = new Map((bafDetalleResult.data ?? []).map((x: any) => [Number(x.producto_operacion_id), x]))
+    const movilDetalle = new Map((movilDetalleResult.data ?? []).map((x: any) => [Number(x.producto_operacion_id), x]))
+    const bafGestion = new Map((bafGestionResult.data ?? []).map((x: any) => [Number(x.producto_operacion_id), x]))
+    const movilGestion = new Map((movilGestionResult.data ?? []).map((x: any) => [Number(x.producto_operacion_id), x]))
+    const contexto: any = contextoResult.data ?? null
+
+    const habilitaciones = new Map<number, any>()
+    for (const producto of productos) {
+      if (['PORTA', 'LINEA_NUEVA'].includes(String(producto.tipo_producto))) {
+        const { data: h, error: hError } = await admin.rpc('evaluar_habilitacion_producto_movil', {
+          p_producto_operacion_id: Number(producto.id),
+        })
+        if (hError) throw new Error(`No se pudo evaluar la habilitación móvil: ${hError.message}`)
+        const valor = Array.isArray(h) ? h[0] : h
+        habilitaciones.set(Number(producto.id), valor)
+      }
+    }
+
+    const clienteMulti: any = op.cliente
+    const domicilioMulti: any = op.domicilio
+    const nombreResponsableProducto = (idResponsable: string | null | undefined) => {
+      if (!idResponsable) return 'Sin asignar'
+      const r = (responsables ?? []).find((x: any) => x.id === idResponsable)
+      return r?.vendedor || r?.nombre || 'Usuario no disponible'
+    }
+
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <AppHeader
+          rol={profile.rol}
+          usuario={profile.nombre?.trim() || user.email || 'Usuario'}
+          actual="SUPER"
+          puedeGestionarVentas={profile.puede_gestionar_ventas === true}
+        />
+
+        <div className="mx-auto max-w-6xl p-4 sm:p-8">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="mb-2 flex flex-wrap gap-2">
+                <span className="rounded-full bg-gray-900 px-3 py-1 text-xs font-semibold text-white">MULTIPRODUCTO</span>
+                {contexto?.es_conexion_full === true && (
+                  <span className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white">CONEXIÓN FULL</span>
+                )}
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900">Super / Detalle de Venta</h1>
+              <p className="mt-1 break-all text-sm text-gray-500">Operación: {op.id_operacion}</p>
+            </div>
+            <a href="/super" className="text-sm font-medium text-gray-600 hover:text-gray-900">Volver a Super / Ventas</a>
+          </div>
+
+          <GestionBloqueoControls
+            tipoRecurso="VENTA"
+            recursoClave={String(op.id_operacion)}
+            idOperacion={op.id_operacion}
+            editando={puedeEditar}
+            sesionToken={puedeEditar ? sesionTokenSolicitado : null}
+            bloqueado={bloqueoVigente}
+            bloqueoPropio={bloqueoPropio}
+            usuarioBloqueo={usuarioBloqueo}
+            bloqueadoDesde={bloqueo?.bloqueado_desde ?? null}
+          />
+
+          <div className="space-y-5">
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Operación</h2>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Campo label="Fecha / Hora" value={fechaArgentina(op.fecha_hora)} />
+                <Campo label="Vendedor" value={op.vendedor} />
+                <Campo label="Origen del dato" value={op.origen_dato} />
+                <Campo label="Cantidad de productos" value={productos.length} />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Cliente</h2>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Campo label="Apellido y Nombre" value={[clienteMulti?.apellido, clienteMulti?.nombre].filter(Boolean).join(', ')} />
+                <Campo label="Documento" value={`${clienteMulti?.tipo_documento ? `${clienteMulti.tipo_documento} ` : ''}${clienteMulti?.dni || ''}`} />
+                <Campo label="Fecha de nacimiento" value={fechaSimple(clienteMulti?.fecha_nacimiento)} />
+                <Campo label="Correo electrónico" value={clienteMulti?.email} />
+                <Campo label="Teléfono" value={clienteMulti?.telefono} />
+                <Campo label="Teléfono alternativo" value={clienteMulti?.telefono_alternativo} />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Domicilio</h2>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Campo label="Calle / Número" value={domicilioMulti?.calle_nro} />
+                <Campo label="Piso / Dpto" value={[domicilioMulti?.piso, domicilioMulti?.dpto].filter(Boolean).join(' / ')} />
+                <Campo label="Entre calles" value={domicilioMulti?.entre_calles} />
+                <Campo label="Barrio" value={domicilioMulti?.barrio} />
+                <Campo label="Localidad" value={domicilioMulti?.localidad} />
+                <Campo label="Coordenadas" value={domicilioMulti?.coordenadas} />
+                <Campo label="Datos extras" value={domicilioMulti?.datos_extras} ancho />
+              </div>
+            </section>
+
+            {contexto?.es_conexion_full === true && (
+              <section className="rounded-2xl border border-red-200 bg-red-50/40 p-5">
+                <h2 className="mb-4 text-lg font-semibold text-gray-900">Conexión Full</h2>
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <Campo label="Modalidad" value={contexto.modalidad_conexion_full} />
+                  <Campo label="Servicios convergentes" value={contexto.cantidad_servicios} />
+                  <Campo label="Referencia habilitante" value={contexto.tipo_referencia_habilitante} />
+                  <Campo label="Referencia" value={contexto.referencia_habilitante} />
+                  <Campo label="Descuento convergencia" value={contexto.descuento_convergencia != null ? `$ ${Number(contexto.descuento_convergencia).toLocaleString('es-AR')}` : '-'} />
+                </div>
+              </section>
+            )}
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold text-gray-900">Servicios contratados</h2>
+                <span className="text-xs text-gray-500">Cada producto conserva su propia gestión y Responsable.</span>
+              </div>
+
+              <div className="space-y-5">
+                {[...productos].sort((a: any, b: any) => {
+                  if (a.tipo_producto === 'BAF' && b.tipo_producto !== 'BAF') return -1
+                  if (b.tipo_producto === 'BAF' && a.tipo_producto !== 'BAF') return 1
+                  return Number(a.orden ?? 0) - Number(b.orden ?? 0)
+                }).map((producto: any) => {
+                  const productoId = Number(producto.id)
+                  const esBaf = producto.tipo_producto === 'BAF'
+                  const esLineaNueva = producto.tipo_producto === 'LINEA_NUEVA'
+                  const detalle: any = esBaf ? bafDetalle.get(productoId) : movilDetalle.get(productoId)
+                  const gestion: any = esBaf ? bafGestion.get(productoId) : movilGestion.get(productoId)
+                  const habilitacion: any = esBaf ? { habilitado: true, motivo: 'GESTION_BAF' } : habilitaciones.get(productoId)
+                  const habilitado = esBaf || habilitacion?.habilitado === true
+                  const puedeEditarProducto = puedeEditar && habilitado
+                  const responsableActual = producto.responsable_id ?? gestion?.responsable_id ?? null
+
+                  return (
+                    <div key={productoId} className="overflow-hidden rounded-2xl border border-gray-200 bg-gray-50/40">
+                      <div className="border-b border-gray-200 bg-white p-5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap gap-2">
+                              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${esBaf ? 'bg-gray-900 text-white' : esLineaNueva ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}`}>
+                                {esBaf ? 'BAF' : esLineaNueva ? 'LÍNEA NUEVA' : 'PORTA'}
+                              </span>
+                              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${habilitado ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-900'}`}>
+                                {habilitado ? 'Habilitado' : 'Pendiente de habilitación'}
+                              </span>
+                            </div>
+                            <h3 className="mt-3 text-lg font-semibold text-gray-900">{producto.producto_snapshot}</h3>
+                            <p className="mt-1 text-sm text-gray-600">Plan: {producto.plan_snapshot || '-'}</p>
+                          </div>
+                          <div className="text-right text-xs text-gray-500">
+                            <div>Producto #{productoId}</div>
+                            <div className="mt-1">Responsable: <span className="font-semibold text-gray-700">{nombreResponsableProducto(responsableActual)}</span></div>
+                          </div>
+                        </div>
+
+                        {!esBaf && !habilitado && (
+                          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                            <div className="font-semibold">Gestión móvil bloqueada</div>
+                            <div className="mt-1">{habilitacion?.motivo === 'BAF_NUEVO_PENDIENTE_OT' ? 'Falta una Orden de Trabajo BAF válida de exactamente 8 dígitos.' : habilitacion?.motivo || 'El producto todavía no está habilitado.'}</div>
+                            <div className="mt-1 text-xs">Motivo técnico: {habilitacion?.motivo || '-'}</div>
+                          </div>
+                        )}
+
+                        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          {esBaf ? (
+                            <>
+                              <Campo label="Modalidad" value={detalle?.modalidad_plan} />
+                              <Campo label="TV" value={detalle?.tv} />
+                              <Campo label="Cantidad DECOS" value={detalle?.cantidad_decos} />
+                              <Campo label="Horario / Observaciones" value={detalle?.horario_contacto} ancho />
+                            </>
+                          ) : (
+                            <>
+                              <Campo label="NIM / Línea" value={detalle?.nim || detalle?.numero_linea} />
+                              <Campo label="Compañía actual" value={detalle?.compania_actual} />
+                              <Campo label="PRE / POS" value={detalle?.modalidad_actual} />
+                              <Campo label="Tipo SIM" value={detalle?.tipo_sim} />
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <form
+                        key={`${productoId}-${gestion?.updated_at ?? 'sin-gestion'}`}
+                        action={guardarGestionProducto}
+                        className="p-5"
+                      >
+                        <input type="hidden" name="id_operacion" value={op.id_operacion} />
+                        <input type="hidden" name="producto_operacion_id" value={productoId} />
+                        <input type="hidden" name="tipo_producto" value={producto.tipo_producto} />
+                        <input type="hidden" name="recurso_clave" value={String(op.id_operacion)} />
+                        <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
+
+                        <fieldset disabled={!puedeEditarProducto}>
+                          <div className="mb-4">
+                            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Responsable</label>
+                            <select name="responsable_id" defaultValue={responsableActual ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">
+                              <option value="">Sin responsable asignado</option>
+                              {(responsables ?? []).map((r: any) => <option key={r.id} value={r.id}>{r.vendedor || r.nombre || r.id}</option>)}
+                            </select>
+                            {profile.rol === 'BBOO' && <p className="mt-1 text-xs text-gray-500">BBOO conserva el Responsable comercial actual.</p>}
+                          </div>
+
+                          {esBaf ? (
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Estado BAF</label><select name="estado_baf_id" defaultValue={gestion?.estado_baf_id ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin estado</option>{(estadosBaf ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">CIA Celular</label><select name="cia_celular" defaultValue={gestion?.cia_celular ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar compañía</option><option>CLARO</option><option>PERSONAL</option><option>MOVISTAR</option><option>TUENTI</option></select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Prospector</label><input name="prospector" defaultValue={gestion?.prospector ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><input name="sds" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Orden Trabajo</label><input name="orden_trabajo" inputMode="numeric" pattern="[0-9]{8}" maxLength={8} defaultValue={gestion?.orden_trabajo ?? ''} placeholder="8 dígitos" className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /><p className="mt-1 text-xs text-gray-500">En Conexión Full con BAF nuevo, esta OT habilita automáticamente PORTA/LN.</p></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Línea Fija</label><input name="linea_fija" defaultValue={gestion?.linea_fija ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Ciclo Cuenta</label><input name="ciclo_cuenta" defaultValue={gestion?.ciclo_cuenta ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Instalación</label><input name="fecha_instalacion" defaultValue={gestion?.fecha_instalacion ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Motivo Estado</label><textarea name="motivo_estado" defaultValue={gestion?.motivo_estado ?? ''} rows={3} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Estado Vendedor</label><select name="estado_porta_id" defaultValue={gestion?.estado_porta_id ?? ''} disabled={profile.rol === 'BBOO'} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin estado</option>{(estadosPorta ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Estado BBOO</label><select name="estado_bboo_id" defaultValue={gestion?.estado_bboo_id ?? ''} disabled={profile.rol === 'VENDEDOR'} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin estado</option>{(estadosBboo ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
+                              <input type="hidden" name="bboo_id" value={profile.rol === 'BBOO' ? user.id : gestion?.bboo_id ?? ''} />
+                              <div>
+                                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Carga STL</label>
+                                <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
+                                  {fechaArgentina(gestion?.fecha_carga_stl ?? null)}
+                                </div>
+                                <p className="mt-1 text-xs text-gray-500">Automática al establecer Estado Vendedor = CARGADO STL.</p>
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha PORTA</label>
+                                <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
+                                  {fechaArgentina(gestion?.fecha_porta ?? null)}
+                                </div>
+                                <p className="mt-1 text-xs text-gray-500">Automática al establecer Estado Vendedor = ACTIVA NRO PORTADO.</p>
+                              </div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SIM</label><input name="sim" inputMode="numeric" defaultValue={gestion?.sim ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</label><select name="plan_cargado" defaultValue={gestion?.plan_cargado || producto.plan_snapshot || ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar plan</option>{(() => { const actual = String(gestion?.plan_cargado || producto.plan_snapshot || '').trim(); const activos = (planesPorta ?? []).map((p: any) => String(p.nombre ?? '').trim()).filter(Boolean); const opciones = actual && !activos.includes(actual) ? [actual, ...activos] : activos; return opciones.map((nombre: string) => <option key={nombre} value={nombre}>{nombre}</option>) })()}</select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><input name="sds" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">PIN / LNVA NRO</label><input name="pin_lnva_nro" defaultValue={gestion?.pin_lnva_nro ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Documentación DNI</label><select name="documentacion_dni" defaultValue={gestion?.documentacion_dni === true ? 'SI' : gestion?.documentacion_dni === false ? 'NO' : ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin informar</option><option value="SI">SI</option><option value="NO">NO</option></select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Medio de despacho CHIP</label><select name="medio_despacho_chip_id" defaultValue={gestion?.medio_despacho_chip_id ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin informar</option>{(mediosDespacho ?? []).map((m: any) => <option key={m.id} value={m.id}>{m.nombre}</option>)}</select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Número de seguimiento</label><input name="numero_seguimiento" defaultValue={gestion?.numero_seguimiento ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Observaciones gestión</label><textarea name="observaciones_gestion" defaultValue={gestion?.observaciones_gestion ?? ''} rows={3} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                            </div>
+                          )}
+
+                          <div className="mt-5 flex justify-end">
+                            <button type="submit" className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-300">Guardar {esBaf ? 'BAF' : esLineaNueva ? 'Línea Nueva' : 'PORTA'}</button>
+                          </div>
+                        </fieldset>
+                      </form>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  // Para el Vendedor Gestor no dependemos de los joins embebidos de PostgREST:
+  // primero autorizamos la operación con su sesión y luego leemos directamente,
+  // del lado servidor, las tablas relacionadas con el cliente admin.
+  const [
+    clienteResultado,
+    domicilioResultado,
+    bafResultado,
+    portaResultado,
+  ] = await Promise.all([
+    op.cliente_id
+      ? admin
+          .from('clientes')
+          .select(`
+            dni,
+            tipo_documento,
+            nombre,
+            apellido,
+            fecha_nacimiento,
+            email,
+            telefono,
+            telefono_alternativo
+          `)
+          .eq('id', op.cliente_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    op.domicilio_id
+      ? admin
+          .from('domicilios')
+          .select(`
+            calle_nro,
+            piso,
+            dpto,
+            entre_calles,
+            barrio,
+            localidad,
+            coordenadas,
+            datos_extras
+          `)
+          .eq('id', op.domicilio_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    op.tipo === 'BAF'
+      ? admin
+          .from('operaciones_baf')
+          .select(`
+            tipo_domicilio,
+            plan,
+            tv,
+            cantidad_decos,
+            zona,
+            horario_contacto,
+            convergente,
+            linea_convergente,
+            modalidad_plan
+          `)
+          .eq('operacion_id', op.id_operacion)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    op.tipo === 'PORTA'
+      ? admin
+          .from('operaciones_porta')
+          .select(`
+            nim,
+            es_linea_nueva,
+            gigas_acordados,
+            tipo_sim,
+            compania_actual,
+            prepago_pospago,
+            observaciones,
+            numero_linea
+          `)
+          .eq('operacion_id', op.id_operacion)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ])
+
+  if (clienteResultado.error) {
+    throw new Error(`No se pudo cargar el Cliente: ${clienteResultado.error.message}`)
+  }
+
+  if (domicilioResultado.error) {
+    throw new Error(`No se pudo cargar el Domicilio: ${domicilioResultado.error.message}`)
+  }
+
+  if (bafResultado.error) {
+    throw new Error(`No se pudieron cargar los datos BAF: ${bafResultado.error.message}`)
+  }
+
+  if (portaResultado.error) {
+    throw new Error(`No se pudieron cargar los datos PORTA/Línea Nueva: ${portaResultado.error.message}`)
+  }
+
+  const cliente = clienteResultado.data ?? op.cliente
+  const domicilio = domicilioResultado.data ?? op.domicilio
+  const baf = bafResultado.data ?? op.operaciones_baf
+  const porta = portaResultado.data ?? op.operaciones_porta
   const gestionBaf = op.gestion_baf
   const gestionPorta = op.gestion_porta
 
-  let bbooActualFueraDeLista: any = null
-
-  if (
-    gestionPorta?.bboo_id &&
-    !(usuariosBboo ?? []).some((bboo: any) => bboo.id === gestionPorta.bboo_id)
-  ) {
-    const { data: bbooActual, error: bbooActualError } = await supabase
+  let bbooActualGestion: any = null
+  if (gestionPorta?.bboo_id) {
+    const { data: perfilBbooActual, error: perfilBbooActualError } = await admin
       .from('profiles')
       .select('id, nombre, vendedor, rol, activo')
       .eq('id', gestionPorta.bboo_id)
       .maybeSingle()
 
-    if (bbooActualError) {
-      throw new Error(`No se pudo cargar el BBOO actual: ${bbooActualError.message}`)
+    if (perfilBbooActualError) {
+      throw new Error(`No se pudo cargar el BBOO actual: ${perfilBbooActualError.message}`)
     }
 
-    bbooActualFueraDeLista = bbooActual
+    bbooActualGestion = perfilBbooActual
   }
 
-  const esBaf = op.tipo === 'BAF' 
+  const esBaf = op.tipo === 'BAF'
   const esPorta = op.tipo === 'PORTA'
   const tipoVisible =
     esPorta && porta?.es_linea_nueva
@@ -617,32 +1068,27 @@ export default async function SuperDetalleVentaPage({
         ? 'Portabilidad'
         : op.tipo
 
-  const puedeEditarEstadoVendedor = puedeEditar
-  const puedeEditarEstadoBboo = puedeEditar
+  const puedeEditarEstadoVendedor =
+    puedeEditar &&
+    (profile.rol === 'ADMIN' ||
+      profile.rol === 'SUPERVISOR' ||
+      (profile.rol === 'VENDEDOR' && profile.puede_gestionar_ventas === true))
+
+  const puedeEditarEstadoBboo =
+    puedeEditar &&
+    (profile.rol === 'ADMIN' || profile.rol === 'SUPERVISOR' || profile.rol === 'BBOO')
 
 
   // Líneas móviles hermanas del mismo grupo.
-  // Cada pestaña conserva su propio id_operacion y, por lo tanto,
-  // su gestión, historial y notificaciones independientes.
+  // Se cargan en dos pasos para no depender de joins embebidos afectados por RLS.
   let lineasGrupo: any[] = []
 
   if (esPorta && op.grupo_operacion) {
-    let consultaLineasGrupo = supabase
+    const { data: operacionesGrupo, error: operacionesGrupoError } = await admin
       .from('operaciones')
-      .select(`
-        id_operacion,
-        operaciones_porta (
-          numero_linea,
-          nim,
-          es_linea_nueva,
-          tipo_sim
-        )
-      `)
+      .select('id_operacion')
       .eq('grupo_operacion', op.grupo_operacion)
       .eq('tipo', 'PORTA')
-
-    const { data: operacionesGrupo, error: operacionesGrupoError } =
-      await consultaLineasGrupo
 
     if (operacionesGrupoError) {
       throw new Error(
@@ -650,49 +1096,48 @@ export default async function SuperDetalleVentaPage({
       )
     }
 
-    lineasGrupo = (operacionesGrupo ?? [])
-      .map((item: any) => ({
-        id_operacion: item.id_operacion,
-        ...(Array.isArray(item.operaciones_porta)
-          ? item.operaciones_porta[0]
-          : item.operaciones_porta),
-      }))
-      .filter((item: any) => item.numero_linea != null)
-      .sort(
-        (a: any, b: any) =>
-          Number(a.numero_linea ?? 0) - Number(b.numero_linea ?? 0)
-      )
+    const idsGrupo = (operacionesGrupo ?? []).map(
+      (item: any) => item.id_operacion
+    )
+
+    if (idsGrupo.length > 0) {
+      const { data: detallesGrupo, error: detallesGrupoError } = await admin
+        .from('operaciones_porta')
+        .select(`
+          operacion_id,
+          numero_linea,
+          nim,
+          es_linea_nueva,
+          tipo_sim
+        `)
+        .in('operacion_id', idsGrupo)
+
+      if (detallesGrupoError) {
+        throw new Error(
+          `No se pudieron cargar los datos de las líneas: ${detallesGrupoError.message}`
+        )
+      }
+
+      lineasGrupo = (detallesGrupo ?? [])
+        .map((item: any) => ({
+          id_operacion: item.operacion_id,
+          numero_linea: item.numero_linea,
+          nim: item.nim,
+          es_linea_nueva: item.es_linea_nueva,
+          tipo_sim: item.tipo_sim,
+        }))
+        .sort(
+          (a: any, b: any) =>
+            Number(a.numero_linea ?? 0) - Number(b.numero_linea ?? 0)
+        )
+    }
   }
 
   const responsableActualId =
     esBaf ? gestionBaf?.responsable_id : gestionPorta?.responsable_id
 
-  let responsableActual: any = (responsables ?? []).find(
+  const responsableActual = (responsables ?? []).find(
     (responsable: any) => responsable.id === responsableActualId
-  )
-
-  // Si el Responsable actualmente asignado quedó inactivo o perdió
-  // puede_gestionar_ventas, ya no aparece entre los Responsables disponibles
-  // para nuevas asignaciones. Lo recuperamos únicamente para conservar y
-  // mostrar correctamente la asignación histórica actual.
-  if (responsableActualId && !responsableActual) {
-    const { data: responsableHistorico, error: responsableHistoricoError } = await supabase
-      .from('profiles')
-      .select('id, nombre, vendedor, rol, activo, puede_gestionar_ventas')
-      .eq('id', responsableActualId)
-      .maybeSingle()
-
-    if (responsableHistoricoError) {
-      throw new Error(
-        `No se pudo cargar el Responsable actual: ${responsableHistoricoError.message}`
-      )
-    }
-
-    responsableActual = responsableHistorico
-  }
-
-  const vendedoresDisponibles = (vendedores ?? []).filter((vendedor: any) =>
-    String(vendedor.vendedor ?? vendedor.nombre ?? '').trim()
   )
 
   return (
@@ -701,22 +1146,10 @@ export default async function SuperDetalleVentaPage({
         rol={profile.rol}
         usuario={profile.nombre?.trim() || user.email || 'Usuario'}
         actual="SUPER"
+        puedeGestionarVentas={profile.puede_gestionar_ventas === true}
       />
-
       <div className="mx-auto max-w-6xl p-4 sm:p-8">
-        <GestionBloqueoControls
-          tipoRecurso="VENTA"
-          recursoClave={recursoClave}
-          idOperacion={op.id_operacion}
-          editando={puedeEditar}
-          sesionToken={puedeEditar ? sesionTokenSolicitado : null}
-          bloqueado={bloqueoVigente}
-          bloqueoPropio={bloqueoPropio}
-          usuarioBloqueo={usuarioBloqueo}
-          bloqueadoDesde={bloqueo?.bloqueado_desde ?? null}
-          basePath="/super/ventas"
-          listPath="/super"
-        />
+
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="mb-2">
@@ -742,45 +1175,84 @@ export default async function SuperDetalleVentaPage({
           </a>
         </div>
 
+        <GestionBloqueoControls
+          tipoRecurso="VENTA"
+          recursoClave={recursoClave}
+          idOperacion={op.id_operacion}
+          editando={puedeEditar}
+          sesionToken={puedeEditar ? sesionTokenSolicitado : null}
+          bloqueado={bloqueoVigente}
+          bloqueoPropio={bloqueoPropio}
+          usuarioBloqueo={usuarioBloqueo}
+          bloqueadoDesde={bloqueo?.bloqueado_desde ?? null}
+        />
+
         <div className="space-y-5">
-          <section className="rounded-2xl border border-gray-200 bg-white p-5">
-            <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Operación</h2>
-              <span className="text-xs font-medium text-amber-700">
-                {puedeEditar ? 'SUPER · Vendedor y Responsable editables' : 'SUPER · Solo consulta'}
-              </span>
+            <div className="rounded-2xl border border-red-100 bg-red-50/40 p-5">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">Responsable</h2>
+                {esPorta && lineasGrupo.length > 1 && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    La asignación se aplica a todas las líneas relacionadas.
+                  </p>
+                )}
+              </div>
+              <fieldset disabled={!puedeEditar}>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div>
+                  <label
+                    htmlFor="responsable_id"
+                    className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500"
+                  >
+                    Responsable
+                  </label>
+
+                  <select
+                    id="responsable_id"
+                    name="responsable_id"
+                    form="gestion-unificada"
+                    defaultValue={responsableActualId ?? ''}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                  >
+                    <option value="">Sin responsable asignado</option>
+
+                    {(responsables ?? []).map((responsable: any) => (
+                      <option key={responsable.id} value={responsable.id}>
+                        {responsable.vendedor || responsable.nombre || responsable.id}
+                      </option>
+                    ))}
+                  </select>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Solo aparecen usuarios activos habilitados para gestionar ventas.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-3 text-xs text-gray-500">
+                Responsable actual:{' '}
+                <span className="font-semibold text-gray-700">
+                  {responsableActual?.vendedor ||
+                    responsableActual?.nombre ||
+                    (responsableActualId ? 'Usuario no disponible' : 'Sin asignar')}
+                </span>
+              </div>
+            </fieldset>
             </div>
 
-            <div className="mb-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+
+          <section className="rounded-2xl border border-gray-200 bg-white p-5">
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">
+              Operación
+            </h2>
+
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Campo label="Fecha / Hora" value={fechaArgentina(op.fecha_hora)} />
+              <Campo label="Vendedor" value={op.vendedor} />
               <Campo label="Origen del dato" value={op.origen_dato} />
               <Campo label="Grupo operación" value={op.grupo_operacion} />
-              <Campo label="Tipo" value={tipoVisible} />
             </div>
-
-            <fieldset disabled={!puedeEditar}>
-              <AsignacionesSuperForm
-              formId="gestion-unificada"
-              idOperacion={op.id_operacion}
-              tipo={op.tipo}
-              vendedorActualId={op.usuario_id ?? ''}
-              vendedorActualNombre={mostrar(op.vendedor)}
-              responsableActualId={responsableActualId ?? ''}
-              responsableActualNombre={
-                responsableActual?.vendedor ||
-                responsableActual?.nombre ||
-                'Sin asignar'
-              }
-              vendedores={vendedoresDisponibles.map((vendedor: any) => ({
-                id: vendedor.id,
-                nombre: vendedor.vendedor || vendedor.nombre,
-              }))}
-              responsables={(responsables ?? []).map((responsable: any) => ({
-                id: responsable.id,
-                nombre: responsable.vendedor || responsable.nombre,
-              }))}
-              />
-            </fieldset>
           </section>
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
@@ -948,166 +1420,200 @@ export default async function SuperDetalleVentaPage({
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-gray-900">Gestión</h2>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                {puedeEditar ? 'Supervisor · editable' : 'Supervisor · solo consulta'}
+              <h2 className="text-lg font-semibold text-gray-900">
+                Gestión
+              </h2>
+
+              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600">
+                Gestión inicial
               </span>
             </div>
 
             {esBaf ? (
-              <form id="gestion-unificada" action={guardarGestionBaf}>
+              <form
+                id="gestion-unificada"
+                action={guardarGestionBaf}
+                className="rounded-xl border border-gray-200 bg-gray-50/50 p-4"
+              >
                 <input type="hidden" name="id_operacion" value={op.id_operacion} />
-                <input type="hidden" name="recurso_clave" value={recursoClave} />
-                <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
+              <input type="hidden" name="recurso_clave" value={recursoClave} />
+              <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
+              <fieldset disabled={!puedeEditar}>
 
-                <fieldset disabled={!puedeEditar}>
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Estado BAF</span>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Gestión BAF
+                    </h3>
+                    <p className="mt-1 text-xs text-gray-500">
+                      La Fecha Gestión se actualiza automáticamente al guardar.
+                    </p>
+                  </div>
+
+                  <div className="text-xs text-gray-500">
+                    Última gestión:{' '}
+                    <span className="font-medium text-gray-700">
+                      {fechaArgentina(gestionBaf?.fecha_gestion)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Estado BAF
+                    </label>
                     <select
                       name="estado_baf_id"
-                      defaultValue={gestionBaf?.estado_baf_id ? String(gestionBaf.estado_baf_id) : ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      defaultValue={gestionBaf?.estado_baf_id ?? ''}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     >
                       <option value="">Sin estado</option>
-                      {gestionBaf?.estado_baf_id &&
-                        !(estadosBaf ?? []).some((estado: any) => estado.id === gestionBaf.estado_baf_id) ? (
-                          <option value={String(gestionBaf.estado_baf_id)}>
-                            {gestionBaf?.estados_baf?.nombre || 'Estado actual'} (inactivo)
-                          </option>
-                        ) : null}
                       {(estadosBaf ?? []).map((estado: any) => (
-                        <option key={estado.id} value={String(estado.id)}>
+                        <option key={estado.id} value={estado.id}>
                           {estado.nombre}
                         </option>
                       ))}
                     </select>
-                  </label>
-
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                      Fecha Gestión
-                    </div>
-                    <div className="mt-1 text-sm font-semibold text-gray-800">
-                      {fechaArgentina(gestionBaf?.fecha_gestion)}
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      Se actualiza automáticamente cuando existe un cambio real.
-                    </div>
                   </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Prospector</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      CIA Celular
+                    </label>
+                    <select
+                      name="cia_celular"
+                      defaultValue={gestionBaf?.cia_celular ?? ''}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      <option value="">Seleccionar compañía</option>
+                      <option value="CLARO">CLARO</option>
+                      <option value="PERSONAL">PERSONAL</option>
+                      <option value="MOVISTAR">MOVISTAR</option>
+                      <option value="TUENTI">TUENTI</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Prospector
+                    </label>
                     <input
                       type="text"
                       name="prospector"
                       defaultValue={gestionBaf?.prospector ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
-
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                      Detalle Lead
-                    </div>
-                    <div className="mt-1 break-words text-sm text-gray-800">
-                      {mostrar(op.origen_dato)}
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">Solo lectura</div>
                   </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">CIA Celular</span>
-                    <input
-                      type="text"
-                      name="cia_celular"
-                      defaultValue={gestionBaf?.cia_celular ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    />
-                  </label>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Detalle Lead
+                    </label>
+                    <div className="w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700">
+                      {op.origen_dato || '-'}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Proviene de la carga inicial de la venta y no se modifica desde Gestión.
+                    </p>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">SDS</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      SDS
+                    </label>
                     <input
                       type="text"
                       name="sds"
                       defaultValue={gestionBaf?.sds ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Orden Trabajo</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Orden Trabajo
+                    </label>
                     <input
                       type="text"
                       name="orden_trabajo"
                       defaultValue={gestionBaf?.orden_trabajo ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Línea Fija</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Línea Fija
+                    </label>
                     <input
                       type="text"
                       name="linea_fija"
                       defaultValue={gestionBaf?.linea_fija ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block sm:col-span-2">
-                    <span className="text-sm font-semibold text-gray-800">Fecha Instalación</span>
-                    <input
-                      type="text"
-                      name="fecha_instalacion"
-                      defaultValue={gestionBaf?.fecha_instalacion ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Ciclo Cuenta</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Ciclo Cuenta
+                    </label>
                     <input
                       type="text"
                       name="ciclo_cuenta"
                       defaultValue={gestionBaf?.ciclo_cuenta ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block sm:col-span-2">
-                    <span className="text-sm font-semibold text-gray-800">Motivo Estado</span>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Fecha Instalación
+                    </label>
+                    <input
+                      type="text"
+                      name="fecha_instalacion"
+                      defaultValue={gestionBaf?.fecha_instalacion ?? ''}
+                      placeholder="Texto libre: fecha, rango horario y aclaraciones"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Motivo Estado
+                    </label>
                     <textarea
                       name="motivo_estado"
-                      rows={3}
                       defaultValue={gestionBaf?.motivo_estado ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      rows={3}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
                 </div>
 
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
-                  <div className="text-xs text-gray-500">
-                    Solo se registran en el historial los campos que realmente cambian.
-                  </div>
+                <div className="mt-5 flex justify-end">
                   <button
                     type="submit"
-                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+                    className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
                   >
                     Guardar
                   </button>
                 </div>
-                </fieldset>
-              </form>
+              </fieldset>
+            </form>
             ) : esPorta ? (
-              <form id="gestion-unificada" action={guardarGestionPorta}>
+              <form
+                id="gestion-unificada"
+                action={guardarGestionPorta}
+                className="rounded-xl border border-gray-200 bg-gray-50/50 p-4"
+              >
                 <input type="hidden" name="id_operacion" value={op.id_operacion} />
-                <input type="hidden" name="recurso_clave" value={recursoClave} />
-                <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
+              <input type="hidden" name="recurso_clave" value={recursoClave} />
+              <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
+              <fieldset disabled={!puedeEditar}>
 
-                <fieldset disabled={!puedeEditar}>
-                <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div
                     className={
                       porta?.es_linea_nueva
@@ -1128,120 +1634,102 @@ export default async function SuperDetalleVentaPage({
                       BBOO
                     </div>
                     <div className="mt-1 font-semibold">
-                      {(() => {
-                        const actual = (usuariosBboo ?? []).find(
-                          (bboo: any) => bboo.id === gestionPorta?.bboo_id
-                        )
-                        return (
-                          actual?.vendedor ||
-                          actual?.nombre ||
-                          bbooActualFueraDeLista?.vendedor ||
-                          bbooActualFueraDeLista?.nombre ||
-                          (gestionPorta?.bboo_id ? 'BBOO asignado' : 'Sin BBOO asignado')
-                        )
-                      })()}
+                      {profile.rol === 'BBOO'
+                        ? profile.nombre?.trim() || user.email || 'Usuario BBOO'
+                        : bbooActualGestion?.vendedor ||
+                          bbooActualGestion?.nombre ||
+                          (gestionPorta?.bboo_id ? 'BBOO asignado' : 'Sin BBOO asignado')}
                     </div>
                   </div>
 
-                  <input type="hidden" name="bboo_id" value={gestionPorta?.bboo_id ?? ''} />
+                  <input
+                    type="hidden"
+                    name="bboo_id"
+                    value={profile.rol === 'BBOO' ? user.id : gestionPorta?.bboo_id ?? ''}
+                  />
                 </div>
 
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Estado Vendedor</span>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Estado Vendedor
+                    </label>
                     <select
                       name="estado_porta_id"
-                      defaultValue={
-                        gestionPorta?.estado_porta_id
-                          ? String(gestionPorta.estado_porta_id)
-                          : ''
-                      }
+                      defaultValue={gestionPorta?.estado_porta_id ?? ''}
                       disabled={!puedeEditarEstadoVendedor}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
                     >
                       <option value="">Sin estado</option>
-                      {gestionPorta?.estado_porta_id &&
-                      !(estadosPorta ?? []).some(
-                        (estado: any) => estado.id === gestionPorta.estado_porta_id
-                      ) ? (
-                        <option value={String(gestionPorta.estado_porta_id)}>
-                          {gestionPorta?.estados_porta?.nombre || 'Estado actual'} (inactivo)
-                        </option>
-                      ) : null}
                       {(estadosPorta ?? []).map((estado: any) => (
-                        <option key={estado.id} value={String(estado.id)}>
+                        <option key={estado.id} value={estado.id}>
                           {estado.nombre}
                         </option>
                       ))}
                     </select>
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Estado BBOO</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Estado BBOO
+                    </label>
                     <select
                       name="estado_bboo_id"
-                      defaultValue={
-                        gestionPorta?.estado_bboo_id
-                          ? String(gestionPorta.estado_bboo_id)
-                          : ''
-                      }
+                      defaultValue={gestionPorta?.estado_bboo_id ?? ''}
                       disabled={!puedeEditarEstadoBboo}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
                     >
                       <option value="">Sin estado</option>
-                      {gestionPorta?.estado_bboo_id &&
-                      !(estadosBboo ?? []).some(
-                        (estado: any) => estado.id === gestionPorta.estado_bboo_id
-                      ) ? (
-                        <option value={String(gestionPorta.estado_bboo_id)}>
-                          {gestionPorta?.estados_bboo?.nombre || 'Estado actual'} (inactivo)
-                        </option>
-                      ) : null}
                       {(estadosBboo ?? []).map((estado: any) => (
-                        <option key={estado.id} value={String(estado.id)}>
+                        <option key={estado.id} value={estado.id}>
                           {estado.nombre}
                         </option>
                       ))}
                     </select>
-                  </label>
+                  </div>
 
                   <div className="sm:col-span-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                      <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Fecha Carga STL
-                      </div>
-                      <div className="mt-1 text-sm font-semibold text-gray-800">
+                      </label>
+                      <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
                         {fechaArgentina(gestionPorta?.fecha_carga_stl)}
                       </div>
                     </div>
 
-                    <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                      <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Fecha PORTA
-                      </div>
-                      <div className="mt-1 text-sm font-semibold text-gray-800">
+                      </label>
+                      <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
                         {fechaArgentina(gestionPorta?.fecha_porta)}
                       </div>
                     </div>
 
                   </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">SIM</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      SIM
+                    </label>
                     <input
                       type="text"
                       name="sim"
+                      inputMode="numeric"
                       defaultValue={gestionPorta?.sim ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">PLAN</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      PLAN
+                    </label>
                     <select
                       name="plan_cargado"
                       defaultValue={gestionPorta?.plan_cargado || porta?.gigas_acordados || ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     >
                       <option value="">Seleccionar plan</option>
                       {(() => {
@@ -1259,30 +1747,36 @@ export default async function SuperDetalleVentaPage({
                         ))
                       })()}
                     </select>
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">SDS</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      SDS
+                    </label>
                     <input
                       type="text"
                       name="sds"
                       defaultValue={gestionPorta?.sds ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">PIN / LNVA NRO</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      PIN / LNVA NRO
+                    </label>
                     <input
                       type="text"
                       name="pin_lnva_nro"
                       defaultValue={gestionPorta?.pin_lnva_nro ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Documentación DNI</span>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Documentación DNI
+                    </label>
                     <select
                       name="documentacion_dni"
                       defaultValue={
@@ -1292,173 +1786,79 @@ export default async function SuperDetalleVentaPage({
                             ? 'NO'
                             : ''
                       }
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     >
                       <option value="">Sin informar</option>
-                      <option value="SI">Sí</option>
-                      <option value="NO">No</option>
+                      <option value="SI">SI</option>
+                      <option value="NO">NO</option>
                     </select>
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Medio de despacho CHIP
-                    </span>
+                    </label>
                     <select
                       name="medio_despacho_chip_id"
-                      defaultValue={
-                        gestionPorta?.medio_despacho_chip_id
-                          ? String(gestionPorta.medio_despacho_chip_id)
-                          : ''
-                      }
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      defaultValue={gestionPorta?.medio_despacho_chip_id ?? ''}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     >
-                      <option value="">Sin asignar</option>
-                      {gestionPorta?.medio_despacho_chip_id &&
-                      !(mediosDespacho ?? []).some(
-                        (medio: any) => medio.id === gestionPorta.medio_despacho_chip_id
-                      ) ? (
-                        <option value={String(gestionPorta.medio_despacho_chip_id)}>
-                          {gestionPorta?.medios_despacho_chip?.nombre || 'Medio actual'} (inactivo)
-                        </option>
-                      ) : null}
+                      <option value="">Sin informar</option>
                       {(mediosDespacho ?? []).map((medio: any) => (
-                        <option key={medio.id} value={String(medio.id)}>
+                        <option key={medio.id} value={medio.id}>
                           {medio.nombre}
                         </option>
                       ))}
                     </select>
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Número de seguimiento
-                    </span>
+                    </label>
                     <input
                       type="text"
                       name="numero_seguimiento"
                       defaultValue={gestionPorta?.numero_seguimiento ?? ''}
                       placeholder="Ej.: código Andreani / Cadetería"
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
 
-                  <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2">
-                    <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Gestión Chip
-                    </div>
-                    <div className="mt-1 text-sm text-gray-500">
+                    </label>
+                    <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500">
                       Pendiente de definición
                     </div>
                   </div>
 
-                  <label className="block sm:col-span-2">
-                    <span className="text-sm font-semibold text-gray-800">
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Observaciones gestión
-                    </span>
+                    </label>
                     <textarea
                       name="observaciones_gestion"
-                      rows={4}
                       defaultValue={gestionPorta?.observaciones_gestion ?? ''}
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      rows={3}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
-                  </label>
+                  </div>
                 </div>
 
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
-                  <div className="text-xs text-gray-500">
-                    Solo se registran en el historial los campos que realmente cambian.
-                  </div>
+                <div className="mt-5 flex justify-end">
                   <button
                     type="submit"
-                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+                    className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
                   >
                     Guardar
                   </button>
                 </div>
-                </fieldset>
-              </form>
+              </fieldset>
+            </form>
             ) : (
-              <div className="text-sm text-gray-500">Esta venta todavía no tiene datos de gestión.</div>
-            )}
-          </section>
-
-          <section className="rounded-2xl border border-gray-200 bg-white p-5">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Historial de cambios
-              </h2>
-              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600">
-                Solo lectura
-              </span>
-            </div>
-
-            {(historial ?? []).length === 0 ? (
-              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
-                Esta operación todavía no tiene cambios registrados en el historial.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {(historial ?? []).map((item: any) => {
-                  const usuarioHistorial =
-                    item.usuario?.vendedor ||
-                    item.usuario?.nombre ||
-                    'Usuario no disponible'
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="rounded-xl border border-gray-200 bg-gray-50 p-4"
-                    >
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <div className="text-sm font-semibold text-gray-900">
-                            {item.etiqueta || item.campo || 'Modificación'}
-                          </div>
-                          <div className="mt-1 text-xs text-gray-500">
-                            {usuarioHistorial}
-                            {item.rol_actor ? ` · ${item.rol_actor}` : ''}
-                            {item.tipo_accion ? ` · ${item.tipo_accion}` : ''}
-                          </div>
-                        </div>
-
-                        <div className="text-xs font-medium text-gray-500">
-                          {fechaArgentina(item.fecha_hora)}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
-                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                            Valor anterior
-                          </div>
-                          <div className="mt-1 break-words text-sm text-gray-700">
-                            {mostrar(item.valor_anterior)}
-                          </div>
-                        </div>
-
-                        <div className="hidden text-center text-gray-400 sm:block">
-                          →
-                        </div>
-
-                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
-                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                            Valor nuevo
-                          </div>
-                          <div className="mt-1 break-words text-sm font-medium text-gray-900">
-                            {mostrar(item.valor_nuevo)}
-                          </div>
-                        </div>
-                      </div>
-
-                      {item.observacion ? (
-                        <div className="mt-3 text-sm text-gray-600">
-                          <span className="font-medium">Observación:</span>{' '}
-                          {item.observacion}
-                        </div>
-                      ) : null}
-                    </div>
-                  )
-                })}
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                Esta venta todavía no tiene datos de gestión.
               </div>
             )}
           </section>

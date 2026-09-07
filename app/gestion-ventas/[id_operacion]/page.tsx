@@ -280,6 +280,105 @@ async function guardarGestionPorta(formData: FormData) {
   redirect('/gestion-ventas')
 }
 
+async function guardarGestionProducto(formData: FormData) {
+  'use server'
+
+  const idOperacion = String(formData.get('id_operacion') ?? '').trim()
+  const productoOperacionId = Number(formData.get('producto_operacion_id') ?? 0)
+  const tipoProducto = String(formData.get('tipo_producto') ?? '').trim().toUpperCase()
+
+  if (!idOperacion || !Number.isInteger(productoOperacionId) || productoOperacionId <= 0) {
+    throw new Error('Producto de operación inválido.')
+  }
+
+  const texto = (nombre: string) => {
+    const valor = String(formData.get(nombre) ?? '').trim()
+    return valor || null
+  }
+
+  const numero = (nombre: string) => {
+    const valor = String(formData.get(nombre) ?? '').trim()
+    if (!valor) return null
+    const n = Number(valor)
+    if (!Number.isInteger(n)) throw new Error(`${nombre} inválido.`)
+    return n
+  }
+
+  const booleano = (nombre: string) => {
+    const valor = String(formData.get(nombre) ?? '').trim()
+    if (valor === 'SI') return true
+    if (valor === 'NO') return false
+    return null
+  }
+
+  const requestHeaders = await headers()
+  const host = requestHeaders.get('x-forwarded-host') || requestHeaders.get('host')
+  if (!host) throw new Error('No se pudo determinar el host de la aplicación.')
+
+  const protocol =
+    requestHeaders.get('x-forwarded-proto') ||
+    (host.includes('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https')
+  const cookie = requestHeaders.get('cookie') || ''
+
+  const esBaf = tipoProducto === 'BAF'
+  const body: Record<string, unknown> = {
+    tipo: esBaf ? 'BAF' : 'PORTA',
+    operacion_id: idOperacion,
+    producto_operacion_id: productoOperacionId,
+    recurso_clave: String(formData.get('recurso_clave') ?? ''),
+    sesion_token: String(formData.get('sesion_token') ?? ''),
+    responsable_id: texto('responsable_id'),
+  }
+
+  if (esBaf) {
+    Object.assign(body, {
+      estado_baf_id: numero('estado_baf_id'),
+      prospector: texto('prospector'),
+      cia_celular: texto('cia_celular'),
+      sds: texto('sds'),
+      orden_trabajo: texto('orden_trabajo'),
+      linea_fija: texto('linea_fija'),
+      fecha_instalacion: texto('fecha_instalacion'),
+      ciclo_cuenta: texto('ciclo_cuenta'),
+      motivo_estado: texto('motivo_estado'),
+    })
+  } else {
+    Object.assign(body, {
+      estado_porta_id: numero('estado_porta_id'),
+      estado_bboo_id: numero('estado_bboo_id'),
+      bboo_id: texto('bboo_id'),
+      sim: texto('sim'),
+      plan_cargado: texto('plan_cargado'),
+      sds: texto('sds'),
+      pin_lnva_nro: texto('pin_lnva_nro'),
+      documentacion_dni: booleano('documentacion_dni'),
+      medio_despacho_chip_id: numero('medio_despacho_chip_id'),
+      numero_seguimiento: texto('numero_seguimiento'),
+      observaciones_gestion: texto('observaciones_gestion'),
+    })
+  }
+
+  const response = await fetch(`${protocol}://${host}/api/gestion/venta`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  })
+
+  const resultado = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(resultado?.error || `No se pudo guardar la gestión. Código HTTP ${response.status}.`)
+  }
+
+  revalidatePath(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/gestion-ventas')
+  revalidatePath(`/mis-ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/mis-ventas')
+  revalidatePath(`/super/ventas/${encodeURIComponent(idOperacion)}`)
+  revalidatePath('/super')
+  redirect(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
+}
+
 export default async function DetalleVentaPage({
   params,
   searchParams,
@@ -551,6 +650,307 @@ export default async function DetalleVentaPage({
       .eq('id', bloqueo.usuario_id)
       .maybeSingle()
     usuarioBloqueo = perfilBloqueo?.vendedor || perfilBloqueo?.nombre || null
+  }
+
+  // ================================================================
+  // NUEVA ARQUITECTURA MULTIPRODUCTO
+  // Si la operación posee operacion_productos, esta rama es la fuente de verdad.
+  // Las ventas históricas continúan por el flujo legacy de más abajo.
+  // ================================================================
+  const { data: productosMultiproducto, error: productosMultiproductoError } = await admin
+    .from('operacion_productos')
+    .select('*')
+    .eq('operacion_id', id)
+    .eq('activo', true)
+    .order('orden', { ascending: true })
+
+  if (productosMultiproductoError) {
+    throw new Error(`No se pudieron cargar los productos de la operación: ${productosMultiproductoError.message}`)
+  }
+
+  if ((productosMultiproducto ?? []).length > 0) {
+    const productos = productosMultiproducto ?? []
+    const idsProductos = productos.map((p: any) => Number(p.id))
+
+    const [
+      bafDetalleResult,
+      movilDetalleResult,
+      bafGestionResult,
+      movilGestionResult,
+      contextoResult,
+    ] = await Promise.all([
+      admin.from('operacion_producto_baf').select('*').in('producto_operacion_id', idsProductos),
+      admin.from('operacion_producto_movil').select('*').in('producto_operacion_id', idsProductos),
+      admin.from('gestion_producto_baf').select('*').in('producto_operacion_id', idsProductos),
+      admin.from('gestion_producto_movil').select('*').in('producto_operacion_id', idsProductos),
+      admin.from('operacion_contexto_comercial').select('*').eq('operacion_id', id).maybeSingle(),
+    ])
+
+    for (const resultado of [bafDetalleResult, movilDetalleResult, bafGestionResult, movilGestionResult, contextoResult]) {
+      if (resultado.error) {
+        throw new Error(`No se pudo cargar la gestión multiproducto: ${resultado.error.message}`)
+      }
+    }
+
+    const bafDetalle = new Map((bafDetalleResult.data ?? []).map((x: any) => [Number(x.producto_operacion_id), x]))
+    const movilDetalle = new Map((movilDetalleResult.data ?? []).map((x: any) => [Number(x.producto_operacion_id), x]))
+    const bafGestion = new Map((bafGestionResult.data ?? []).map((x: any) => [Number(x.producto_operacion_id), x]))
+    const movilGestion = new Map((movilGestionResult.data ?? []).map((x: any) => [Number(x.producto_operacion_id), x]))
+    const contexto: any = contextoResult.data ?? null
+
+    const habilitaciones = new Map<number, any>()
+    for (const producto of productos) {
+      if (['PORTA', 'LINEA_NUEVA'].includes(String(producto.tipo_producto))) {
+        const { data: h, error: hError } = await admin.rpc('evaluar_habilitacion_producto_movil', {
+          p_producto_operacion_id: Number(producto.id),
+        })
+        if (hError) throw new Error(`No se pudo evaluar la habilitación móvil: ${hError.message}`)
+        const valor = Array.isArray(h) ? h[0] : h
+        habilitaciones.set(Number(producto.id), valor)
+      }
+    }
+
+    const clienteMulti: any = op.cliente
+    const domicilioMulti: any = op.domicilio
+    const nombreResponsableProducto = (idResponsable: string | null | undefined) => {
+      if (!idResponsable) return 'Sin asignar'
+      const r = (responsables ?? []).find((x: any) => x.id === idResponsable)
+      return r?.vendedor || r?.nombre || 'Usuario no disponible'
+    }
+
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <AppHeader
+          rol={profile.rol}
+          usuario={profile.nombre?.trim() || user.email || 'Usuario'}
+          actual="GESTION_VENTAS"
+          puedeGestionarVentas={profile.puede_gestionar_ventas === true}
+        />
+
+        <div className="mx-auto max-w-6xl p-4 sm:p-8">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="mb-2 flex flex-wrap gap-2">
+                <span className="rounded-full bg-gray-900 px-3 py-1 text-xs font-semibold text-white">MULTIPRODUCTO</span>
+                {contexto?.es_conexion_full === true && (
+                  <span className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white">CONEXIÓN FULL</span>
+                )}
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900">Gestión de Venta</h1>
+              <p className="mt-1 break-all text-sm text-gray-500">Operación: {op.id_operacion}</p>
+            </div>
+            <a href="/gestion-ventas" className="text-sm font-medium text-gray-600 hover:text-gray-900">Volver a Gestión de Ventas</a>
+          </div>
+
+          <GestionBloqueoControls
+            tipoRecurso="VENTA"
+            recursoClave={String(op.id_operacion)}
+            idOperacion={op.id_operacion}
+            editando={puedeEditar}
+            sesionToken={puedeEditar ? sesionTokenSolicitado : null}
+            bloqueado={bloqueoVigente}
+            bloqueoPropio={bloqueoPropio}
+            usuarioBloqueo={usuarioBloqueo}
+            bloqueadoDesde={bloqueo?.bloqueado_desde ?? null}
+          />
+
+          <div className="space-y-5">
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Operación</h2>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Campo label="Fecha / Hora" value={fechaArgentina(op.fecha_hora)} />
+                <Campo label="Vendedor" value={op.vendedor} />
+                <Campo label="Origen del dato" value={op.origen_dato} />
+                <Campo label="Cantidad de productos" value={productos.length} />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Cliente</h2>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Campo label="Apellido y Nombre" value={[clienteMulti?.apellido, clienteMulti?.nombre].filter(Boolean).join(', ')} />
+                <Campo label="Documento" value={`${clienteMulti?.tipo_documento ? `${clienteMulti.tipo_documento} ` : ''}${clienteMulti?.dni || ''}`} />
+                <Campo label="Fecha de nacimiento" value={fechaSimple(clienteMulti?.fecha_nacimiento)} />
+                <Campo label="Correo electrónico" value={clienteMulti?.email} />
+                <Campo label="Teléfono" value={clienteMulti?.telefono} />
+                <Campo label="Teléfono alternativo" value={clienteMulti?.telefono_alternativo} />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Domicilio</h2>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Campo label="Calle / Número" value={domicilioMulti?.calle_nro} />
+                <Campo label="Piso / Dpto" value={[domicilioMulti?.piso, domicilioMulti?.dpto].filter(Boolean).join(' / ')} />
+                <Campo label="Entre calles" value={domicilioMulti?.entre_calles} />
+                <Campo label="Barrio" value={domicilioMulti?.barrio} />
+                <Campo label="Localidad" value={domicilioMulti?.localidad} />
+                <Campo label="Coordenadas" value={domicilioMulti?.coordenadas} />
+                <Campo label="Datos extras" value={domicilioMulti?.datos_extras} ancho />
+              </div>
+            </section>
+
+            {contexto?.es_conexion_full === true && (
+              <section className="rounded-2xl border border-red-200 bg-red-50/40 p-5">
+                <h2 className="mb-4 text-lg font-semibold text-gray-900">Conexión Full</h2>
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <Campo label="Modalidad" value={contexto.modalidad_conexion_full} />
+                  <Campo label="Servicios convergentes" value={contexto.cantidad_servicios} />
+                  <Campo label="Referencia habilitante" value={contexto.tipo_referencia_habilitante} />
+                  <Campo label="Referencia" value={contexto.referencia_habilitante} />
+                  <Campo label="Descuento convergencia" value={contexto.descuento_convergencia != null ? `$ ${Number(contexto.descuento_convergencia).toLocaleString('es-AR')}` : '-'} />
+                </div>
+              </section>
+            )}
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold text-gray-900">Servicios contratados</h2>
+                <span className="text-xs text-gray-500">Cada producto conserva su propia gestión y Responsable.</span>
+              </div>
+
+              <div className="space-y-5">
+                {[...productos].sort((a: any, b: any) => {
+                  if (a.tipo_producto === 'BAF' && b.tipo_producto !== 'BAF') return -1
+                  if (b.tipo_producto === 'BAF' && a.tipo_producto !== 'BAF') return 1
+                  return Number(a.orden ?? 0) - Number(b.orden ?? 0)
+                }).map((producto: any) => {
+                  const productoId = Number(producto.id)
+                  const esBaf = producto.tipo_producto === 'BAF'
+                  const esLineaNueva = producto.tipo_producto === 'LINEA_NUEVA'
+                  const detalle: any = esBaf ? bafDetalle.get(productoId) : movilDetalle.get(productoId)
+                  const gestion: any = esBaf ? bafGestion.get(productoId) : movilGestion.get(productoId)
+                  const habilitacion: any = esBaf ? { habilitado: true, motivo: 'GESTION_BAF' } : habilitaciones.get(productoId)
+                  const habilitado = esBaf || habilitacion?.habilitado === true
+                  const puedeEditarProducto = puedeEditar && habilitado
+                  const responsableActual = producto.responsable_id ?? gestion?.responsable_id ?? null
+
+                  return (
+                    <div key={productoId} className="overflow-hidden rounded-2xl border border-gray-200 bg-gray-50/40">
+                      <div className="border-b border-gray-200 bg-white p-5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap gap-2">
+                              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${esBaf ? 'bg-gray-900 text-white' : esLineaNueva ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}`}>
+                                {esBaf ? 'BAF' : esLineaNueva ? 'LÍNEA NUEVA' : 'PORTA'}
+                              </span>
+                              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${habilitado ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-900'}`}>
+                                {habilitado ? 'Habilitado' : 'Pendiente de habilitación'}
+                              </span>
+                            </div>
+                            <h3 className="mt-3 text-lg font-semibold text-gray-900">{producto.producto_snapshot}</h3>
+                            <p className="mt-1 text-sm text-gray-600">Plan: {producto.plan_snapshot || '-'}</p>
+                          </div>
+                          <div className="text-right text-xs text-gray-500">
+                            <div>Producto #{productoId}</div>
+                            <div className="mt-1">Responsable: <span className="font-semibold text-gray-700">{nombreResponsableProducto(responsableActual)}</span></div>
+                          </div>
+                        </div>
+
+                        {!esBaf && !habilitado && (
+                          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                            <div className="font-semibold">Gestión móvil bloqueada</div>
+                            <div className="mt-1">{habilitacion?.motivo === 'BAF_NUEVO_PENDIENTE_OT' ? 'Falta una Orden de Trabajo BAF válida de exactamente 8 dígitos.' : habilitacion?.motivo || 'El producto todavía no está habilitado.'}</div>
+                            <div className="mt-1 text-xs">Motivo técnico: {habilitacion?.motivo || '-'}</div>
+                          </div>
+                        )}
+
+                        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          {esBaf ? (
+                            <>
+                              <Campo label="Modalidad" value={detalle?.modalidad_plan} />
+                              <Campo label="TV" value={detalle?.tv} />
+                              <Campo label="Cantidad DECOS" value={detalle?.cantidad_decos} />
+                              <Campo label="Horario / Observaciones" value={detalle?.horario_contacto} ancho />
+                            </>
+                          ) : (
+                            <>
+                              <Campo label="NIM / Línea" value={detalle?.nim || detalle?.numero_linea} />
+                              <Campo label="Compañía actual" value={detalle?.compania_actual} />
+                              <Campo label="PRE / POS" value={detalle?.modalidad_actual} />
+                              <Campo label="Tipo SIM" value={detalle?.tipo_sim} />
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <form
+                        key={`${productoId}-${gestion?.updated_at ?? 'sin-gestion'}`}
+                        action={guardarGestionProducto}
+                        className="p-5"
+                      >
+                        <input type="hidden" name="id_operacion" value={op.id_operacion} />
+                        <input type="hidden" name="producto_operacion_id" value={productoId} />
+                        <input type="hidden" name="tipo_producto" value={producto.tipo_producto} />
+                        <input type="hidden" name="recurso_clave" value={String(op.id_operacion)} />
+                        <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
+
+                        <fieldset disabled={!puedeEditarProducto}>
+                          <div className="mb-4">
+                            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Responsable</label>
+                            <select name="responsable_id" defaultValue={responsableActual ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">
+                              <option value="">Sin responsable asignado</option>
+                              {(responsables ?? []).map((r: any) => <option key={r.id} value={r.id}>{r.vendedor || r.nombre || r.id}</option>)}
+                            </select>
+                            {profile.rol === 'BBOO' && <p className="mt-1 text-xs text-gray-500">BBOO conserva el Responsable comercial actual.</p>}
+                          </div>
+
+                          {esBaf ? (
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Estado BAF</label><select name="estado_baf_id" defaultValue={gestion?.estado_baf_id ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin estado</option>{(estadosBaf ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">CIA Celular</label><select name="cia_celular" defaultValue={gestion?.cia_celular ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar compañía</option><option>CLARO</option><option>PERSONAL</option><option>MOVISTAR</option><option>TUENTI</option></select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Prospector</label><input name="prospector" defaultValue={gestion?.prospector ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><input name="sds" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Orden Trabajo</label><input name="orden_trabajo" inputMode="numeric" pattern="[0-9]{8}" maxLength={8} defaultValue={gestion?.orden_trabajo ?? ''} placeholder="8 dígitos" className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /><p className="mt-1 text-xs text-gray-500">En Conexión Full con BAF nuevo, esta OT habilita automáticamente PORTA/LN.</p></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Línea Fija</label><input name="linea_fija" defaultValue={gestion?.linea_fija ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Ciclo Cuenta</label><input name="ciclo_cuenta" defaultValue={gestion?.ciclo_cuenta ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Instalación</label><input name="fecha_instalacion" defaultValue={gestion?.fecha_instalacion ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Motivo Estado</label><textarea name="motivo_estado" defaultValue={gestion?.motivo_estado ?? ''} rows={3} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Estado Vendedor</label><select name="estado_porta_id" defaultValue={gestion?.estado_porta_id ?? ''} disabled={profile.rol === 'BBOO'} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin estado</option>{(estadosPorta ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Estado BBOO</label><select name="estado_bboo_id" defaultValue={gestion?.estado_bboo_id ?? ''} disabled={profile.rol === 'VENDEDOR'} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin estado</option>{(estadosBboo ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
+                              <input type="hidden" name="bboo_id" value={profile.rol === 'BBOO' ? user.id : gestion?.bboo_id ?? ''} />
+                              <div>
+                                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Carga STL</label>
+                                <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
+                                  {fechaArgentina(gestion?.fecha_carga_stl ?? null)}
+                                </div>
+                                <p className="mt-1 text-xs text-gray-500">Automática al establecer Estado Vendedor = CARGADO STL.</p>
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha PORTA</label>
+                                <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
+                                  {fechaArgentina(gestion?.fecha_porta ?? null)}
+                                </div>
+                                <p className="mt-1 text-xs text-gray-500">Automática al establecer Estado Vendedor = ACTIVA NRO PORTADO.</p>
+                              </div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SIM</label><input name="sim" inputMode="numeric" defaultValue={gestion?.sim ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</label><select name="plan_cargado" defaultValue={gestion?.plan_cargado || producto.plan_snapshot || ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar plan</option>{(() => { const actual = String(gestion?.plan_cargado || producto.plan_snapshot || '').trim(); const activos = (planesPorta ?? []).map((p: any) => String(p.nombre ?? '').trim()).filter(Boolean); const opciones = actual && !activos.includes(actual) ? [actual, ...activos] : activos; return opciones.map((nombre: string) => <option key={nombre} value={nombre}>{nombre}</option>) })()}</select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><input name="sds" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">PIN / LNVA NRO</label><input name="pin_lnva_nro" defaultValue={gestion?.pin_lnva_nro ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Documentación DNI</label><select name="documentacion_dni" defaultValue={gestion?.documentacion_dni === true ? 'SI' : gestion?.documentacion_dni === false ? 'NO' : ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin informar</option><option value="SI">SI</option><option value="NO">NO</option></select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Medio de despacho CHIP</label><select name="medio_despacho_chip_id" defaultValue={gestion?.medio_despacho_chip_id ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin informar</option>{(mediosDespacho ?? []).map((m: any) => <option key={m.id} value={m.id}>{m.nombre}</option>)}</select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Número de seguimiento</label><input name="numero_seguimiento" defaultValue={gestion?.numero_seguimiento ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Observaciones gestión</label><textarea name="observaciones_gestion" defaultValue={gestion?.observaciones_gestion ?? ''} rows={3} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                            </div>
+                          )}
+
+                          <div className="mt-5 flex justify-end">
+                            <button type="submit" className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-300">Guardar {esBaf ? 'BAF' : esLineaNueva ? 'Línea Nueva' : 'PORTA'}</button>
+                          </div>
+                        </fieldset>
+                      </form>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    )
   }
 
   // Para el Vendedor Gestor no dependemos de los joins embebidos de PostgREST:

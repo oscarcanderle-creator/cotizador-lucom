@@ -89,74 +89,99 @@ function nombreCliente(cliente: any) {
   return [apellido, nombre].filter(Boolean).join(', ') || '-'
 }
 
-function tipoVisible(operacion: any) {
-  if (
-    operacion.tipo === 'PORTA' &&
-    operacion.operaciones_porta?.es_linea_nueva
-  ) {
-    return 'LN'
+function tiposOperacion(operacion: any): string[] {
+  const productos = Array.isArray(operacion.productos_nuevos)
+    ? operacion.productos_nuevos
+    : []
+
+  if (productos.length > 0) {
+    return Array.from(
+      new Set(
+        productos.map((p: any) =>
+          p.tipo_producto === 'LINEA_NUEVA' ? 'LN' : String(p.tipo_producto)
+        )
+      )
+    ) as string[]
   }
 
-  return operacion.tipo
+  if (operacion.tipo === 'PORTA' && operacion.operaciones_porta?.es_linea_nueva) {
+    return ['LN']
+  }
+
+  return [String(operacion.tipo)]
+}
+
+function tipoVisible(operacion: any) {
+  return tiposOperacion(operacion).join(' + ')
 }
 
 function productoVisible(operacion: any) {
-  if (operacion.tipo === 'BAF') {
-    return operacion.operaciones_baf?.plan || '-'
+  const productos = Array.isArray(operacion.productos_nuevos)
+    ? operacion.productos_nuevos
+    : []
+
+  if (productos.length > 0) {
+    return productos
+      .map((p: any) => {
+        const tipo = p.tipo_producto === 'LINEA_NUEVA' ? 'LN' : p.tipo_producto
+        return `${tipo} · ${p.plan_snapshot || p.producto_snapshot || '-'}`
+      })
+      .join(' | ')
   }
+
+  if (operacion.tipo === 'BAF') return operacion.operaciones_baf?.plan || '-'
 
   if (operacion.tipo === 'PORTA') {
     const porta = operacion.operaciones_porta
-
     if (!porta) return '-'
-
-    if (porta.es_linea_nueva) {
-      return porta.gigas_acordados
-        ? `Línea Nueva · ${porta.gigas_acordados}`
-        : 'Línea Nueva'
-    }
-
-    return porta.gigas_acordados
-      ? `Portabilidad · ${porta.gigas_acordados}`
-      : 'Portabilidad'
+    if (porta.es_linea_nueva) return porta.gigas_acordados ? `Línea Nueva · ${porta.gigas_acordados}` : 'Línea Nueva'
+    return porta.gigas_acordados ? `Portabilidad · ${porta.gigas_acordados}` : 'Portabilidad'
   }
 
   return '-'
 }
 
 function estadoVisible(operacion: any) {
-  if (operacion.tipo === 'BAF') {
-    return operacion.gestion_baf?.estado_nombre || 'Sin gestión'
+  const productos = Array.isArray(operacion.productos_nuevos)
+    ? operacion.productos_nuevos
+    : []
+
+  if (productos.length > 0) {
+    return productos
+      .map((p: any) => {
+        const tipo = p.tipo_producto === 'LINEA_NUEVA' ? 'LN' : p.tipo_producto
+        if (p.tipo_producto === 'BAF') return `${tipo}: ${p.gestion?.estado_nombre || 'Sin gestión'}`
+        if (p.habilitacion && p.habilitacion.habilitado === false) return `${tipo}: Pendiente OT`
+        return `${tipo}: ${p.gestion?.estado_nombre || 'Sin gestión'}`
+      })
+      .join(' | ')
   }
 
-  if (operacion.tipo === 'PORTA') {
-    return operacion.gestion_porta?.estado_nombre || 'Sin gestión'
-  }
-
+  if (operacion.tipo === 'BAF') return operacion.gestion_baf?.estado_nombre || 'Sin gestión'
+  if (operacion.tipo === 'PORTA') return operacion.gestion_porta?.estado_nombre || 'Sin gestión'
   return 'Sin gestión'
 }
 
-function lineaVisible(
-  operacion: any,
-  cantidadLineasGrupo: Map<string, number>
-) {
-  if (operacion.tipo !== 'PORTA') return '-'
+function lineaVisible(operacion: any, cantidadLineasGrupo: Map<string, number>) {
+  const productos = Array.isArray(operacion.productos_nuevos) ? operacion.productos_nuevos : []
+  if (productos.length > 0) {
+    const moviles = productos.filter((p: any) => ['PORTA', 'LINEA_NUEVA'].includes(p.tipo_producto))
+    if (moviles.length === 0) return '-'
+    return moviles.map((p: any, i: number) => {
+      const d = p.detalle || {}
+      const tipo = p.tipo_producto === 'LINEA_NUEVA' ? 'LN' : 'PORTA'
+      const nim = tipo === 'PORTA' && String(d.nim ?? '').trim() ? ` · ${String(d.nim).trim()}` : ''
+      return `Línea ${d.numero_linea ?? i + 1} de ${moviles.length} · ${tipo}${nim}`
+    }).join(' | ')
+  }
 
+  if (operacion.tipo !== 'PORTA') return '-'
   const porta = operacion.operaciones_porta
   if (!porta) return '-'
-
   const numero = porta.numero_linea ?? '-'
-  const cantidad = operacion.grupo_operacion
-    ? cantidadLineasGrupo.get(operacion.grupo_operacion) ?? 1
-    : 1
-
+  const cantidad = operacion.grupo_operacion ? cantidadLineasGrupo.get(operacion.grupo_operacion) ?? 1 : 1
   const tipo = porta.es_linea_nueva ? 'LN' : 'PORTA'
-
-  const nim =
-    !porta.es_linea_nueva && String(porta.nim ?? '').trim()
-      ? ` · ${String(porta.nim).trim()}`
-      : ''
-
+  const nim = !porta.es_linea_nueva && String(porta.nim ?? '').trim() ? ` · ${String(porta.nim).trim()}` : ''
   return `Línea ${numero} de ${cantidad} · ${tipo}${nim}`
 }
 
@@ -299,6 +324,7 @@ export default async function GestionVentasPage({
     gestionPortaResultado,
     perfilesResultado,
     mediosDespachoResultado,
+    productosNuevosResultado,
   ] = await Promise.all([
     idsClientes.length > 0
       ? admin
@@ -352,6 +378,15 @@ export default async function GestionVentasPage({
       .from('medios_despacho_chip')
       .select('id, nombre')
       .order('nombre', { ascending: true }),
+
+    idsOperaciones.length > 0
+      ? admin
+          .from('operacion_productos')
+          .select('id, operacion_id, tipo_producto, responsable_id, orden, producto_snapshot, plan_snapshot')
+          .in('operacion_id', idsOperaciones)
+          .eq('activo', true)
+          .order('orden', { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
   ])
 
   if (clientesResultado.error) {
@@ -396,9 +431,37 @@ export default async function GestionVentasPage({
     )
   }
 
+  if (productosNuevosResultado.error) {
+    throw new Error(
+      `No se pudieron cargar los productos de la nueva arquitectura: ${productosNuevosResultado.error.message}`
+    )
+  }
+
+  const productosNuevos = productosNuevosResultado.data ?? []
+  const idsProductosNuevos = productosNuevos.map((p: any) => p.id)
+
+  const [detalleBafNuevoResultado, detalleMovilNuevoResultado, gestionBafNuevaResultado, gestionMovilNuevaResultado] = await Promise.all([
+    idsProductosNuevos.length > 0
+      ? admin.from('operacion_producto_baf').select('*').in('producto_operacion_id', idsProductosNuevos)
+      : Promise.resolve({ data: [], error: null }),
+    idsProductosNuevos.length > 0
+      ? admin.from('operacion_producto_movil').select('*').in('producto_operacion_id', idsProductosNuevos)
+      : Promise.resolve({ data: [], error: null }),
+    idsProductosNuevos.length > 0
+      ? admin.from('gestion_producto_baf').select('*').in('producto_operacion_id', idsProductosNuevos)
+      : Promise.resolve({ data: [], error: null }),
+    idsProductosNuevos.length > 0
+      ? admin.from('gestion_producto_movil').select('*').in('producto_operacion_id', idsProductosNuevos)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+
+  for (const resultado of [detalleBafNuevoResultado, detalleMovilNuevoResultado, gestionBafNuevaResultado, gestionMovilNuevaResultado]) {
+    if (resultado.error) throw new Error(`No se pudo cargar la arquitectura multiproducto: ${resultado.error.message}`)
+  }
+
   const estadosBafIds = Array.from(
     new Set(
-      (gestionBafResultado.data ?? [])
+      [...(gestionBafResultado.data ?? []), ...(gestionBafNuevaResultado.data ?? [])]
         .map((g: any) => g.estado_baf_id)
         .filter(Boolean)
     )
@@ -406,7 +469,7 @@ export default async function GestionVentasPage({
 
   const estadosPortaIds = Array.from(
     new Set(
-      (gestionPortaResultado.data ?? [])
+      [...(gestionPortaResultado.data ?? []), ...(gestionMovilNuevaResultado.data ?? [])]
         .map((g: any) => g.estado_porta_id)
         .filter(Boolean)
     )
@@ -414,7 +477,7 @@ export default async function GestionVentasPage({
 
   const estadosBbooIds = Array.from(
     new Set(
-      (gestionPortaResultado.data ?? [])
+      [...(gestionPortaResultado.data ?? []), ...(gestionMovilNuevaResultado.data ?? [])]
         .map((g: any) => g.estado_bboo_id)
         .filter(Boolean)
     )
@@ -519,6 +582,42 @@ export default async function GestionVentasPage({
     ])
   )
 
+  const detalleBafNuevoPorProducto = new Map((detalleBafNuevoResultado.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
+  const detalleMovilNuevoPorProducto = new Map((detalleMovilNuevoResultado.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
+  const gestionBafNuevaPorProducto = new Map((gestionBafNuevaResultado.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
+  const gestionMovilNuevaPorProducto = new Map((gestionMovilNuevaResultado.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
+
+  const productosPorOperacion = new Map<string, any[]>()
+  for (const producto of productosNuevos) {
+    const gestionBase = producto.tipo_producto === 'BAF'
+      ? gestionBafNuevaPorProducto.get(producto.id)
+      : gestionMovilNuevaPorProducto.get(producto.id)
+    const gestion = gestionBase
+      ? {
+          ...gestionBase,
+          estado_nombre: producto.tipo_producto === 'BAF'
+            ? (gestionBase.estado_baf_id ? estadoBafPorId.get(gestionBase.estado_baf_id) ?? null : null)
+            : (gestionBase.estado_porta_id ? estadoPortaPorId.get(gestionBase.estado_porta_id) ?? null : null),
+          estado_vendedor_nombre: gestionBase.estado_porta_id ? estadoPortaPorId.get(gestionBase.estado_porta_id) ?? null : null,
+          estado_bboo_nombre: gestionBase.estado_bboo_id ? estadoBbooPorId.get(gestionBase.estado_bboo_id) ?? null : null,
+        }
+      : null
+    const detalle = producto.tipo_producto === 'BAF'
+      ? detalleBafNuevoPorProducto.get(producto.id) ?? null
+      : detalleMovilNuevoPorProducto.get(producto.id) ?? null
+
+    let habilitacion: any = null
+    if (['PORTA', 'LINEA_NUEVA'].includes(producto.tipo_producto)) {
+      const { data } = await admin.rpc('evaluar_habilitacion_producto_movil', { p_producto_operacion_id: producto.id })
+      habilitacion = Array.isArray(data) ? data[0] ?? null : data
+    }
+
+    const completo = { ...producto, detalle, gestion, habilitacion }
+    const lista = productosPorOperacion.get(producto.operacion_id) ?? []
+    lista.push(completo)
+    productosPorOperacion.set(producto.operacion_id, lista)
+  }
+
   const operacionesCompletas = operaciones.map((operacion: any) => ({
     ...operacion,
     cliente: operacion.cliente_id
@@ -532,6 +631,7 @@ export default async function GestionVentasPage({
       gestionBafPorOperacion.get(operacion.id_operacion) ?? null,
     gestion_porta:
       gestionPortaPorOperacion.get(operacion.id_operacion) ?? null,
+    productos_nuevos: productosPorOperacion.get(operacion.id_operacion) ?? [],
   }))
 
   const cantidadLineasGrupo = new Map<string, number>()
@@ -564,26 +664,30 @@ export default async function GestionVentasPage({
   ) as string[]
   companias.sort((a, b) => a.localeCompare(b, 'es'))
 
-  const nombreResponsable = (operacion: any) => {
-    const responsableId =
-      operacion.tipo === 'BAF'
-        ? operacion.gestion_baf?.responsable_id
-        : operacion.gestion_porta?.responsable_id
-
-    if (!responsableId) return 'Sin responsable'
-
-    const perfil = perfiles.find(
-      (item: any) => item.id === responsableId
-    )
-
-    return (
-      perfil?.vendedor ||
-      perfil?.nombre ||
-      'Usuario no disponible'
-    )
+  const nombresResponsables = (operacion: any) => {
+    const productos = Array.isArray(operacion.productos_nuevos) ? operacion.productos_nuevos : []
+    if (productos.length > 0) {
+      const nombres = productos.map((p: any) => {
+        const id = p.responsable_id || p.gestion?.responsable_id
+        if (!id) return 'Sin responsable'
+        const perfil = perfiles.find((item: any) => item.id === id)
+        return perfil?.vendedor || perfil?.nombre || 'Usuario no disponible'
+      })
+      return Array.from(new Set(nombres)) as string[]
+    }
+    const responsableId = operacion.tipo === 'BAF' ? operacion.gestion_baf?.responsable_id : operacion.gestion_porta?.responsable_id
+    if (!responsableId) return ['Sin responsable']
+    const perfil = perfiles.find((item: any) => item.id === responsableId)
+    return [perfil?.vendedor || perfil?.nombre || 'Usuario no disponible']
   }
 
+  const nombreResponsable = (operacion: any) => nombresResponsables(operacion).join(' | ')
+
   const fechaUltimaGestion = (operacion: any) => {
+    if (Array.isArray(operacion.productos_nuevos) && operacion.productos_nuevos.length > 0) {
+      const fechas = operacion.productos_nuevos.map((p: any) => p.gestion?.updated_at || p.gestion?.fecha_gestion).filter(Boolean).sort()
+      return fechas.length ? fechas[fechas.length - 1] : null
+    }
     if (operacion.tipo === 'BAF') {
       return (
         operacion.gestion_baf?.updated_at ||
@@ -605,13 +709,13 @@ export default async function GestionVentasPage({
 
   const responsables = Array.from(
     new Set(
-      operacionesCompletas.map((o: any) => nombreResponsable(o))
+      operacionesCompletas.flatMap((o: any) => nombresResponsables(o))
     )
   ) as string[]
 
   const estados = Array.from(
     new Set(
-      operacionesCompletas.map((o: any) => estadoVisible(o))
+      operacionesCompletas.flatMap((o: any) => { const p=o.productos_nuevos??[]; return p.length ? p.map((x:any)=> x.tipo_producto==='BAF' ? (x.gestion?.estado_nombre||'Sin gestión') : (x.habilitacion?.habilitado===false ? 'Pendiente OT' : (x.gestion?.estado_nombre||'Sin gestión'))) : [estadoVisible(o)] })
     )
   ) as string[]
 
@@ -781,6 +885,36 @@ export default async function GestionVentasPage({
     const porta = operacion.operaciones_porta
     const gestionPorta = operacion.gestion_porta
     const gestionBaf = operacion.gestion_baf
+    const productosNuevos = Array.isArray(operacion.productos_nuevos) ? operacion.productos_nuevos : []
+    const esNueva = productosNuevos.length > 0
+    const bafNuevo = productosNuevos.find((p: any) => p.tipo_producto === 'BAF')
+    const movilesNuevos = productosNuevos.filter((p: any) => ['PORTA', 'LINEA_NUEVA'].includes(p.tipo_producto))
+    const valoresMoviles = (fn: (p: any) => any) => movilesNuevos.map(fn).filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '').join(' | ') || '-'
+
+    if (esNueva) {
+      switch (campo) {
+        case 'tipo': return tipoVisible(operacion)
+        case 'responsable': return nombreResponsable(operacion)
+        case 'numero_linea': return valoresMoviles((p) => p.detalle?.numero_linea)
+        case 'compania_actual': return valoresMoviles((p) => p.detalle?.compania_actual)
+        case 'tipo_sim': return valoresMoviles((p) => p.detalle?.tipo_sim === 'ESIM' ? 'eSIM' : p.detalle?.tipo_sim)
+        case 'plan_acordado': return valoresMoviles((p) => p.plan_snapshot)
+        case 'plan_cargado': return valoresMoviles((p) => p.gestion?.plan_cargado)
+        case 'estado_vendedor': return valoresMoviles((p) => p.habilitacion?.habilitado === false ? 'Pendiente OT' : (p.gestion?.estado_vendedor_nombre || 'Sin gestión'))
+        case 'estado_bboo': return valoresMoviles((p) => p.habilitacion?.habilitado === false ? 'Pendiente OT' : (p.gestion?.estado_bboo_nombre || 'Sin gestión'))
+        case 'estado_baf': return bafNuevo?.gestion?.estado_nombre || (bafNuevo ? 'Sin gestión' : '-')
+        case 'bboo': return valoresMoviles((p) => nombrePerfilPorId(p.gestion?.bboo_id))
+        case 'fecha_carga_stl': return movilesNuevos.find((p: any) => p.gestion?.fecha_carga_stl)?.gestion?.fecha_carga_stl || null
+        case 'fecha_porta': return movilesNuevos.find((p: any) => p.gestion?.fecha_porta)?.gestion?.fecha_porta || null
+        case 'medio_despacho_chip': return valoresMoviles((p) => p.gestion?.medio_despacho_chip_id ? medioDespachoPorId.get(p.gestion.medio_despacho_chip_id) : '')
+        case 'numero_seguimiento': return valoresMoviles((p) => p.gestion?.numero_seguimiento)
+        case 'pin': return valoresMoviles((p) => p.gestion?.pin_lnva_nro)
+        case 'sim_operativo': return valoresMoviles((p) => p.gestion?.sim)
+        case 'sds': return [bafNuevo?.gestion?.sds, ...movilesNuevos.map((p: any) => p.gestion?.sds)].filter(Boolean).join(' | ') || '-'
+        case 'fecha_instalacion': return bafNuevo?.gestion?.fecha_instalacion || null
+        case 'orden_trabajo': return bafNuevo?.gestion?.orden_trabajo || '-'
+      }
+    }
 
     switch (campo) {
       case 'fecha_ingreso':
@@ -899,9 +1033,9 @@ export default async function GestionVentasPage({
     anchoAccion
 
   const ventasFiltradas = operacionesCompletas.filter((operacion: any) => {
-    const tipo = tipoVisible(operacion)
+    const tipos = tiposOperacion(operacion)
 
-    if (filtroTipo && filtroTipo !== tipo) return false
+    if (filtroTipo && !tipos.includes(filtroTipo)) return false
 
     if (
       filtroVendedor &&
@@ -912,14 +1046,14 @@ export default async function GestionVentasPage({
 
     if (
       filtroResponsable &&
-      nombreResponsable(operacion) !== filtroResponsable
+      !nombresResponsables(operacion).includes(filtroResponsable)
     ) {
       return false
     }
 
     if (
       filtroEstado &&
-      estadoVisible(operacion) !== filtroEstado
+      !estadoVisible(operacion).includes(filtroEstado)
     ) {
       return false
     }
@@ -945,6 +1079,8 @@ export default async function GestionVentasPage({
       lineaVisible(operacion, cantidadLineasGrupo),
       productoVisible(operacion),
       estadoVisible(operacion),
+      productoVisible(operacion),
+      ...(operacion.productos_nuevos ?? []).flatMap((p: any) => [p.tipo_producto, p.plan_snapshot, p.producto_snapshot, p.detalle?.nim, p.detalle?.numero_linea, p.detalle?.compania_actual]),
     ]
       .filter(Boolean)
       .join(' ')
