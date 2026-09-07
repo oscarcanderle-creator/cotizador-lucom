@@ -6,7 +6,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const SPREADSHEET_ID_PRUEBA = '1zVmiFIvTx9FlAuijQd_3QndOOR4Sui7iQTiOBvoVvTA'
-const HOJA_PRUEBA = 'Precios_Planes_Claro'
+const HOJA_PRUEBA = 'Precios'
 
 type Producto = {
   producto: string
