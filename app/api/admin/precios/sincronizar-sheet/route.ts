@@ -17,6 +17,14 @@ type Producto = {
   activo: boolean
 }
 
+type PromocionFlash = {
+  origen: string
+  porcentaje: number | null
+  fecha_desde: string
+  fecha_hasta: string
+  activo: boolean
+}
+
 function normalizar(value: string | null | undefined) {
   return String(value ?? '')
     .trim()
@@ -68,6 +76,28 @@ function buscarProducto(
   return encontrado
 }
 
+function obtenerFlashVigente(
+  promociones: PromocionFlash[],
+  origen: string,
+  ahora: Date
+) {
+  return promociones
+    .filter((promo) => {
+      if (!promo.activo) return false
+      if (normalizar(promo.origen) !== normalizar(origen)) return false
+
+      const desde = new Date(promo.fecha_desde)
+      const hasta = new Date(promo.fecha_hasta)
+
+      // La vigencia comienza inclusive en DESDE y termina al alcanzar HASTA.
+      return ahora >= desde && ahora < hasta
+    })
+    .sort(
+      (a, b) =>
+        new Date(b.fecha_desde).getTime() - new Date(a.fecha_desde).getTime()
+    )[0]
+}
+
 export async function POST() {
   try {
     const supabase = await createClient()
@@ -99,6 +129,13 @@ export async function POST() {
 
     if (productosError) throw new Error(productosError.message)
 
+    const { data: promocionesData, error: promocionesError } = await supabase
+      .from('promociones_flash')
+      .select('origen, porcentaje, fecha_desde, fecha_hasta, activo')
+      .eq('activo', true)
+
+    if (promocionesError) throw new Error(promocionesError.message)
+
     const { data: reglasData, error: reglasError } = await supabase
       .from('reglas_comerciales')
       .select('codigo, valor, activo')
@@ -108,13 +145,36 @@ export async function POST() {
     if (reglasError) throw new Error(reglasError.message)
 
     const productos = (productosData ?? []) as Producto[]
+    const promociones = (promocionesData ?? []) as PromocionFlash[]
     const reglas = reglasData ?? []
+    const ahora = new Date()
+
+    const flashPorOrigen = new Map<string, PromocionFlash>()
+
+    for (const origen of ['MOVISTAR', 'PERSONAL']) {
+      const flash = obtenerFlashVigente(promociones, origen, ahora)
+      if (flash) flashPorOrigen.set(origen, flash)
+    }
+
+    // TUENTI comparte la promoción comercial de MOVISTAR.
+    // Si hay Flash MOVISTAR vigente, el mismo porcentaje se aplica a TUENTI.
+    const flashMovistar = flashPorOrigen.get('MOVISTAR')
+    if (flashMovistar) {
+      flashPorOrigen.set('TUENTI', flashMovistar)
+    }
 
     const planesMoviles = ['2GB', '4GB', '7GB', '10GB', '30GB', '50GB']
 
     // E2:E25 conserva el orden histórico:
     // MOVISTAR (6), PERSONAL (6), TUENTI (6), LINEA NUEVA (6).
+    //
+    // Flash reemplaza temporalmente el descuento de PORTABILIDAD:
+    // - PERSONAL usa Flash PERSONAL.
+    // - MOVISTAR usa Flash MOVISTAR.
+    // - TUENTI hereda la Flash MOVISTAR.
+    // El descuento_normal de productos nunca se modifica.
     const descuentos: number[][] = []
+
     for (const origen of ['MOVISTAR', 'PERSONAL', 'TUENTI']) {
       for (const plan of planesMoviles) {
         const p = buscarProducto(
@@ -125,7 +185,29 @@ export async function POST() {
             normalizar(x.plan) === plan,
           `${origen} ${plan}`
         )
-        descuentos.push([Number(p.descuento_normal ?? 0)])
+
+        const flash = flashPorOrigen.get(origen)
+
+        // Regla comercial: TUENTI utiliza siempre el mismo descuento que MOVISTAR,
+        // tanto en condiciones normales como durante una promoción Flash.
+        const productoBaseDescuento =
+          origen === 'TUENTI'
+            ? buscarProducto(
+                productos,
+                (x) =>
+                  x.producto === 'PORTABILIDAD' &&
+                  x.origen === 'MOVISTAR' &&
+                  normalizar(x.plan) === plan,
+                `MOVISTAR ${plan} para TUENTI`
+              )
+            : p
+
+        const descuentoEfectivo =
+          flash && Number.isFinite(Number(flash.porcentaje))
+            ? Number(flash.porcentaje)
+            : Number(productoBaseDescuento.descuento_normal ?? 0)
+
+        descuentos.push([descuentoEfectivo])
       }
     }
 
@@ -260,6 +342,15 @@ export async function POST() {
       rangos: [`${HOJA_PRUEBA}!E2:E25`, `${HOJA_PRUEBA}!H2:I20`],
       descuentosEscritos: descuentos.length,
       preciosEscritos: precios.length,
+      fechaEvaluacion: ahora.toISOString(),
+      flashVigentes: Array.from(flashPorOrigen.entries()).map(
+        ([origen, promo]) => ({
+          origen,
+          porcentaje: Number(promo.porcentaje),
+          fecha_desde: promo.fecha_desde,
+          fecha_hasta: promo.fecha_hasta,
+        })
+      ),
     })
   } catch (error) {
     console.error('Error sincronizando Lista de Precios con Google Sheets:', error)
