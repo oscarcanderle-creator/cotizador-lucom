@@ -125,6 +125,7 @@ export async function POST() {
     const { data: productosData, error: productosError } = await supabase
       .from('productos')
       .select('producto, origen, plan, precio_lista, descuento_normal, activo')
+      .eq('negocio', 'MASIVO')
       .eq('activo', true)
 
     if (productosError) throw new Error(productosError.message)
@@ -132,6 +133,7 @@ export async function POST() {
     const { data: promocionesData, error: promocionesError } = await supabase
       .from('promociones_flash')
       .select('origen, porcentaje, fecha_desde, fecha_hasta, activo')
+      .eq('negocio', 'MASIVO')
       .eq('activo', true)
 
     if (promocionesError) throw new Error(promocionesError.message)
@@ -139,6 +141,7 @@ export async function POST() {
     const { data: reglasData, error: reglasError } = await supabase
       .from('reglas_comerciales')
       .select('codigo, valor, activo')
+      .eq('negocio', 'MASIVO')
       .in('codigo', ['CONVERGENCIA_2', 'CONVERGENCIA_3'])
       .eq('activo', true)
 

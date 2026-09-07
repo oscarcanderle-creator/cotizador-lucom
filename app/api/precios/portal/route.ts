@@ -39,6 +39,7 @@ export async function GET() {
           activo,
           orden
         `)
+        .eq('negocio', 'MASIVO')
         .eq('activo', true)
         .order('orden', { ascending: true })
         .order('id', { ascending: true }),
@@ -53,6 +54,7 @@ export async function GET() {
           activo,
           updated_at
         `)
+        .eq('negocio', 'MASIVO')
         .eq('activo', true)
         .order('id', { ascending: true }),
     ])

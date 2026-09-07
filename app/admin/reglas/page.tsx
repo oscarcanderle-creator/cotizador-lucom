@@ -29,8 +29,17 @@ function unidadRegla(
   return ''
 }
 
-export default async function AdminReglasPage() {
+export default async function AdminReglasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ negocio?: string }>
+}) {
   const supabase = await createClient()
+
+  const params = await searchParams
+  const negocio = params.negocio?.toUpperCase() === 'PYME'
+    ? 'PYME'
+    : 'MASIVO'
 
   const {
     data: { user },
@@ -62,6 +71,7 @@ export default async function AdminReglasPage() {
     .select(
       'id, codigo, nombre, tipo, valor, activo'
     )
+    .eq('negocio', negocio)
     .order('id')
 
   if (error) {
@@ -167,6 +177,34 @@ export default async function AdminReglasPage() {
             Volver al administrador
           </a>
 
+        </div>
+
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <a
+            href="/admin/reglas?negocio=MASIVO"
+            className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+              negocio === 'MASIVO'
+                ? 'bg-red-600 text-white'
+                : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            MASIVO
+          </a>
+
+          <a
+            href="/admin/reglas?negocio=PYME"
+            className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+              negocio === 'PYME'
+                ? 'bg-red-600 text-white'
+                : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            PYME
+          </a>
+
+          <span className="ml-2 text-sm text-gray-500">
+            Negocio actual: <strong className="text-gray-800">{negocio}</strong>
+          </span>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">

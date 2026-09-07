@@ -1,684 +1,1215 @@
 'use client'
 
 import {
+
   useEffect,
+
   useMemo,
+
   useRef,
+
   useState,
+
 } from 'react'
 
 import {
+
   calcularCotizacion,
+
   TipoLinea,
+
   PromocionFlash,
+
 } from '../../lib/cotizador/calcular'
 
 import { toPng } from 'html-to-image'
+
 import jsPDF from 'jspdf'
+
 import AppHeader from '../../components/AppHeader'
 
+type Negocio = 'MASIVO' | 'PYME'
+
 type Producto = {
+
   id: number
+
+  negocio: string
+
   producto: string
+
   origen: string | null
+
   plan: string
+
   precio_lista: number
+
   descuento_normal: number | null
+
   precio_cliente: number | null
+
   beneficios: string | null
+
 }
 
 type NovedadPropuesta = {
+
   id: number
+
   titulo: string
+
   contenido: string
+
   activo: boolean
+
   orden: number
+
 }
 
 type Props = {
+
   productos: Producto[]
-  reglas: Record<string, number>
+
+  reglas: Record<Negocio, Record<string, number>>
+
   promocionesFlash: PromocionFlash[]
+
   novedades: NovedadPropuesta[]
+
   usuario: string
+
   rol: string
+
   puedeGestionarVentas: boolean
+
 }
 
 type PortabilidadUI = {
+
   nim: string
+
   origen: 'PRE' | 'POS'
+
 }
 
 type LineaUI = {
+
   id: number
+
   tipo: TipoLinea
+
   plan: string
+
   cantidad: number
+
   portabilidades: PortabilidadUI[]
+
 }
 
 type InternetUI = {
+
   id: number
+
   plan: string
+
 }
 
 type DatosCliente = {
+
   nombre: string
+
   apellido: string
+
   dni: string
+
   telefono: string
+
   email: string
+
   companiaActual: string
+
   domicilio: string
+
   entreCalles: string
+
   localidad: string
+
   observacionesDomicilio: string
+
 }
 
 function dinero(valor: number) {
+
   return new Intl.NumberFormat('es-AR', {
+
     style: 'currency',
+
     currency: 'ARS',
+
     maximumFractionDigits: 0,
+
   }).format(valor)
+
 }
 
 function nombreTipo(tipo: TipoLinea) {
+
   if (tipo === 'LINEA NUEVA') {
+
     return 'Línea Nueva'
+
   }
 
   return `Port. ${tipo}`
+
 }
 
 function fechaArgentina(fecha: Date) {
+
   return new Intl.DateTimeFormat('es-AR', {
+
     timeZone: 'America/Argentina/Buenos_Aires',
+
     day: '2-digit',
+
     month: '2-digit',
+
     year: 'numeric',
+
   }).format(fecha)
+
 }
 
 function emailValido(email: string) {
+
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+
 }
 
 function nimValido(nim: string) {
+
   return /^[1-49][0-9]{9}$/.test(nim.trim())
+
 }
 
 export default function Cotizador({
-  productos,
-  reglas,
+
+  productos: productosTodos,
+
+  reglas: reglasPorNegocio,
+
   promocionesFlash,
+
   novedades,
+
   usuario,
+
   rol,
+
   puedeGestionarVentas,
+
 }: Props) {
+
   const propuestaRef = useRef<HTMLDivElement>(null)
+
   const [exportando, setExportando] = useState(false)
 
+  const [negocio, setNegocio] =
+    useState<Negocio>('MASIVO')
+
+  const productos = useMemo(
+    () =>
+      productosTodos.filter(
+        (producto) =>
+          producto.negocio === negocio
+      ),
+    [productosTodos, negocio]
+  )
+
+  const reglas =
+    reglasPorNegocio[negocio] ?? {}
+
+  const promocionesFlashAplicables =
+    negocio === 'MASIVO'
+      ? promocionesFlash
+      : []
+
   /*
+
    * Cotizador anónimo:
+
    * - TERRENO
+
    * - VENDEDOR sin permiso de Gestión de Ventas
+
    *
+
    * ADMIN, SUPERVISOR y VENDEDOR gestor conservan el cotizador completo.
+
    */
+
   const cotizadorAnonimo =
+
     rol === 'TERRENO' ||
+
     (rol === 'VENDEDOR' && !puedeGestionarVentas)
 
   /*
+
    * =====================================================
+
    * DATOS TEMPORALES DEL CLIENTE
+
    * =====================================================
+
    *
+
    * Estos datos viven solamente durante la cotización.
+
    * No se guardan en Supabase.
+
    */
 
   const [datosCliente, setDatosCliente] =
+
     useState<DatosCliente>({
+
       nombre: '',
+
       apellido: '',
+
       dni: '',
+
       telefono: '',
+
       email: '',
+
       companiaActual: '',
+
       domicilio: '',
+
       entreCalles: '',
+
       localidad: '',
+
       observacionesDomicilio: '',
+
     })
 
   const fechaEmision = useMemo(
+
     () => fechaArgentina(new Date()),
+
     []
+
   )
 
   const datosClienteCompletos =
+
     cotizadorAnonimo ||
+
     (
+
       datosCliente.nombre.trim() !== '' &&
+
       datosCliente.apellido.trim() !== '' &&
+
       datosCliente.dni.trim() !== '' &&
+
       datosCliente.telefono.trim() !== '' &&
+
       emailValido(datosCliente.email) &&
+
       datosCliente.companiaActual.trim() !== '' &&
+
       datosCliente.domicilio.trim() !== '' &&
+
       datosCliente.entreCalles.trim() !== '' &&
+
       datosCliente.localidad.trim() !== '' &&
+
       datosCliente.observacionesDomicilio.trim() !== ''
+
     )
 
   function actualizarDatoCliente(
+
     campo: keyof DatosCliente,
+
     valor: string
+
   ) {
+
     setDatosCliente((actual) => ({
+
       ...actual,
+
       [campo]: valor,
+
     }))
+
   }
 
   /*
+
    * =====================================================
+
    * CLIENTE CLARO
+
    * =====================================================
+
    */
 
   const [
+
     clienteTieneLineasClaro,
+
     setClienteTieneLineasClaro,
+
   ] = useState(false)
 
   const [
+
     cantidadLineasActuales,
+
     setCantidadLineasActuales,
+
   ] = useState(1)
 
   const [
+
     clienteTieneBAF,
+
     setClienteTieneBAF,
+
   ] = useState(false)
 
   /*
+
    * =====================================================
+
    * LÍNEAS NUEVAS
+
    * =====================================================
+
    */
+
   const [lineas, setLineas] =
+
     useState<LineaUI[]>(
+
       cotizadorAnonimo
+
         ? []
+
         : [
+
             {
+
               id: 1,
+
               tipo: 'LINEA NUEVA',
+
               plan: '7 Gigas',
+
               cantidad: 1,
+
               portabilidades: [],
+
             },
+
           ]
+
     )
 
   const [nextLineaId, setNextLineaId] =
+
     useState(cotizadorAnonimo ? 1 : 2)
 
   /*
+
    * =====================================================
+
    * INTERNET / BAF
+
    * =====================================================
+
    */
 
   const [serviciosInternet, setServiciosInternet] =
+
     useState<InternetUI[]>(
+
       cotizadorAnonimo
+
         ? [
+
             {
+
               id: 1,
+
               plan: '200 MB',
+
             },
+
           ]
+
         : []
+
     )
 
   const [nextInternetId, setNextInternetId] =
+
     useState(cotizadorAnonimo ? 2 : 1)
 
   /*
+
    * =====================================================
+
    * TV
+
    * =====================================================
+
    */
 
   const [
+
     tvActivo,
+
     setTvActivo,
+
   ] = useState(false)
 
   const [
+
     cantidadDecosAdicionales,
+
     setCantidadDecosAdicionales,
+
   ] = useState(0)
 
   /*
+
    * Si TV se combina con un Internet nuevo,
+
    * el máximo permitido es 2 decos adicionales.
+
    * Si se agrega TV sin Internet nuevo,
+
    * se permiten hasta 3 adicionales.
+
    */
+
   useEffect(() => {
+
     if (
+
       serviciosInternet.length > 0 &&
+
       cantidadDecosAdicionales > 2
+
     ) {
+
       setCantidadDecosAdicionales(2)
+
     }
+
   }, [
+
     serviciosInternet.length,
+
     cantidadDecosAdicionales,
+
   ])
 
   /*
+
    * =====================================================
+
    * CLARO PAY
+
    * =====================================================
+
    */
 
   const [
+
     pagaClaroPay,
+
     setPagaClaroPay,
+
   ] = useState(true)
 
   /*
+
    * =====================================================
+
    * LISTADOS DE PRODUCTOS
+
    * =====================================================
+
    */
 
   const planesMoviles = useMemo(() => {
+
     const unicos =
+
       new Map<string, Producto>()
 
     productos
+
       .filter(
+
         (p) =>
+
           p.producto ===
+
             'LINEA NUEVA' &&
+
           p.origen ===
+
             'LINEA NUEVA'
+
       )
+
       .forEach((p) => {
+
         unicos.set(p.plan, p)
+
       })
 
     return Array.from(
+
       unicos.values()
+
     )
+
   }, [productos])
 
   const planesInternet =
+
     useMemo(() => {
+
       return productos.filter(
+
         (p) =>
+
           p.producto ===
+
           'Internet Fibra optica'
+
       )
+
     }, [productos])
 
   /*
+
    * TV
+
    */
 
   const productoTV =
+
     useMemo(() => {
+
       return productos.find(
+
         (p) =>
+
           p.producto ===
+
           'CLARO TV'
+
       )
+
     }, [productos])
 
   const productoDeco =
+
     useMemo(() => {
+
       return productos.find(
+
         (p) =>
+
           p.producto ===
+
           'DECODIFICADOR TV ADICIONAL'
+
       )
+
     }, [productos])
 
   /*
+
    * PACKS INFORMATIVOS
+
    */
 
   const packsDatos =
+
     useMemo(() => {
+
       return productos.filter(
+
         (p) =>
+
           p.producto ===
+
           'PACK DATOS'
+
       )
+
     }, [productos])
 
   const packsTV =
+
     useMemo(() => {
+
       return productos.filter(
+
         (p) =>
+
           p.producto ===
+
           'PACK TV'
+
       )
+
     }, [productos])
 
   /*
+
    * =====================================================
+
    * REGLAS PARAMETRIZADAS
+
    * =====================================================
+
    */
 
   const descuentoConexionFull =
+
     reglas.COMBO_PORTA ?? 80
 
   const convergencia2 =
+
     reglas.CONVERGENCIA_2 ??
+
     4000
 
   const convergencia3 =
+
     reglas.CONVERGENCIA_3 ??
+
     5000
 
   const porcentajeClaroPay =
+
     reglas.CLARO_PAY ?? 15
 
   const topeClaroPay =
+
     reglas.CLARO_PAY_TOPE ??
+
     3000
 
   /*
+
    * =====================================================
+
    * MODIFICAR LÍNEAS
+
    * =====================================================
+
    */
 
   function actualizarLinea(
+
     id: number,
+
     campo: keyof LineaUI,
+
     valor: string | number
+
   ) {
+
     setLineas((actuales) =>
+
       actuales.map((linea) => {
+
         if (linea.id !== id) return linea
 
         const nuevoTipo =
+
           campo === 'tipo'
+
             ? (valor as TipoLinea)
+
             : linea.tipo
 
         let portabilidades = linea.portabilidades ?? []
 
         if (nuevoTipo === 'LINEA NUEVA') {
+
           portabilidades = []
+
         } else {
+
           portabilidades = [
+
             portabilidades[0] ?? {
+
               nim: '',
+
               origen: 'PRE' as const,
+
             },
+
           ]
+
         }
 
         return {
+
           ...linea,
+
           [campo]: valor,
+
           cantidad: 1,
+
           portabilidades,
+
         }
+
       })
+
     )
+
   }
 
   function actualizarPortabilidad(
+
     lineaId: number,
+
     indice: number,
+
     campo: keyof PortabilidadUI,
+
     valor: string
+
   ) {
+
     setLineas((actuales) =>
+
       actuales.map((linea) =>
+
         linea.id === lineaId
+
           ? {
+
               ...linea,
+
               portabilidades: linea.portabilidades.map(
+
                 (p, i) =>
+
                   i === indice
+
                     ? { ...p, [campo]: valor }
+
                     : p
+
               ),
+
             }
+
           : linea
+
       )
+
     )
+
   }
 
   const portabilidadesCompletas = lineas.every(
+
     (linea) =>
+
       linea.tipo === 'LINEA NUEVA' ||
+
       (
+
         linea.portabilidades.length === 1 &&
+
         nimValido(linea.portabilidades[0].nim)
+
       )
+
   )
 
   function agregarLinea() {
+
     setLineas((actuales) => [
+
       ...actuales,
 
       {
+
         id: nextLineaId,
+
         tipo: 'LINEA NUEVA',
+
         plan: '7 Gigas',
+
         cantidad: 1,
+
         portabilidades: [],
+
       },
+
     ])
 
     setNextLineaId(
+
       (actual) => actual + 1
+
     )
+
   }
 
   function eliminarLinea(
+
     id: number
+
   ) {
+
     setLineas((actuales) =>
+
       actuales.filter(
+
         (linea) =>
+
           linea.id !== id
+
       )
+
     )
+
   }
 
   /*
+
    * =====================================================
+
    * SERVICIOS INTERNET / BAF
+
    * =====================================================
+
    */
 
   function agregarInternet() {
+
     setServiciosInternet((actuales) => {
+
       if (actuales.length >= 2) {
+
         return actuales
+
       }
 
       return [
+
         ...actuales,
+
         {
+
           id: nextInternetId,
+
           plan: '200 MB',
+
         },
+
       ]
+
     })
 
     setNextInternetId((actual) => actual + 1)
+
   }
 
   function actualizarInternet(
+
     id: number,
+
     plan: string
+
   ) {
+
     setServiciosInternet((actuales) =>
+
       actuales.map((servicio) =>
+
         servicio.id === id
+
           ? { ...servicio, plan }
+
           : servicio
+
       )
+
     )
+
   }
 
   function eliminarInternet(id: number) {
+
     setServiciosInternet((actuales) =>
+
       actuales.filter(
+
         (servicio) =>
+
           servicio.id !== id
+
       )
+
     )
+
   }
 
   const productosInternetSeleccionados =
+
     useMemo(() => {
+
       return serviciosInternet
+
         .map((servicio) => {
+
           const producto = productos.find(
+
             (p) =>
+
               p.producto ===
+
                 'Internet Fibra optica' &&
+
               p.plan === servicio.plan
+
           )
 
           if (!producto) {
+
             return null
+
           }
 
           return {
+
             id: servicio.id,
+
             plan: servicio.plan,
+
             producto,
+
           }
+
         })
+
         .filter(
+
           (
+
             item
+
           ): item is {
+
             id: number
+
             plan: string
+
             producto: Producto
+
           } => item !== null
+
         )
+
     }, [
+
       serviciosInternet,
+
       productos,
+
     ])
 
   /*
+
    * =====================================================
+
    * ARMAR LÍNEAS PARA EL MOTOR
+
    * =====================================================
+
    */
 
   const lineasMotor =
+
     useMemo(() => {
+
       return lineas.map(
+
         (linea) => {
+
           let producto:
+
             | Producto
+
             | undefined
 
           if (
+
             linea.tipo ===
+
             'LINEA NUEVA'
+
           ) {
+
             producto =
+
               productos.find(
+
                 (p) =>
+
                   p.producto ===
+
                     'LINEA NUEVA' &&
+
                   p.origen ===
+
                     'LINEA NUEVA' &&
+
                   p.plan ===
+
                     linea.plan
+
               )
+
           } else {
+
             producto =
+
               productos.find(
+
                 (p) =>
+
                   p.producto ===
+
                     'PORTABILIDAD' &&
+
                   p.origen ===
+
                     linea.tipo &&
+
                   p.plan ===
+
                     linea.plan
+
               )
+
           }
 
           return {
+
             id: linea.id,
+
             tipo: linea.tipo,
+
             plan: linea.plan,
 
             cantidad: 1,
 
             precioLista:
+
               Number(
+
                 producto
+
                   ?.precio_lista ??
+
                   0
+
               ),
 
             descuentoNormal:
+
               Number(
+
                 producto
+
                   ?.descuento_normal ??
+
                   0
+
               ),
 
             beneficiosNormal:
+
               producto
+
                 ?.beneficios ??
+
               null,
+
           }
+
         }
+
       )
+
     }, [
+
       lineas,
+
       productos,
+
     ])
 
   /*
+
    * =====================================================
+
    * MOTOR DE CÁLCULO
+
    * =====================================================
+
    */
 
   const resultado =
+
     calcularCotizacion({
+
       lineas:
+
         lineasMotor,
 
       serviciosBAF:
+
         productosInternetSeleccionados.map(
+
           (servicio) => ({
+
             id: servicio.id,
+
             plan: servicio.plan,
+
             precioLista: Number(
+
               servicio.producto.precio_lista ?? 0
+
             ),
+
           })
+
         ),
 
       clienteTieneBAF,
@@ -694,30 +1225,45 @@ export default function Cotizador({
       convergencia3,
 
       /*
+
        * TV
+
        */
 
       contrataTV:
+
         tvActivo,
 
       precioTV:
+
         Number(
+
           productoTV
+
             ?.precio_lista ??
+
             0
+
         ),
 
       cantidadDecosAdicionales,
 
       precioDecoAdicional:
+
         Number(
+
           productoDeco
+
             ?.precio_lista ??
+
             0
+
         ),
 
       /*
+
        * CLARO PAY
+
        */
 
       pagaClaroPay,
@@ -726,252 +1272,419 @@ export default function Cotizador({
 
       topeClaroPay,
 
-      promocionesFlash,
+      promocionesFlash:
+        promocionesFlashAplicables,
+
     })
 
   /*
+
    * =====================================================
+
    * EXPORTAR / COMPARTIR PROPUESTA
+
    * =====================================================
+
    */
 
   function validarExportacion() {
+
     if (!datosClienteCompletos) {
+
       window.alert(
+
         'Completá todos los datos obligatorios del cliente antes de generar la propuesta.'
+
       )
+
       return false
+
     }
 
     if (!portabilidadesCompletas) {
+
       window.alert(
+
         'El NIM a portar debe tener 10 dígitos y no puede comenzar con 0, + ni 5.'
+
       )
+
       return false
+
     }
 
     return true
+
   }
 
   function nombreArchivo(extension: 'jpg' | 'pdf') {
+
     if (cotizadorAnonimo) {
+
       return `Propuesta-Claro-${fechaEmision.replace(/\//g, '-')}.${extension}`
+
     }
 
     const cliente =
+
       `${datosCliente.apellido}-${datosCliente.nombre}`
+
         .trim()
+
         .replace(/\s+/g, '-')
+
         .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ-]/g, '')
 
     return `Propuesta-Claro-${cliente || 'Cliente'}-${fechaEmision.replace(/\//g, '-')}.${extension}`
+
   }
 
   async function imagenPropuesta() {
+
     if (!propuestaRef.current) {
+
       throw new Error('No se encontró la propuesta.')
+
     }
 
     return toPng(propuestaRef.current, {
+
       cacheBust: true,
+
       pixelRatio: 2,
+
       backgroundColor: '#ffffff',
+
     })
+
   }
 
   async function descargarJPG() {
+
     if (!validarExportacion()) return
 
     try {
+
       setExportando(true)
+
       const dataUrl = await imagenPropuesta()
+
       const enlace = document.createElement('a')
+
       enlace.download = nombreArchivo('jpg')
+
       enlace.href = dataUrl
+
       enlace.click()
+
     } catch (error) {
+
       console.error(error)
+
       window.alert('No se pudo generar el JPG de la propuesta.')
+
     } finally {
+
       setExportando(false)
+
     }
+
   }
 
   async function descargarPDF() {
+
     if (!validarExportacion()) return
 
     try {
+
       setExportando(true)
+
       const dataUrl = await imagenPropuesta()
 
       if (!propuestaRef.current) return
 
       const ancho = propuestaRef.current.offsetWidth
+
       const alto = propuestaRef.current.offsetHeight
 
       const pdf = new jsPDF({
+
         orientation: alto > ancho ? 'portrait' : 'landscape',
+
         unit: 'px',
+
         format: [ancho, alto],
+
         hotfixes: ['px_scaling'],
+
       })
 
       pdf.addImage(dataUrl, 'PNG', 0, 0, ancho, alto)
+
       pdf.save(nombreArchivo('pdf'))
+
     } catch (error) {
+
       console.error(error)
+
       window.alert('No se pudo generar el PDF de la propuesta.')
+
     } finally {
+
       setExportando(false)
+
     }
+
   }
 
 async function compartirPropuesta() {
+
   if (!validarExportacion()) {
+
     return
+
   }
 
   if (cotizadorAnonimo) {
+
     try {
+
       setExportando(true)
 
       const dataUrl = await imagenPropuesta()
+
       const respuesta = await fetch(dataUrl)
+
       const blob = await respuesta.blob()
 
       const archivo = new File(
+
         [blob],
+
         nombreArchivo('jpg'),
+
         { type: 'image/png' }
+
       )
 
       const texto =
+
         `Propuesta Comercial Claro por ${dinero(resultado.total)}. ` +
+
         `Es válida únicamente durante el día ${fechaEmision}. ` +
+
         'Por favor revisá los productos, beneficios e importes detallados.'
 
       if (
+
         navigator.share &&
+
         navigator.canShare?.({ files: [archivo] })
+
       ) {
+
         await navigator.share({
+
           title: 'Propuesta Comercial Claro',
+
           text: texto,
+
           files: [archivo],
+
         })
+
         return
+
       }
 
       const enlace = document.createElement('a')
+
       enlace.download = nombreArchivo('jpg')
+
       enlace.href = dataUrl
+
       enlace.click()
 
       window.alert(
+
         'La propuesta se descargó como imagen para que puedas compartirla.'
+
       )
+
     } catch (error) {
+
       if (
+
         error instanceof DOMException &&
+
         error.name === 'AbortError'
+
       ) {
+
         return
+
       }
 
       console.error(error)
+
       window.alert('No se pudo compartir la propuesta.')
+
     } finally {
+
       setExportando(false)
+
     }
 
     return
+
   }
 
   const telefono =
+
     datosCliente.telefono.replace(/\D/g, '')
 
   const texto =
+
     `Hola ${datosCliente.nombre}, te envío la Propuesta Comercial Claro por ${dinero(resultado.total)}. ` +
+
     `Es válida únicamente durante el día ${fechaEmision}. ` +
+
     'Por favor revisá los productos, beneficios e importes detallados. ' +
+
     'Si estás de acuerdo, respondé OK a este mensaje.'
 
   const urlWhatsApp =
+
     `https://wa.me/${telefono}?text=${encodeURIComponent(texto)}`
 
   window.open(
+
     urlWhatsApp,
+
     '_blank',
+
     'noopener,noreferrer'
+
   )
+
 }
+
   /*
+
    * =====================================================
+
    * INTERFAZ
+
    * =====================================================
+
    */
 
   return (
+
     <main className="min-h-screen bg-gray-50 text-gray-900 overflow-x-hidden">
 
       {/* CABECERA COMÚN */}
+
       <AppHeader
+
         rol={rol}
+
         usuario={usuario}
+
         actual="COTIZADOR"
+
         puedeGestionarVentas={puedeGestionarVentas}
+
       />
 
       <div className="max-w-7xl mx-auto px-3 py-3 sm:px-5 sm:py-4 grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-4 lg:gap-5">
 
         {/* ==================================================
+
             PANEL IZQUIERDO
+
         ================================================== */}
 
         <section>
 
           {/* MASIVO / PYME */}
 
-          <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className="grid grid-cols-2 gap-2 mb-2">
 
-            <button className="bg-red-600 text-white font-semibold rounded-lg py-2">
+            <button
+              type="button"
+              onClick={() => setNegocio('MASIVO')}
+              className={`font-semibold rounded-lg py-2 transition-colors ${
+                negocio === 'MASIVO'
+                  ? 'bg-red-600 text-white'
+                  : 'bg-white border border-gray-300 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
               MASIVO
             </button>
 
-            <button className="bg-white border border-gray-300 text-gray-500 font-semibold rounded-lg py-2">
+            <button
+              type="button"
+              onClick={() => setNegocio('PYME')}
+              className={`font-semibold rounded-lg py-2 transition-colors ${
+                negocio === 'PYME'
+                  ? 'bg-red-600 text-white'
+                  : 'bg-white border border-gray-300 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
               PYME
             </button>
 
           </div>
 
+          {negocio === 'PYME' && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+              PYME · Precios sin Impuestos
+            </div>
+          )}
+
           {/* ==================================================
+
               DATOS DEL CLIENTE
+
           ================================================== */}
 
           {!cotizadorAnonimo && (
+
             <>
+
           <div className="mb-4">
 
             <div className="flex items-start justify-between gap-3 mb-2">
 
               <div>
+
                 <h2 className="text-lg font-semibold">
+
                   Datos del Cliente
+
                 </h2>
 
                 <p className="text-sm text-gray-500 mt-1">
+
                   Obligatorios para generar y compartir la propuesta.
+
                 </p>
+
               </div>
 
               <div className="text-right text-sm">
 
                 <div className="text-gray-500">
+
                   Vendedor
+
                 </div>
 
                 <div className="font-semibold text-gray-800">
+
                   {usuario}
+
                 </div>
 
               </div>
@@ -983,186 +1696,345 @@ async function compartirPropuesta() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
 
                 <div>
+
                   <label className="block text-xs text-gray-500 mb-0.5">
+
                     Nombre *
+
                   </label>
+
                   <input
+
                     type="text"
+
                     value={datosCliente.nombre}
+
                     onChange={(e) =>
+
                       actualizarDatoCliente(
+
                         'nombre',
+
                         e.target.value
+
                       )
+
                     }
+
                     className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-xs text-gray-500 mb-0.5">
+
                     Apellido *
+
                   </label>
+
                   <input
+
                     type="text"
+
                     value={datosCliente.apellido}
+
                     onChange={(e) =>
+
                       actualizarDatoCliente(
+
                         'apellido',
+
                         e.target.value
+
                       )
+
                     }
+
                     className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-xs text-gray-500 mb-0.5">
+
                     DNI *
+
                   </label>
+
                   <input
+
                     type="text"
+
                     inputMode="numeric"
+
                     value={datosCliente.dni}
+
                     onChange={(e) =>
+
                       actualizarDatoCliente(
+
                         'dni',
+
                         e.target.value
+
                       )
+
                     }
+
                     className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-xs text-gray-500 mb-0.5">
+
                     Teléfono *
+
                   </label>
+
                   <input
+
                     type="tel"
+
                     value={datosCliente.telefono}
+
                     onChange={(e) =>
+
                       actualizarDatoCliente(
+
                         'telefono',
+
                         e.target.value
+
                       )
+
                     }
+
                     className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                   />
+
                 </div>
 
                 <div className="sm:col-span-2 lg:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+
                 <div>
+
                   <label className="block text-xs text-gray-500 mb-0.5">
+
                     Domicilio *
+
                   </label>
+
                   <input
+
                     type="text"
+
                     value={datosCliente.domicilio}
+
                     onChange={(e) =>
+
                       actualizarDatoCliente(
+
                         'domicilio',
+
                         e.target.value
+
                       )
+
                     }
+
                     className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-xs text-gray-500 mb-0.5">
+
                     Entre calles *
+
                   </label>
+
                   <input
+
                     type="text"
+
                     value={datosCliente.entreCalles}
+
                     onChange={(e) =>
+
                       actualizarDatoCliente(
+
                         'entreCalles',
+
                         e.target.value
+
                       )
+
                     }
+
                     className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                   />
+
                 </div>
 
                 <div className="">
+
                   <label className="block text-xs text-gray-500 mb-0.5">
+
                     Localidad *
+
                   </label>
+
                   <input
+
                     type="text"
+
                     value={datosCliente.localidad}
+
                     onChange={(e) =>
+
                       actualizarDatoCliente(
+
                         'localidad',
+
                         e.target.value
+
                       )
+
                     }
+
                     className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                   />
+
                 </div>
 
                 </div>
 
                 <div className="sm:col-span-2 lg:col-span-2">
+
                   <label className="block text-xs text-gray-500 mb-0.5">
+
                     Email *
+
                   </label>
+
                   <input
+
                     type="email"
+
                     value={datosCliente.email}
+
                     onChange={(e) =>
+
                       actualizarDatoCliente(
+
                         'email',
+
                         e.target.value
+
                       )
+
                     }
+
                     className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                   />
 
                   {datosCliente.email.trim() !== '' &&
+
                     !emailValido(datosCliente.email) && (
+
                     <div className="text-xs text-red-600 mt-1">
+
                       Ingresá una dirección de email válida.
+
                     </div>
+
                   )}
+
                 </div>
 
                 <div className="sm:col-span-2 lg:col-span-2">
+
                   <label className="block text-xs text-gray-500 mb-0.5">
+
                     Compañía Actual *
+
                   </label>
+
                   <input
+
                     type="text"
+
                     value={datosCliente.companiaActual}
+
                     onChange={(e) =>
+
                       actualizarDatoCliente(
+
                         'companiaActual',
+
                         e.target.value
+
                       )
+
                     }
+
                     className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                   />
+
                 </div>
 
                 <div className="sm:col-span-2 lg:col-span-4">
+
                   <label className="block text-xs text-gray-500 mb-0.5">
+
                     Observaciones del domicilio *
+
                   </label>
+
                   <textarea
+
                     rows={2}
+
                     value={
+
                       datosCliente.observacionesDomicilio
+
                     }
+
                     onChange={(e) =>
+
                       actualizarDatoCliente(
+
                         'observacionesDomicilio',
+
                         e.target.value
+
                       )
+
                     }
+
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 resize-y"
+
                   />
+
                 </div>
 
               </div>
@@ -1170,33 +2042,55 @@ async function compartirPropuesta() {
               <div className="border-t border-gray-100 mt-3 pt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs sm:text-sm">
 
                 <div>
+
                   <span className="text-gray-500">
+
                     Fecha de emisión:{' '}
+
                   </span>
+
                   <strong>{fechaEmision}</strong>
+
                 </div>
 
                 <div>
+
                   <span className="text-gray-500">
+
                     Vigencia:{' '}
+
                   </span>
+
                   <strong>
+
                     solo durante el día de emisión
+
                   </strong>
+
                 </div>
 
               </div>
 
               <div
+
                 className={
+
                   datosClienteCompletos
+
                     ? 'mt-3 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs sm:text-sm text-green-700'
+
                     : 'mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs sm:text-sm text-amber-700'
+
                 }
+
               >
+
                 {datosClienteCompletos
+
                   ? 'Datos completos. La propuesta quedará habilitada para exportación.'
+
                   : 'Completá todos los campos obligatorios para habilitar la exportación.'}
+
               </div>
 
             </div>
@@ -1204,6 +2098,7 @@ async function compartirPropuesta() {
           </div>
 
             </>
+
           )}
 
           {/* CLIENTE CLARO */}
@@ -1211,7 +2106,9 @@ async function compartirPropuesta() {
           <div className="mb-3">
 
             <h2 className="text-base font-semibold mb-2">
+
               Cliente Claro
+
             </h2>
 
             <div className="bg-white border border-gray-200 rounded-xl px-3 py-2">
@@ -1219,53 +2116,97 @@ async function compartirPropuesta() {
               <div className="flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-2">
 
                 <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+
                   <input
+
                     type="checkbox"
+
                     checked={clienteTieneLineasClaro}
+
                     onChange={(e) =>
+
                       setClienteTieneLineasClaro(
+
                         e.target.checked
+
                       )
+
                     }
+
                     className="sr-only peer"
+
                   />
+
                   <span className="relative w-9 h-5 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
+
                   Tiene Líneas Mov.?
+
                 </label>
 
                 {clienteTieneLineasClaro && (
+
                   <label className="flex items-center gap-2 text-xs text-gray-500">
+
                     Cant.
+
                     <input
+
                       type="number"
+
                       min="1"
+
                       value={cantidadLineasActuales}
+
                       onChange={(e) =>
+
                         setCantidadLineasActuales(
+
                           Math.max(
+
                             1,
+
                             Number(e.target.value)
+
                           )
+
                         )
+
                       }
+
                       className="w-16 border border-gray-300 rounded-md px-2 py-1 bg-white text-gray-900"
+
                     />
+
                   </label>
+
                 )}
 
                 <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+
                   <input
+
                     type="checkbox"
+
                     checked={clienteTieneBAF}
+
                     onChange={(e) =>
+
                       setClienteTieneBAF(
+
                         e.target.checked
+
                       )
+
                     }
+
                     className="sr-only peer"
+
                   />
+
                   <span className="relative w-9 h-5 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
+
                   Tiene BAF?
+
                 </label>
 
               </div>
@@ -1275,25 +2216,35 @@ async function compartirPropuesta() {
           </div>
 
           {/* ==================================================
+
               LÍNEAS MÓVILES
+
           ================================================== */}
 
           <div className="flex items-center justify-between mb-1.5">
 
             <h2 className="text-lg font-semibold">
+
               Líneas Móviles
+
             </h2>
 
             <button
+
               type="button"
 
               onClick={
+
                 agregarLinea
+
               }
 
               className="text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium"
+
             >
+
               + Agregar línea
+
             </button>
 
           </div>
@@ -1303,18 +2254,23 @@ async function compartirPropuesta() {
             {lineas.length === 0 && (
 
               <div className="bg-white border border-gray-200 rounded-xl p-6 text-gray-400 italic">
+
                 Sin líneas móviles configuradas
+
               </div>
 
             )}
 
             {lineas.map(
+
               (linea) => (
 
                 <div
+
                   key={linea.id}
 
                   className="bg-white border border-gray-200 rounded-lg px-3 py-2.5"
+
                 >
 
                   <div className="grid grid-cols-1 sm:grid-cols-[1.15fr_.95fr_auto] gap-2 items-end">
@@ -1324,44 +2280,67 @@ async function compartirPropuesta() {
                     <div>
 
                       <label className="block text-xs text-gray-500 mb-0.5">
+
                         Plan
+
                       </label>
 
                       <select
+
                         value={
+
                           linea.plan
+
                         }
 
                         onChange={(e) =>
+
                           actualizarLinea(
+
                             linea.id,
 
                             'plan',
 
                             e.target.value
+
                           )
+
                         }
 
                         className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                       >
 
                         {planesMoviles.map(
+
                           (p) => (
 
                             <option
+
                               key={p.id}
+
                               value={p.plan}
+
                             >
+
                               {p.plan}
+
                               {' - '}
+
                               {dinero(
+
                                 Number(
+
                                   p.precio_lista
+
                                 )
+
                               )}
+
                             </option>
 
                           )
+
                         )}
 
                       </select>
@@ -1373,42 +2352,61 @@ async function compartirPropuesta() {
                     <div>
 
                       <label className="block text-xs text-gray-500 mb-0.5">
+
                         Tipo
+
                       </label>
 
                       <select
+
                         value={
+
                           linea.tipo
+
                         }
 
                         onChange={(e) =>
+
                           actualizarLinea(
+
                             linea.id,
 
                             'tipo',
 
                             e.target
+
                               .value as TipoLinea
+
                           )
+
                         }
 
                         className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                       >
 
                         <option value="LINEA NUEVA">
+
                           Línea nueva
+
                         </option>
 
                         <option value="PERSONAL">
+
                           Port. Personal
+
                         </option>
 
                         <option value="MOVISTAR">
+
                           Port. Movistar
+
                         </option>
 
                         <option value="TUENTI">
+
                           Port. Tuenti
+
                         </option>
 
                       </select>
@@ -1418,87 +2416,149 @@ async function compartirPropuesta() {
                     {/* ELIMINAR */}
 
                     <button
+
                       type="button"
 
                       onClick={() =>
+
                         eliminarLinea(
+
                           linea.id
+
                         )
+
                       }
 
                       className="h-8 w-full sm:w-9 px-2 border border-gray-300 rounded-md text-gray-500 hover:text-red-600 hover:border-red-300"
+
                     >
+
                       ×
+
                     </button>
 
                   </div>
+
                   {linea.tipo !== 'LINEA NUEVA' && linea.portabilidades[0] && (
+
                     <div className="mt-1.5 pt-1.5 border-t border-gray-100">
+
                       <div className="mb-1 text-xs font-medium text-gray-600">
+
                         NIM a Portar
+
                       </div>
 
                       <div className="grid grid-cols-[1fr_72px] gap-1.5 items-center">
+
                         <input
+
                           type="tel"
+
                           inputMode="numeric"
+
                           maxLength={10}
+
                           placeholder="10 dígitos"
+
                           value={linea.portabilidades[0].nim}
+
                           onChange={(e) =>
+
                             actualizarPortabilidad(
+
                               linea.id,
+
                               0,
+
                               'nim',
+
                               e.target.value
+
                                 .replace(/\D/g, '')
+
                                 .replace(/^[05]+/, '')
+
                                 .slice(0, 10)
+
                             )
+
                           }
+
                           className={`min-w-0 w-full border rounded-md px-2 py-1 text-sm bg-white text-gray-900 ${
+
                             linea.portabilidades[0].nim !== '' &&
+
                             !nimValido(linea.portabilidades[0].nim)
+
                               ? 'border-red-400'
+
                               : 'border-gray-300'
+
                           }`}
+
                         />
 
                         <select
+
                           value={linea.portabilidades[0].origen}
+
                           onChange={(e) =>
+
                             actualizarPortabilidad(
+
                               linea.id,
+
                               0,
+
                               'origen',
+
                               e.target.value
+
                             )
+
                           }
+
                           className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm bg-white text-gray-900"
+
                         >
+
                           <option value="PRE">PRE</option>
+
                           <option value="POS">POS</option>
+
                         </select>
+
                       </div>
 
                       {linea.portabilidades[0].nim !== '' &&
+
                         !nimValido(linea.portabilidades[0].nim) && (
+
                           <div className="mt-1 text-[11px] text-red-600">
+
                             Debe tener 10 dígitos y no comenzar con 0 ni 5.
+
                           </div>
+
                         )}
+
                     </div>
+
                   )}
 
                 </div>
 
               )
+
             )}
 
           </div>
 
           {/* ==================================================
+
               INTERNET / BAF
+
           ================================================== */}
 
           <div className="mt-4">
@@ -1506,20 +2566,33 @@ async function compartirPropuesta() {
             <div className="flex items-center justify-between mb-1.5">
 
               <h2 className="text-lg font-semibold">
+
                 Internet WiFi
+
               </h2>
 
               <button
+
                 type="button"
+
                 onClick={agregarInternet}
+
                 disabled={serviciosInternet.length >= 2}
+
                 className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium ${
+
                   serviciosInternet.length >= 2
+
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+
                     : 'text-red-600 bg-red-50 hover:bg-red-100'
+
                 }`}
+
               >
+
                 + Agregar Internet
+
               </button>
 
             </div>
@@ -1529,17 +2602,23 @@ async function compartirPropuesta() {
               {serviciosInternet.length === 0 && (
 
                 <div className="bg-white border border-gray-200 rounded-xl p-6 text-gray-400 italic">
+
                   Sin servicios de Internet configurados
+
                 </div>
 
               )}
 
               {serviciosInternet.map(
+
                 (servicio, indice) => (
 
                   <div
+
                     key={servicio.id}
+
                     className="bg-white border border-gray-200 rounded-lg px-3 py-2.5"
+
                   >
 
                     <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-end">
@@ -1547,37 +2626,61 @@ async function compartirPropuesta() {
                       <div>
 
                         <label className="block text-xs text-gray-500 mb-0.5">
+
                           Internet {indice + 1}
+
                         </label>
 
                         <select
+
                           value={servicio.plan}
+
                           onChange={(e) =>
+
                             actualizarInternet(
+
                               servicio.id,
+
                               e.target.value
+
                             )
+
                           }
+
                           className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                         >
 
                           {planesInternet.map(
+
                             (p) => (
 
                               <option
+
                                 key={p.id}
+
                                 value={p.plan}
+
                               >
+
                                 {p.plan}
+
                                 {' - '}
+
                                 {dinero(
+
                                   Number(
+
                                     p.precio_lista
+
                                   )
+
                                 )}
+
                               </option>
 
                             )
+
                           )}
 
                         </select>
@@ -1585,15 +2688,25 @@ async function compartirPropuesta() {
                       </div>
 
                       <button
+
                         type="button"
+
                         onClick={() =>
+
                           eliminarInternet(
+
                             servicio.id
+
                           )
+
                         }
+
                         className="h-8 w-full sm:w-9 px-2 border border-gray-300 rounded-md text-gray-500 hover:text-red-600 hover:border-red-300"
+
                       >
+
                         ×
+
                       </button>
 
                     </div>
@@ -1601,6 +2714,7 @@ async function compartirPropuesta() {
                   </div>
 
                 )
+
               )}
 
             </div>
@@ -1608,7 +2722,9 @@ async function compartirPropuesta() {
           </div>
 
           {/* ==================================================
+
               CLARO TV
+
           ================================================== */}
 
           <div className="mt-4">
@@ -1618,21 +2734,33 @@ async function compartirPropuesta() {
               <div>
 
                 <h2 className="text-lg font-semibold">
+
                   Claro TV
+
                 </h2>
 
               </div>
 
               <label className="relative inline-flex items-center cursor-pointer">
+
                 <input
+
                   type="checkbox"
+
                   checked={tvActivo}
+
                   onChange={(e) =>
+
                     setTvActivo(e.target.checked)
+
                   }
+
                   className="sr-only peer"
+
                 />
+
                 <span className="relative w-9 h-5 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
+
               </label>
 
             </div>
@@ -1646,24 +2774,37 @@ async function compartirPropuesta() {
                   <div>
 
                     <div className="font-medium">
+
                       {productoTV?.plan ??
+
                         'TV FULL HD'}
+
                     </div>
 
                     <div className="text-sm text-gray-500 mt-1">
+
                       Incluye 1 decodificador sin cargo
+
                     </div>
 
                   </div>
 
                   <div className="font-semibold">
+
                     {dinero(
+
                       Number(
+
                         productoTV
+
                           ?.precio_lista ??
+
                           0
+
                       )
+
                     )}
+
                   </div>
 
                 </div>
@@ -1671,62 +2812,99 @@ async function compartirPropuesta() {
                 <div className="mt-4">
 
                   <label className="block text-xs text-gray-500 mb-0.5">
+
                     Decodificadores adicionales
+
                   </label>
 
                   <select
+
                     value={
+
                       cantidadDecosAdicionales
+
                     }
 
                     onChange={(e) =>
+
                       setCantidadDecosAdicionales(
+
                         Number(
+
                           e.target.value
+
                         )
+
                       )
+
                     }
 
                     className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+
                   >
 
                     <option value="0">
+
                       0 adicionales
+
                     </option>
 
                     <option value="1">
+
                       1 adicional
+
                     </option>
 
                     <option value="2">
+
                       2 adicionales
+
                     </option>
 
                     {serviciosInternet.length === 0 && (
+
                       <option value="3">
+
                         3 adicionales
+
                       </option>
+
                     )}
 
                   </select>
 
                   <div className="text-sm text-gray-500 mt-2">
+
                     Cada deco adicional:{' '}
+
                     <strong>
+
                       {dinero(
+
                         Number(
+
                           productoDeco
+
                             ?.precio_lista ??
+
                             0
+
                         )
+
                       )}
+
                     </strong>
+
                   </div>
 
                   <div className="text-xs text-gray-400 mt-1">
+
                     {serviciosInternet.length > 0
+
                       ? 'Internet + TV: máximo 1 incluido + 2 adicionales.'
+
                       : 'Añadir TV: máximo 1 incluido + 3 adicionales. Solo aplica a servicios 2Play.'}
+
                   </div>
 
                 </div>
@@ -1744,18 +2922,29 @@ async function compartirPropuesta() {
             <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
 
               <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+
                 <input
+
                   type="checkbox"
+
                   checked={pagaClaroPay}
+
                   onChange={(e) =>
+
                     setPagaClaroPay(
+
                       e.target.checked
+
                     )
+
                   }
+
                   className="w-4 h-4"
+
                 />
 
                 ClaroPay ({porcentajeClaroPay}% Desc.)
+
               </label>
 
             </div>
@@ -1767,13 +2956,19 @@ async function compartirPropuesta() {
           <div className="mt-4">
 
             <div className="flex items-baseline justify-between gap-3 mb-1">
+
               <h2 className="text-base font-semibold">
+
                 Packs · Información
+
               </h2>
 
               <span className="text-xs text-gray-400">
+
                 Autogestión
+
               </span>
+
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-3">
@@ -1781,45 +2976,75 @@ async function compartirPropuesta() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
 
                 <div>
+
                   <div className="text-xs font-semibold text-gray-500 uppercase mb-1">
+
                     Datos
+
                   </div>
 
                   {packsDatos.map((pack) => (
+
                     <div
+
                       key={pack.id}
+
                       className="flex flex-wrap justify-between gap-2 gap-3 text-xs sm:text-sm py-0.5"
+
                     >
+
                       <span>{pack.plan}</span>
+
                       <span className="font-semibold">
+
                         {dinero(Number(pack.precio_lista))}
+
                       </span>
+
                     </div>
+
                   ))}
+
                 </div>
 
                 <div className="sm:border-l sm:border-gray-200 sm:pl-4">
+
                   <div className="text-xs font-semibold text-gray-500 uppercase mb-1">
+
                     TV
+
                   </div>
 
                   {packsTV.map((pack) => (
+
                     <div
+
                       key={pack.id}
+
                       className="flex flex-wrap justify-between gap-2 gap-3 text-xs sm:text-sm py-0.5"
+
                     >
+
                       <span>{pack.plan}</span>
+
                       <span className="font-semibold">
+
                         {dinero(Number(pack.precio_lista))}
+
                       </span>
+
                     </div>
+
                   ))}
+
                 </div>
 
               </div>
 
               <div className="border-t border-gray-100 mt-1 pt-1 text-[10px] text-gray-400">
+
                 Valores informativos · No se suman a la propuesta.
+
               </div>
 
             </div>
@@ -1829,7 +3054,9 @@ async function compartirPropuesta() {
         </section>
 
         {/* ==================================================
+
             PRESUPUESTO
+
         ================================================== */}
 
         <aside className="bg-white border border-gray-200 rounded-2xl p-3 sm:p-4 shadow-sm h-fit lg:sticky lg:top-3">
@@ -1837,165 +3064,294 @@ async function compartirPropuesta() {
           <div ref={propuestaRef}>
 
           <div className="border-b border-gray-200 pb-2 mb-3">
+
             <div className="text-xl sm:text-2xl font-bold text-red-600">
+
               Claro
+
             </div>
+
             <h2 className="text-lg sm:text-lg font-bold mt-0.5">
+
               Propuesta Comercial
+
             </h2>
+
 <div className="text-xs sm:text-sm font-bold text-gray-900 mt-0.5">
+
   Lucom Agente Oficial Claro
+
 </div>
+
+            <div className="text-xs font-semibold text-gray-600 mt-1">
+              {negocio}
+              {negocio === 'PYME' && ' · Precios sin Impuestos'}
+            </div>
+
           </div>
 
           {/* DATOS DEL CLIENTE */}
 
           {cotizadorAnonimo ? (
+
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3">
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs sm:text-sm">
+
                 <div className="sm:col-span-2">
+
                   <span className="text-gray-500">
+
                     Vendedor:{' '}
+
                   </span>
+
                   <span className="font-medium">
+
                     {usuario}
+
                   </span>
+
                 </div>
 
                 <div>
+
                   <span className="text-gray-500">
+
                     Emisión:{' '}
+
                   </span>
+
                   <span>{fechaEmision}</span>
+
                 </div>
 
                 <div>
+
                   <span className="text-gray-500">
+
                     Vigencia:{' '}
+
                   </span>
+
                   <span className="font-medium">
+
                     {fechaEmision}
+
                   </span>
+
                 </div>
+
               </div>
+
             </div>
+
           ) : (
+
             <>
+
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3">
 
             <div className="text-[10px] font-semibold text-gray-500 mb-1.5">
+
               DATOS DEL CLIENTE
+
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs sm:text-sm">
 
               <div>
+
                 <span className="text-gray-500">
+
                   Cliente:{' '}
+
                 </span>
+
                 <span className="font-medium">
+
                   {datosCliente.nombre || '—'}{' '}
+
                   {datosCliente.apellido || ''}
+
                 </span>
+
               </div>
 
               <div>
+
                 <span className="text-gray-500">
+
                   DNI:{' '}
+
                 </span>
+
                 <span>
+
                   {datosCliente.dni || '—'}
+
                 </span>
+
               </div>
 
               <div>
+
                 <span className="text-gray-500">
+
                   Teléfono:{' '}
+
                 </span>
+
                 <span>
+
                   {datosCliente.telefono || '—'}
+
                 </span>
+
               </div>
 
               <div>
+
                 <span className="text-gray-500">
+
                   Email:{' '}
+
                 </span>
+
                 <span>
+
                   {datosCliente.email || '—'}
+
                 </span>
+
               </div>
 
               <div>
+
                 <span className="text-gray-500">
+
                   Compañía Actual:{' '}
+
                 </span>
+
                 <span>
+
                   {datosCliente.companiaActual || '—'}
+
                 </span>
+
               </div>
 
               <div>
+
                 <span className="text-gray-500">
+
                   Domicilio:{' '}
+
                 </span>
+
                 <span>
+
                   {datosCliente.domicilio || '—'}
+
                 </span>
+
               </div>
 
               <div>
+
                 <span className="text-gray-500">
+
                   Entre calles:{' '}
+
                 </span>
+
                 <span>
+
                   {datosCliente.entreCalles || '—'}
+
                 </span>
+
               </div>
 
               <div>
+
                 <span className="text-gray-500">
+
                   Localidad:{' '}
+
                 </span>
+
                 <span>
+
                   {datosCliente.localidad || '—'}
+
                 </span>
+
               </div>
 
               <div>
+
                 <span className="text-gray-500">
+
                   Obs. domicilio:{' '}
+
                 </span>
+
                 <span>
+
                   {datosCliente.observacionesDomicilio || '—'}
+
                 </span>
+
               </div>
 
               <div className="sm:col-span-2 border-t border-gray-200 pt-1 mt-1">
+
                 <span className="text-gray-500">
+
                   Vendedor:{' '}
+
                 </span>
+
                 <span className="font-medium">
+
                   {usuario}
+
                 </span>
+
               </div>
 
               <div>
+
                 <span className="text-gray-500">
+
                   Emisión:{' '}
+
                 </span>
+
                 <span>
+
                   {fechaEmision}
+
                 </span>
+
               </div>
 
               <div>
+
                 <span className="text-gray-500">
+
                   Vigencia:{' '}
+
                 </span>
+
                 <span className="font-medium">
+
                 {fechaEmision}
+
                 </span>
+
               </div>
 
             </div>
@@ -2003,28 +3359,35 @@ async function compartirPropuesta() {
           </div>
 
             </>
+
           )}
 
           {/* MÓVILES */}
 
           {resultado.lineas.length >
+
             0 && (
 
             <>
 
               <div className="text-[10px] font-semibold text-gray-500 mb-1.5">
+
                 LÍNEAS MÓVILES
+
               </div>
 
               <div className="space-y-1.5">
 
                 {resultado.lineas.map(
+
                   (linea) => (
 
                     <div
+
                       key={linea.id}
 
                       className="bg-gray-50 rounded-md px-3 py-2"
+
                     >
 
                       <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-4">
@@ -2032,94 +3395,149 @@ async function compartirPropuesta() {
                         <div>
 
                           <span className="font-medium">
+
                             {linea.plan}
+
                           </span>
 
                           <span className="ml-2 text-red-600">
+
                             {nombreTipo(
+
                               linea.tipo
+
                             )}
+
                           </span>
 
                         </div>
 
                         <div className="font-semibold">
+
                           {dinero(
+
                             linea.subtotal
+
                           )}
+
                         </div>
 
                       </div>
+
                       {linea.tipo !== 'LINEA NUEVA' && (
+
                         <div className="mt-0.5 text-[11px] text-gray-600">
+
                           NIM:{' '}
+
                           <strong>
+
                             {lineas.find((l) => l.id === linea.id)
+
                               ?.portabilidades[0]?.nim || '—'}
+
                           </strong>
+
                           {' · '}
+
                           {lineas.find((l) => l.id === linea.id)
+
                             ?.portabilidades[0]?.origen || 'PRE'}
+
                         </div>
+
                       )}
 
                       <div className="text-xs sm:text-sm mt-1">
 
                         <span className="line-through text-gray-400">
+
                           {dinero(
+
                             linea.precioLista
+
                           )}
+
                         </span>
 
                         <span className="ml-2 text-red-600">
+
                           -
+
                           {
+
                             linea.descuentoAplicado
+
                           }
+
                           %
+
                         </span>
 
                         <span className="ml-2">
+
                           {dinero(
+
                             linea.precioUnitario
+
                           )}
+
                           {' por línea'}
+
                         </span>
 
                       </div>
 
                       {linea.tipoDescuento ===
+
                         'CONEXION_FULL' && (
 
                         <div className="mt-1.5 flex items-center gap-1.5 text-sm sm:text-base font-bold text-green-800">
+
                           <span aria-hidden="true">🎁</span>
+
                           <span>
+
                             Conexión Full - 10 Gb de Regalo x 12 meses
+
                           </span>
+
                         </div>
 
                       )}
 
                       {linea.tipoDescuento ===
+
                         'FLASH' && (
 
                         <div className="text-xs sm:text-sm text-amber-600 mt-1">
+
                           ⚡{' '}
+
                           {linea.nombreFlash ??
+
                             'Promo Flash'}
+
                         </div>
 
                       )}
 
                       {linea.tipoDescuento ===
+
                         'NORMAL' &&
+
                         linea.beneficiosNormal && (
 
                         <div className="text-xs sm:text-sm text-red-600 mt-1">
+
                           🎁{' '}
+
                           {
+
                             linea.beneficiosNormal
+
                           }
+
                         </div>
 
                       )}
@@ -2127,6 +3545,7 @@ async function compartirPropuesta() {
                     </div>
 
                   )
+
                 )}
 
               </div>
@@ -2134,14 +3553,21 @@ async function compartirPropuesta() {
               <div className="bg-gray-100 rounded-lg px-3 py-2 mt-2 flex flex-wrap justify-between gap-2 text-sm font-semibold">
 
                 <span>
+
                   Subtotal Móvil
+
                 </span>
 
                 <span>
+
                   {dinero(
+
                     resultado
+
                       .subtotalMoviles
+
                   )}
+
                 </span>
 
               </div>
@@ -2157,47 +3583,67 @@ async function compartirPropuesta() {
   <>
 
     <div className="text-[11px] font-semibold text-gray-500 mt-4 mb-2">
+
       INTERNET WIFI
+
     </div>
 
     <div className="space-y-2">
 
       {productosInternetSeleccionados.map(
+
         (servicio, indice) => (
 
           <div
+
             key={servicio.id}
+
             className="bg-gray-50 rounded-md px-3 py-2"
+
           >
 
             <div className="flex flex-wrap justify-between gap-2">
 
               <span>
+
                 Internet {indice + 1} · {servicio.plan}
+
               </span>
 
               <span className="font-semibold">
+
                 {dinero(
+
                   Number(
+
                     servicio.producto.precio_lista ??
+
                     0
+
                   )
+
                 )}
+
               </span>
 
             </div>
 
             <div className="text-xs sm:text-sm text-amber-600 mt-1">
+
               🎁 Instalación + 1er mes GRATIS
+
             </div>
 
             <div className="text-xs sm:text-sm text-gray-700 mt-1">
+
               ☎️ Incluye Línea Fija c/8000 Minutos libres
+
             </div>
 
           </div>
 
         )
+
       )}
 
     </div>
@@ -2205,13 +3651,19 @@ async function compartirPropuesta() {
     <div className="bg-gray-100 rounded-lg px-3 py-2 mt-2 flex flex-wrap justify-between gap-2 text-sm font-semibold">
 
       <span>
+
         Subtotal Internet
+
       </span>
 
       <span>
+
         {dinero(
+
           resultado.subtotalBAF
+
         )}
+
       </span>
 
     </div>
@@ -2219,15 +3671,19 @@ async function compartirPropuesta() {
   </>
 
 )}
+
           {/* TV */}
 
           {resultado.subtotalTV >
+
             0 && (
 
             <>
 
               <div className="text-[11px] font-semibold text-gray-500 mt-4 mb-2">
+
                 CLARO TV
+
               </div>
 
               <div className="bg-gray-50 rounded-md px-3 py-2">
@@ -2235,41 +3691,63 @@ async function compartirPropuesta() {
                 <div className="flex flex-wrap justify-between gap-2">
 
                   <span>
+
                     TV FULL HD
+
                   </span>
 
                   <span className="font-semibold">
+
                     {dinero(
+
                       resultado
+
                         .subtotalTV
+
                     )}
+
                   </span>
 
                 </div>
 
                 <div className="text-xs sm:text-sm text-green-600 mt-1">
+
                   ✓ 1 decodificador incluido sin cargo
+
                 </div>
 
                 {resultado
+
                   .cantidadDecosAdicionales >
+
                   0 && (
 
                   <div className="flex flex-wrap justify-between gap-2 mt-3 text-sm">
 
                     <span>
+
                       {
+
                         resultado
+
                           .cantidadDecosAdicionales
+
                       }{' '}
+
                       deco(s) adicional(es)
+
                     </span>
 
                     <span>
+
                       {dinero(
+
                         resultado
+
                           .subtotalDecosAdicionales
+
                       )}
+
                     </span>
 
                   </div>
@@ -2277,11 +3755,17 @@ async function compartirPropuesta() {
                 )}
 
                 <div className="text-xs text-gray-400 mt-2">
+
                   Total de decos:{' '}
+
                   {
+
                     resultado
+
                       .cantidadDecosTotal
+
                   }
+
                 </div>
 
               </div>
@@ -2293,10 +3777,13 @@ async function compartirPropuesta() {
           {/* CONEXIÓN FULL */}
 
           {resultado
+
             .hayConexionFull && (
 
             <div className="mt-3 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-green-700 text-xs sm:text-sm">
+
               Beneficios de Conexión Full aplicados.
+
             </div>
 
           )}
@@ -2308,33 +3795,49 @@ async function compartirPropuesta() {
             <div className="flex flex-wrap justify-between gap-2 text-gray-600">
 
               <span>
+
                 Subtotal
+
               </span>
 
               <span>
+
                 {dinero(
+
                   resultado
+
                     .subtotalAntesConvergencia
+
                 )}
+
               </span>
 
             </div>
 
             {resultado
+
               .hayConvergencia && (
 
               <div className="flex flex-wrap justify-between gap-2 text-green-600 mt-2">
 
                 <span>
+
                   Descuento Convergente
+
                 </span>
 
                 <span>
+
                   -
+
                   {dinero(
+
                     resultado
+
                       .descuentoConvergencia
+
                   )}
+
                 </span>
 
               </div>
@@ -2342,19 +3845,27 @@ async function compartirPropuesta() {
             )}
 
             {resultado
+
               .hayConvergencia && (
 
               <div className="flex flex-wrap justify-between gap-2 text-gray-600 mt-2">
 
                 <span>
+
                   Subtotal con Convergencia
+
                 </span>
 
                 <span>
+
                   {dinero(
+
                     resultado
+
                       .totalDespuesConvergencia
+
                   )}
+
                 </span>
 
               </div>
@@ -2368,32 +3879,51 @@ async function compartirPropuesta() {
                 <div className="flex flex-wrap justify-between gap-2 text-green-600">
 
                   <span>
+
                     Claro Pay{' '}
+
                     {
+
                       porcentajeClaroPay
+
                     }
+
                     %
+
                   </span>
 
                   <span>
+
                     -
+
                     {dinero(
+
                       resultado
+
                         .descuentoClaroPay
+
                     )}
+
                   </span>
 
                 </div>
 
                 {resultado
+
                   .descuentoClaroPay >=
+
                   topeClaroPay && (
 
                   <div className="text-xs text-gray-400 mt-1">
+
                     Tope máximo aplicado:{' '}
+
                     {dinero(
+
                       topeClaroPay
+
                     )}
+
                   </div>
 
                 )}
@@ -2405,13 +3935,19 @@ async function compartirPropuesta() {
             <div className="bg-red-600 text-white rounded-lg px-4 py-3 mt-3 flex justify-between items-center gap-3">
 
               <span className="text-lg font-bold">
+
                 Total
+
               </span>
 
               <span className="text-lg font-bold">
+
                 {dinero(
+
                   resultado.total
+
                 )}
+
               </span>
 
             </div>
@@ -2427,16 +3963,23 @@ async function compartirPropuesta() {
               {novedades.map((novedad) => (
 
                 <div
+
                   key={novedad.id}
+
                   className="border border-red-200 bg-red-50 rounded-lg px-3 py-2"
+
                 >
 
                   <div className="text-sm font-semibold text-red-700">
+
                     {novedad.titulo}
+
                   </div>
 
                   <div className="text-xs sm:text-sm text-gray-700 mt-0.5 leading-snug whitespace-pre-line">
+
                     {novedad.contenido}
+
                   </div>
 
                 </div>
@@ -2448,11 +3991,17 @@ async function compartirPropuesta() {
           )}
 
           <div className="mt-5 border border-gray-200 bg-gray-50 rounded-lg p-3 text-xs leading-relaxed text-gray-600">
+
             <strong className="text-gray-800">
+
               Conformidad:
+
             </strong>{' '}
+
             La respuesta “OK” a esta propuesta implica conformidad con los productos, beneficios e importes detallados.
+
             La propuesta es válida únicamente durante el día de emisión.
+
           </div>
 
           </div>
@@ -2462,38 +4011,63 @@ async function compartirPropuesta() {
             <div className="grid grid-cols-3 gap-2">
 
               <button
+
                 type="button"
+
                 onClick={descargarJPG}
+
                 disabled={!datosClienteCompletos || !portabilidadesCompletas || exportando}
+
                 className="rounded-md bg-red-600 text-white font-medium text-xs sm:text-sm px-2 sm:px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+
               >
+
                 {exportando ? 'Generando...' : 'JPG'}
+
               </button>
 
               <button
+
                 type="button"
+
                 onClick={descargarPDF}
+
                 disabled={!datosClienteCompletos || !portabilidadesCompletas || exportando}
+
                 className="rounded-md bg-white border border-gray-300 text-gray-800 font-medium text-xs sm:text-sm px-2 sm:px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+
               >
+
                 PDF
+
               </button>
 
               <button
+
                 type="button"
+
                 onClick={compartirPropuesta}
+
                 disabled={!datosClienteCompletos || !portabilidadesCompletas || exportando}
+
                 className="rounded-md bg-green-600 text-white font-medium text-xs sm:text-sm px-2 sm:px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+
               >
+
                 Compartir
+
               </button>
 
             </div>
 
             {!datosClienteCompletos && (
+
               <div className="text-xs text-amber-700 mt-2">
+
                 Completá todos los datos obligatorios para habilitar la exportación.
+
               </div>
+
             )}
 
           </div>
@@ -2503,5 +4077,7 @@ async function compartirPropuesta() {
       </div>
 
     </main>
+
   )
+
 }

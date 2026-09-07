@@ -102,6 +102,7 @@ export default async function AdminFlashPage() {
     .select(
       'id, nombre, origen, porcentaje, fecha_desde, fecha_hasta, activo'
     )
+    .eq('negocio', 'MASIVO')
     .order('fecha_desde', {
       ascending: false,
     })
@@ -196,6 +197,7 @@ export default async function AdminFlashPage() {
           nombre,
           origen,
           porcentaje,
+          negocio: 'MASIVO',
 
           fecha_desde:
             desde,
