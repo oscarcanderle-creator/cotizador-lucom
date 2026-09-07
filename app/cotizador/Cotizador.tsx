@@ -59,6 +59,11 @@ type LineaUI = {
   portabilidades: PortabilidadUI[]
 }
 
+type InternetUI = {
+  id: number
+  plan: string
+}
+
 type DatosCliente = {
   nombre: string
   apellido: string
@@ -231,15 +236,20 @@ export default function Cotizador({
    * =====================================================
    */
 
-  const [
-    internetActivo,
-    setInternetActivo,
-  ] = useState(cotizadorAnonimo)
+  const [serviciosInternet, setServiciosInternet] =
+    useState<InternetUI[]>(
+      cotizadorAnonimo
+        ? [
+            {
+              id: 1,
+              plan: '200 MB',
+            },
+          ]
+        : []
+    )
 
-  const [
-    planInternet,
-    setPlanInternet,
-  ] = useState('200 MB')
+  const [nextInternetId, setNextInternetId] =
+    useState(cotizadorAnonimo ? 2 : 1)
 
   /*
    * =====================================================
@@ -256,6 +266,24 @@ export default function Cotizador({
     cantidadDecosAdicionales,
     setCantidadDecosAdicionales,
   ] = useState(0)
+
+  /*
+   * Si TV se combina con un Internet nuevo,
+   * el máximo permitido es 2 decos adicionales.
+   * Si se agrega TV sin Internet nuevo,
+   * se permiten hasta 3 adicionales.
+   */
+  useEffect(() => {
+    if (
+      serviciosInternet.length > 0 &&
+      cantidadDecosAdicionales > 2
+    ) {
+      setCantidadDecosAdicionales(2)
+    }
+  }, [
+    serviciosInternet.length,
+    cantidadDecosAdicionales,
+  ])
 
   /*
    * =====================================================
@@ -478,60 +506,84 @@ export default function Cotizador({
 
   /*
    * =====================================================
-   * PRODUCTO BAF SELECCIONADO
+   * SERVICIOS INTERNET / BAF
    * =====================================================
    */
 
-  const productoInternet =
-    useMemo(() => {
-      if (!internetActivo) {
-        return null
+  function agregarInternet() {
+    setServiciosInternet((actuales) => {
+      if (actuales.length >= 2) {
+        return actuales
       }
 
-      return productos.find(
-        (p) =>
-          p.producto ===
-            'Internet Fibra optica' &&
-          p.plan ===
-            planInternet
+      return [
+        ...actuales,
+        {
+          id: nextInternetId,
+          plan: '200 MB',
+        },
+      ]
+    })
+
+    setNextInternetId((actual) => actual + 1)
+  }
+
+  function actualizarInternet(
+    id: number,
+    plan: string
+  ) {
+    setServiciosInternet((actuales) =>
+      actuales.map((servicio) =>
+        servicio.id === id
+          ? { ...servicio, plan }
+          : servicio
       )
+    )
+  }
+
+  function eliminarInternet(id: number) {
+    setServiciosInternet((actuales) =>
+      actuales.filter(
+        (servicio) =>
+          servicio.id !== id
+      )
+    )
+  }
+
+  const productosInternetSeleccionados =
+    useMemo(() => {
+      return serviciosInternet
+        .map((servicio) => {
+          const producto = productos.find(
+            (p) =>
+              p.producto ===
+                'Internet Fibra optica' &&
+              p.plan === servicio.plan
+          )
+
+          if (!producto) {
+            return null
+          }
+
+          return {
+            id: servicio.id,
+            plan: servicio.plan,
+            producto,
+          }
+        })
+        .filter(
+          (
+            item
+          ): item is {
+            id: number
+            plan: string
+            producto: Producto
+          } => item !== null
+        )
     }, [
+      serviciosInternet,
       productos,
-      internetActivo,
-      planInternet,
     ])
-
-  /*
-   * =====================================================
-   * DISPONIBILIDAD DE TV
-   * =====================================================
-   *
-   * TV puede venderse cuando:
-   *
-   * - el cliente ya tiene BAF
-   *   o
-   * - está contratando BAF.
-   */
-
-  const puedeContratarTV =
-    clienteTieneBAF ||
-    internetActivo
-
-  /*
-   * Si desaparece la condición
-   * necesaria para TV, quitamos
-   * automáticamente TV y decos.
-   */
-
-  useEffect(() => {
-    if (!puedeContratarTV) {
-      setTvActivo(false)
-
-      setCantidadDecosAdicionales(
-        0
-      )
-    }
-  }, [puedeContratarTV])
 
   /*
    * =====================================================
@@ -618,14 +670,15 @@ export default function Cotizador({
       lineas:
         lineasMotor,
 
-      contrataBAF:
-        internetActivo,
-
-      precioBAF:
-        Number(
-          productoInternet
-            ?.precio_lista ??
-            0
+      serviciosBAF:
+        productosInternetSeleccionados.map(
+          (servicio) => ({
+            id: servicio.id,
+            plan: servicio.plan,
+            precioLista: Number(
+              servicio.producto.precio_lista ?? 0
+            ),
+          })
         ),
 
       clienteTieneBAF,
@@ -1450,72 +1503,107 @@ async function compartirPropuesta() {
 
           <div className="mt-4">
 
-            <div className="flex items-center gap-2 mb-2">
-
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={internetActivo}
-                  onChange={(e) =>
-                    setInternetActivo(e.target.checked)
-                  }
-                  className="sr-only peer"
-                />
-                <span className="relative w-9 h-5 rounded-full bg-gray-300 transition-colors peer-checked:bg-green-500 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
-              </label>
+            <div className="flex items-center justify-between mb-1.5">
 
               <h2 className="text-lg font-semibold">
                 Internet WiFi
               </h2>
 
+              <button
+                type="button"
+                onClick={agregarInternet}
+                disabled={serviciosInternet.length >= 2}
+                className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium ${
+                  serviciosInternet.length >= 2
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'text-red-600 bg-red-50 hover:bg-red-100'
+                }`}
+              >
+                + Agregar Internet
+              </button>
+
             </div>
 
-            {internetActivo && (
+            <div className="space-y-1.5">
 
-              <div className="bg-white border border-gray-200 rounded-lg px-3 py-2.5">
+              {serviciosInternet.length === 0 && (
 
-                <label className="block text-xs text-gray-500 mb-0.5">
-                  Plan de Internet
-                </label>
+                <div className="bg-white border border-gray-200 rounded-xl p-6 text-gray-400 italic">
+                  Sin servicios de Internet configurados
+                </div>
 
-                <select
-                  value={
-                    planInternet
-                  }
+              )}
 
-                  onChange={(e) =>
-                    setPlanInternet(
-                      e.target.value
-                    )
-                  }
+              {serviciosInternet.map(
+                (servicio, indice) => (
 
-                  className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
-                >
+                  <div
+                    key={servicio.id}
+                    className="bg-white border border-gray-200 rounded-lg px-3 py-2.5"
+                  >
 
-                  {planesInternet.map(
-                    (p) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-end">
 
-                      <option
-                        key={p.id}
-                        value={p.plan}
-                      >
-                        {p.plan}
-                        {' - '}
-                        {dinero(
-                          Number(
-                            p.precio_lista
+                      <div>
+
+                        <label className="block text-xs text-gray-500 mb-0.5">
+                          Internet {indice + 1}
+                        </label>
+
+                        <select
+                          value={servicio.plan}
+                          onChange={(e) =>
+                            actualizarInternet(
+                              servicio.id,
+                              e.target.value
+                            )
+                          }
+                          className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+                        >
+
+                          {planesInternet.map(
+                            (p) => (
+
+                              <option
+                                key={p.id}
+                                value={p.plan}
+                              >
+                                {p.plan}
+                                {' - '}
+                                {dinero(
+                                  Number(
+                                    p.precio_lista
+                                  )
+                                )}
+                              </option>
+
+                            )
+                          )}
+
+                        </select>
+
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          eliminarInternet(
+                            servicio.id
                           )
-                        )}
-                      </option>
+                        }
+                        className="h-8 w-full sm:w-9 px-2 border border-gray-300 rounded-md text-gray-500 hover:text-red-600 hover:border-red-300"
+                      >
+                        ×
+                      </button>
 
-                    )
-                  )}
+                    </div>
 
-                </select>
+                  </div>
 
-              </div>
+                )
+              )}
 
-            )}
+            </div>
 
           </div>
 
@@ -1533,20 +1621,11 @@ async function compartirPropuesta() {
                   Claro TV
                 </h2>
 
-                {!puedeContratarTV && (
-
-                  <div className="text-sm text-gray-400 mt-1">
-                    Requiere servicio Internet 2Play instalado.
-                  </div>
-
-                )}
-
               </div>
 
-              <label className={`relative inline-flex items-center ${puedeContratarTV ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}>
+              <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  disabled={!puedeContratarTV}
                   checked={tvActivo}
                   onChange={(e) =>
                     setTvActivo(e.target.checked)
@@ -1558,8 +1637,7 @@ async function compartirPropuesta() {
 
             </div>
 
-            {tvActivo &&
-              puedeContratarTV && (
+            {tvActivo && (
 
               <div className="bg-white border border-gray-200 rounded-lg px-3 py-2.5">
 
@@ -1624,6 +1702,12 @@ async function compartirPropuesta() {
                       2 adicionales
                     </option>
 
+                    {serviciosInternet.length === 0 && (
+                      <option value="3">
+                        3 adicionales
+                      </option>
+                    )}
+
                   </select>
 
                   <div className="text-sm text-gray-500 mt-2">
@@ -1640,7 +1724,9 @@ async function compartirPropuesta() {
                   </div>
 
                   <div className="text-xs text-gray-400 mt-1">
-                    Máximo: 3 decodificadores por servicio.
+                    {serviciosInternet.length > 0
+                      ? 'Internet + TV: máximo 1 incluido + 2 adicionales.'
+                      : 'Añadir TV: máximo 1 incluido + 3 adicionales. Solo aplica a servicios 2Play.'}
                   </div>
 
                 </div>
@@ -2005,8 +2091,11 @@ async function compartirPropuesta() {
                       {linea.tipoDescuento ===
                         'CONEXION_FULL' && (
 
-                        <div className="text-xs sm:text-sm text-green-600 mt-1">
-                          Conexión Full · 10 GB de regalo x 12 meses
+                        <div className="mt-1.5 flex items-center gap-1.5 text-sm sm:text-base font-bold text-green-800">
+                          <span aria-hidden="true">🎁</span>
+                          <span>
+                            Conexión Full - 10 Gb de Regalo x 12 meses
+                          </span>
                         </div>
 
                       )}
@@ -2063,7 +2152,7 @@ async function compartirPropuesta() {
 
 {/* INTERNET */}
 
-{productoInternet && (
+{productosInternetSeleccionados.length > 0 && (
 
   <>
 
@@ -2071,29 +2160,45 @@ async function compartirPropuesta() {
       INTERNET WIFI
     </div>
 
-    <div className="bg-gray-50 rounded-md px-3 py-2">
+    <div className="space-y-2">
 
-      <div className="flex flex-wrap justify-between gap-2">
+      {productosInternetSeleccionados.map(
+        (servicio, indice) => (
 
-        <span>
-          {productoInternet.plan}
-        </span>
+          <div
+            key={servicio.id}
+            className="bg-gray-50 rounded-md px-3 py-2"
+          >
 
-        <span className="font-semibold">
-          {dinero(
-            resultado.subtotalBAF
-          )}
-        </span>
+            <div className="flex flex-wrap justify-between gap-2">
 
-      </div>
+              <span>
+                Internet {indice + 1} · {servicio.plan}
+              </span>
 
-      <div className="text-xs sm:text-sm text-amber-600 mt-1">
-        🎁 Instalación + 1er mes GRATIS
-      </div>
+              <span className="font-semibold">
+                {dinero(
+                  Number(
+                    servicio.producto.precio_lista ??
+                    0
+                  )
+                )}
+              </span>
 
-      <div className="text-xs sm:text-sm text-gray-700 mt-1">
-      ☎️ Incluye Línea Fija c/8000 Minutos libres
-      </div>
+            </div>
+
+            <div className="text-xs sm:text-sm text-amber-600 mt-1">
+              🎁 Instalación + 1er mes GRATIS
+            </div>
+
+            <div className="text-xs sm:text-sm text-gray-700 mt-1">
+              ☎️ Incluye Línea Fija c/8000 Minutos libres
+            </div>
+
+          </div>
+
+        )
+      )}
 
     </div>
 

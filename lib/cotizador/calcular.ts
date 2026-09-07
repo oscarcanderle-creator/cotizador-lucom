@@ -25,11 +25,16 @@ export type LineaEntrada = {
   beneficiosNormal: string | null
 }
 
+export type ServicioBAFEntrada = {
+  id: number
+  plan: string
+  precioLista: number
+}
+
 export type EntradaCotizacion = {
   lineas: LineaEntrada[]
 
-  contrataBAF: boolean
-  precioBAF: number
+  serviciosBAF: ServicioBAFEntrada[]
 
   clienteTieneBAF: boolean
   clienteTieneLineasClaro: boolean
@@ -118,8 +123,7 @@ export function calcularCotizacion(
   const {
     lineas,
 
-    contrataBAF,
-    precioBAF,
+    serviciosBAF,
 
     clienteTieneBAF,
     clienteTieneLineasClaro,
@@ -160,6 +164,21 @@ export function calcularCotizacion(
 
   const hayLineasNuevas =
     cantidadMovilesNuevas > 0
+
+  /*
+   * =====================================================
+   * INTERNET / BAF NUEVOS
+   * =====================================================
+   */
+
+  const cantidadBAFNuevos =
+    Math.min(
+      2,
+      serviciosBAF.length
+    )
+
+  const contrataBAF =
+    cantidadBAFNuevos > 0
 
   /*
    * =====================================================
@@ -353,32 +372,29 @@ export function calcularCotizacion(
    */
 
   const subtotalBAF =
-    contrataBAF
-      ? precioBAF
-      : 0
+    serviciosBAF
+      .slice(0, 2)
+      .reduce(
+        (total, servicio) =>
+          total +
+          Number(
+            servicio.precioLista ?? 0
+          ),
+        0
+      )
 
   /*
    * =====================================================
    * CLARO TV
    * =====================================================
    *
-   * TV puede contratarse solamente si:
-   *
-   * - el cliente ya tiene BAF
-   *   o
-   * - está contratando BAF.
-   *
-   * La interfaz también impedirá
-   * seleccionar una combinación inválida.
+   * TV puede contratarse como producto independiente.
+   * No requiere que el cliente tenga BAF ni que
+   * esté contratando un nuevo servicio de Internet.
    */
 
-  const puedeContratarTV =
-    clienteTieneBAF ||
-    contrataBAF
-
   const tvValido =
-    contrataTV &&
-    puedeContratarTV
+    contrataTV
 
   const subtotalTV =
     tvValido
@@ -396,23 +412,27 @@ export function calcularCotizacion(
       : 0
 
   /*
-   * Máximo:
+   * Máximo de decodificadores adicionales:
    *
-   * 1 deco incluido
-   * +
-   * 2 adicionales
+   * - Internet nuevo + TV: hasta 2 adicionales.
+   * - Añadir TV sin Internet nuevo: hasta 3 adicionales.
    *
-   * = 3 decos.
+   * La opción de Añadir TV sin Internet nuevo
+   * aplica únicamente a servicios 2Play existentes.
    *
-   * Aunque la interfaz también
-   * limite el selector, el motor
-   * vuelve a validar el máximo.
+   * Aunque la interfaz también limite el selector,
+   * el motor vuelve a validar el máximo.
    */
+
+  const maxDecosAdicionales =
+    contrataBAF
+      ? 2
+      : 3
 
   const decosAdicionalesValidos =
     tvValido
       ? Math.min(
-          2,
+          maxDecosAdicionales,
           Math.max(
             0,
             cantidadDecosAdicionales
@@ -452,6 +472,11 @@ export function calcularCotizacion(
    * +
    * LÍNEAS MÓVILES
    *
+   * Cada nuevo BAF cuenta como un servicio.
+   * Por ejemplo, 2 BAF + 1 línea móvil
+   * totalizan 3 servicios y aplican
+   * Convergencia 3.
+   *
    * TV NO crea por sí mismo
    * una condición de Convergencia.
    */
@@ -474,9 +499,8 @@ export function calcularCotizacion(
     totalBAF += 1
   }
 
-  if (contrataBAF) {
-    totalBAF += 1
-  }
+  totalBAF +=
+    cantidadBAFNuevos
 
   const hayConvergencia =
     totalMoviles > 0 &&
