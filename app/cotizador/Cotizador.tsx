@@ -1046,6 +1046,86 @@ export default function Cotizador({
 
    * =====================================================
 
+   * BENEFICIOS MÓVILES
+
+   * Se obtienen desde Reglas Comerciales según el negocio
+
+   * activo (MASIVO / PYME). Si una regla está inactiva,
+
+   * page.tsx no la entrega y el beneficio no se aplica.
+
+   * =====================================================
+
+   */
+
+  function obtenerGbPlan(plan: string) {
+
+    const coincidencia = plan.match(/(\d+(?:[.,]\d+)?)/)
+
+    if (!coincidencia) return 0
+
+    return Number(coincidencia[1].replace(',', '.'))
+
+  }
+
+  function obtenerBeneficioMovil(
+
+    tipo: TipoLinea,
+
+    plan: string
+
+  ): string | null {
+
+    let prefijoRegla: string
+
+    if (tipo === 'LINEA NUEVA') {
+
+      prefijoRegla = 'BENEFICIO_LINEA_NUEVA'
+
+    } else if (tipo === 'PERSONAL') {
+
+      prefijoRegla = 'BENEFICIO_PORTA_PERSONAL'
+
+    } else if (tipo === 'MOVISTAR') {
+
+      prefijoRegla = 'BENEFICIO_PORTA_MOVISTAR'
+
+    } else {
+
+      return null
+
+    }
+
+    const gb = reglas[`${prefijoRegla}_GB`]
+
+    const meses = reglas[`${prefijoRegla}_MESES`]
+
+    const planMinimo = reglas[`${prefijoRegla}_PLAN_MIN`]
+
+    if (
+
+      gb === undefined ||
+
+      meses === undefined ||
+
+      planMinimo === undefined
+
+    ) {
+
+      return null
+
+    }
+
+    if (obtenerGbPlan(plan) < planMinimo) return null
+
+    return `${gb}Gb x ${meses} meses`
+
+  }
+
+  /*
+
+   * =====================================================
+
    * ARMAR LÍNEAS PARA EL MOTOR
 
    * =====================================================
@@ -1154,11 +1234,13 @@ export default function Cotizador({
 
             beneficiosNormal:
 
-              producto
+              obtenerBeneficioMovil(
 
-                ?.beneficios ??
+                linea.tipo,
 
-              null,
+                linea.plan
+
+              ),
 
           }
 
@@ -1171,6 +1253,8 @@ export default function Cotizador({
       lineas,
 
       productos,
+
+      reglas,
 
     ])
 
