@@ -3606,25 +3606,14 @@ async function compartirPropuesta() {
 
                       )}
 
-                      {linea.tipoDescuento ===
-
-                        'NORMAL' &&
-
-                        linea.beneficiosNormal && (
-
-                        <div className="text-xs sm:text-sm text-red-600 mt-1">
-
-                          🎁{' '}
-
-                          {
-
-                            linea.beneficiosNormal
-
-                          }
-
-                        </div>
-
-                      )}
+                    {linea.beneficiosNormal && (
+  <div className="text-xs sm:text-sm text-red-600 mt-1">
+    🎁{' '}
+    {
+      linea.beneficiosNormal
+    }
+  </div>
+)}
 
                     </div>
 
