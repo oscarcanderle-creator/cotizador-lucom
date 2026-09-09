@@ -122,7 +122,6 @@ async function guardarGestionBaf(formData: FormData) {
       operacion_id: idOperacion,
       recurso_clave: String(formData.get('recurso_clave') ?? ''),
       sesion_token: String(formData.get('sesion_token') ?? ''),
-      responsable_id: texto('responsable_id'),
       estado_baf_id: estadoBafId,
       prospector: texto('prospector'),
       cia_celular: texto('cia_celular'),
@@ -248,7 +247,6 @@ async function guardarGestionPorta(formData: FormData) {
       operacion_id: idOperacion,
       recurso_clave: String(formData.get('recurso_clave') ?? ''),
       sesion_token: String(formData.get('sesion_token') ?? ''),
-      responsable_id: texto('responsable_id'),
       estado_porta_id: estadoPortaId,
       estado_bboo_id: estadoBbooId,
       bboo_id: bbooIdRaw || null,
@@ -718,6 +716,15 @@ export default async function DetalleVentaPage({
       return r?.vendedor || r?.nombre || 'Usuario no disponible'
     }
 
+    const nombreBbooProducto = (idBboo: string | null | undefined) => {
+      if (!idBboo) return 'Sin BBOO asignado'
+      if (idBboo === user.id && profile.rol === 'BBOO') {
+        return profile.nombre?.trim() || user.email || 'Usuario BBOO'
+      }
+      const r = (usuariosBboo ?? []).find((x: any) => x.id === idBboo)
+      return r?.vendedor || r?.nombre || 'Usuario BBOO no disponible'
+    }
+
     return (
       <main className="min-h-screen bg-gray-50">
         <AppHeader
@@ -752,6 +759,7 @@ export default async function DetalleVentaPage({
             bloqueoPropio={bloqueoPropio}
             usuarioBloqueo={usuarioBloqueo}
             bloqueadoDesde={bloqueo?.bloqueado_desde ?? null}
+            autoAsignarGestion
           />
 
           <div className="space-y-5">
@@ -844,6 +852,11 @@ export default async function DetalleVentaPage({
                           <div className="text-right text-xs text-gray-500">
                             <div>Producto #{productoId}</div>
                             <div className="mt-1">Responsable: <span className="font-semibold text-gray-700">{nombreResponsableProducto(responsableActual)}</span></div>
+                            {!esBaf && (
+                              <div className="mt-1">
+                                BBOO: <span className="font-semibold text-gray-700">{nombreBbooProducto(gestion?.bboo_id)}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -886,13 +899,28 @@ export default async function DetalleVentaPage({
                         <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
 
                         <fieldset disabled={!puedeEditarProducto}>
-                          <div className="mb-4">
-                            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Responsable</label>
-                            <select name="responsable_id" defaultValue={responsableActual ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">
-                              <option value="">Sin responsable asignado</option>
-                              {(responsables ?? []).map((r: any) => <option key={r.id} value={r.id}>{r.vendedor || r.nombre || r.id}</option>)}
-                            </select>
-                            {profile.rol === 'BBOO' && <p className="mt-1 text-xs text-gray-500">BBOO conserva el Responsable comercial actual.</p>}
+                          <div className="mb-4 rounded-lg border border-gray-200 bg-white px-3 py-2">
+                            {profile.rol === 'BBOO' && !esBaf ? (
+                              <>
+                                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">BBOO asignado</div>
+                                <div className="mt-1 text-sm font-semibold text-gray-800">
+                                  {nombreBbooProducto(gestion?.bboo_id)}
+                                </div>
+                                <div className="mt-2 text-xs text-gray-500">
+                                  Responsable comercial: <span className="font-semibold text-gray-700">{nombreResponsableProducto(responsableActual)}</span>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Responsable</div>
+                                <div className="mt-1 text-sm font-semibold text-gray-800">
+                                  {nombreResponsableProducto(responsableActual)}
+                                </div>
+                                <p className="mt-1 text-xs text-gray-500">
+                                  Al iniciar la gestión, el Responsable se asigna automáticamente al usuario gestor.
+                                </p>
+                              </>
+                            )}
                           </div>
 
                           {esBaf ? (
@@ -927,7 +955,7 @@ export default async function DetalleVentaPage({
                                 <p className="mt-1 text-xs text-gray-500">Automática al establecer Estado Vendedor = ACTIVA NRO PORTADO.</p>
                               </div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SIM</label><input name="sim" inputMode="numeric" defaultValue={gestion?.sim ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
-                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</label><select name="plan_cargado" defaultValue={gestion?.plan_cargado || producto.plan_snapshot || ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar plan</option>{(() => { const actual = String(gestion?.plan_cargado || producto.plan_snapshot || '').trim(); const activos = (planesPorta ?? []).map((p: any) => String(p.nombre ?? '').trim()).filter(Boolean); const opciones = actual && !activos.includes(actual) ? [actual, ...activos] : activos; return opciones.map((nombre: string) => <option key={nombre} value={nombre}>{nombre}</option>) })()}</select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</label><select name="plan_cargado" defaultValue={gestion?.plan_cargado || producto.plan_snapshot || ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar plan</option>{(() => { const actual = String(gestion?.plan_cargado || producto.plan_snapshot || '').trim(); const activos = Array.from(new Set((planesPorta ?? []).map((p: any) => String(p.nombre ?? '').trim()).filter(Boolean))); const opciones = actual && !activos.includes(actual) ? [actual, ...activos] : activos; return opciones.map((nombre: string) => <option key={nombre} value={nombre}>{nombre}</option>) })()}</select></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><input name="sds" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">PIN / LNVA NRO</label><input name="pin_lnva_nro" defaultValue={gestion?.pin_lnva_nro ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Documentación DNI</label><select name="documentacion_dni" defaultValue={gestion?.documentacion_dni === true ? 'SI' : gestion?.documentacion_dni === false ? 'NO' : ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin informar</option><option value="SI">SI</option><option value="NO">NO</option></select></div>
@@ -1193,60 +1221,47 @@ export default async function DetalleVentaPage({
           bloqueoPropio={bloqueoPropio}
           usuarioBloqueo={usuarioBloqueo}
           bloqueadoDesde={bloqueo?.bloqueado_desde ?? null}
+          autoAsignarGestion
         />
 
         <div className="space-y-5">
             <div className="rounded-2xl border border-red-100 bg-red-50/40 p-5">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Responsable</h2>
-                {esPorta && lineasGrupo.length > 1 && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    La asignación se aplica a todas las líneas relacionadas.
+              {profile.rol === 'BBOO' && esPorta ? (
+                <>
+                  <h2 className="text-lg font-semibold text-gray-900">BBOO asignado</h2>
+                  <div className="mt-3 text-sm text-gray-700">
+                    BBOO actual:{' '}
+                    <span className="font-semibold">
+                      {bbooActualGestion?.vendedor ||
+                        bbooActualGestion?.nombre ||
+                        (gestionPorta?.bboo_id ? 'Usuario no disponible' : 'Sin BBOO asignado')}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500">
+                    Responsable comercial:{' '}
+                    <span className="font-semibold text-gray-700">
+                      {responsableActual?.vendedor ||
+                        responsableActual?.nombre ||
+                        (responsableActualId ? 'Usuario no disponible' : 'Sin asignar')}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-lg font-semibold text-gray-900">Responsable</h2>
+                  <div className="mt-3 text-sm text-gray-700">
+                    Responsable actual:{' '}
+                    <span className="font-semibold">
+                      {responsableActual?.vendedor ||
+                        responsableActual?.nombre ||
+                        (responsableActualId ? 'Usuario no disponible' : 'Sin asignar')}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Al presionar Gestionar, la venta se asigna automáticamente al usuario gestor.
                   </p>
-                )}
-              </div>
-              <fieldset disabled={!puedeEditar}>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                <div>
-                  <label
-                    htmlFor="responsable_id"
-                    className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500"
-                  >
-                    Responsable
-                  </label>
-
-                  <select
-                    id="responsable_id"
-                    name="responsable_id"
-                    form="gestion-unificada"
-                    defaultValue={responsableActualId ?? ''}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                  >
-                    <option value="">Sin responsable asignado</option>
-
-                    {(responsables ?? []).map((responsable: any) => (
-                      <option key={responsable.id} value={responsable.id}>
-                        {responsable.vendedor || responsable.nombre || responsable.id}
-                      </option>
-                    ))}
-                  </select>
-
-                  <p className="mt-1 text-xs text-gray-500">
-                    Solo aparecen usuarios activos habilitados para gestionar ventas.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-3 text-xs text-gray-500">
-                Responsable actual:{' '}
-                <span className="font-semibold text-gray-700">
-                  {responsableActual?.vendedor ||
-                    responsableActual?.nombre ||
-                    (responsableActualId ? 'Usuario no disponible' : 'Sin asignar')}
-                </span>
-              </div>
-            </fieldset>
+                </>
+              )}
             </div>
 
 

@@ -264,7 +264,10 @@ export default async function GestionVentasPage({
     (vistaConfigurada ?? []).length > 0
       ? (vistaConfigurada ?? []).map((columna: any) => ({
           campo: String(columna.campo),
-          etiqueta: String(columna.etiqueta || columna.campo),
+          etiqueta:
+            esBboo && String(columna.campo) === 'responsable'
+              ? 'BBOO asignado'
+              : String(columna.etiqueta || columna.campo),
           ancho: Math.min(600, Math.max(60, Number(columna.ancho) || 140)),
           orden: Number(columna.orden) || 0,
         }))
@@ -683,6 +686,39 @@ export default async function GestionVentasPage({
 
   const nombreResponsable = (operacion: any) => nombresResponsables(operacion).join(' | ')
 
+  const nombresBboo = (operacion: any) => {
+    const productos = Array.isArray(operacion.productos_nuevos) ? operacion.productos_nuevos : []
+
+    if (productos.length > 0) {
+      const moviles = productos.filter((p: any) =>
+        ['PORTA', 'LINEA_NUEVA'].includes(String(p.tipo_producto))
+      )
+      if (moviles.length === 0) return ['-']
+
+      const nombres = moviles.map((p: any) => {
+        const id = p.gestion?.bboo_id
+        if (!id) return 'Sin BBOO asignado'
+        const perfil = perfiles.find((item: any) => item.id === id)
+        return perfil?.vendedor || perfil?.nombre || 'Usuario no disponible'
+      })
+      return Array.from(new Set(nombres)) as string[]
+    }
+
+    if (operacion.tipo !== 'PORTA') return ['-']
+    const id = operacion.gestion_porta?.bboo_id
+    if (!id) return ['Sin BBOO asignado']
+    const perfil = perfiles.find((item: any) => item.id === id)
+    return [perfil?.vendedor || perfil?.nombre || 'Usuario no disponible']
+  }
+
+  const nombreBboo = (operacion: any) => nombresBboo(operacion).join(' | ')
+
+  const nombresAsignacionVista = (operacion: any) =>
+    esBboo ? nombresBboo(operacion) : nombresResponsables(operacion)
+
+  const nombreAsignacionVista = (operacion: any) =>
+    esBboo ? nombreBboo(operacion) : nombreResponsable(operacion)
+
   const fechaUltimaGestion = (operacion: any) => {
     if (Array.isArray(operacion.productos_nuevos) && operacion.productos_nuevos.length > 0) {
       const fechas = operacion.productos_nuevos.map((p: any) => p.gestion?.updated_at || p.gestion?.fecha_gestion).filter(Boolean).sort()
@@ -709,7 +745,7 @@ export default async function GestionVentasPage({
 
   const responsables = Array.from(
     new Set(
-      operacionesCompletas.flatMap((o: any) => nombresResponsables(o))
+      operacionesCompletas.flatMap((o: any) => nombresAsignacionVista(o))
     )
   ) as string[]
 
@@ -786,10 +822,11 @@ export default async function GestionVentasPage({
         return tipoVisible(operacion)
       case 'vendedor':
         return String(operacion.vendedor ?? '')
-      case 'responsable':
-        return nombreResponsable(operacion) === 'Sin responsable'
-          ? ''
-          : nombreResponsable(operacion)
+      case 'responsable': {
+        const nombre = nombreAsignacionVista(operacion)
+        if (nombre === 'Sin responsable' || nombre === 'Sin BBOO asignado' || nombre === '-') return ''
+        return nombre
+      }
       case 'medio_despacho':
         return gestionPorta?.medio_despacho_chip_id
           ? String(medioDespachoPorId.get(gestionPorta.medio_despacho_chip_id) ?? '')
@@ -894,7 +931,7 @@ export default async function GestionVentasPage({
     if (esNueva) {
       switch (campo) {
         case 'tipo': return tipoVisible(operacion)
-        case 'responsable': return nombreResponsable(operacion)
+        case 'responsable': return nombreAsignacionVista(operacion)
         case 'numero_linea': return valoresMoviles((p) => p.detalle?.numero_linea)
         case 'compania_actual': return valoresMoviles((p) => p.detalle?.compania_actual)
         case 'tipo_sim': return valoresMoviles((p) => p.detalle?.tipo_sim === 'ESIM' ? 'eSIM' : p.detalle?.tipo_sim)
@@ -924,7 +961,7 @@ export default async function GestionVentasPage({
       case 'vendedor':
         return operacion.vendedor || '-'
       case 'responsable':
-        return nombreResponsable(operacion)
+        return nombreAsignacionVista(operacion)
       case 'cliente':
         return nombreCliente(cliente)
       case 'dni':
@@ -1046,7 +1083,7 @@ export default async function GestionVentasPage({
 
     if (
       filtroResponsable &&
-      !nombresResponsables(operacion).includes(filtroResponsable)
+      !nombresAsignacionVista(operacion).includes(filtroResponsable)
     ) {
       return false
     }
@@ -1069,6 +1106,7 @@ export default async function GestionVentasPage({
       operacion.id_operacion,
       operacion.vendedor,
       nombreResponsable(operacion),
+      nombreBboo(operacion),
       operacion.origen_dato,
       cliente?.dni,
       cliente?.nombre,
@@ -1236,7 +1274,7 @@ export default async function GestionVentasPage({
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-500">
-              Responsable
+              {esBboo ? 'BBOO asignado' : 'Responsable'}
             </label>
             <select
               name="responsable"

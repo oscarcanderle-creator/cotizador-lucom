@@ -282,8 +282,18 @@ export async function POST(request: Request) {
     const responsableAnterior = productoOperacion.responsable_id ?? null
     let responsableNuevo = responsableAnterior
 
-    // BBOO conserva el Responsable comercial; el resto de los gestores puede cambiarlo.
-    if (body.responsable_id !== undefined && rolActor !== 'BBOO') {
+    // En Gestión de Ventas la asignación operativa no se elige desde el formulario:
+    // VENDEDOR gestor siempre se representa a sí mismo; BBOO conserva Responsable comercial.
+    // ADMIN/SUPERVISOR mantienen la reasignación explícita desde sus vistas.
+    if (rolActor === 'VENDEDOR' && actorProducto.puede_gestionar_ventas === true) {
+      if (responsableAnterior && responsableAnterior !== user.id) {
+        return NextResponse.json(
+          { error: 'Este producto está asignado a otro Responsable.' },
+          { status: 409 }
+        )
+      }
+      responsableNuevo = user.id
+    } else if (body.responsable_id !== undefined && rolActor !== 'BBOO') {
       responsableNuevo = body.responsable_id ? String(body.responsable_id) : null
     }
 
@@ -797,7 +807,7 @@ export async function POST(request: Request) {
     }
   } else if (
     body.responsable_id !== undefined &&
-    String(actorProfilePermisos.rol) !== 'BBOO'
+    !['BBOO', 'VENDEDOR'].includes(String(actorProfilePermisos.rol))
   ) {
     const responsableSolicitadoId = body.responsable_id ?? null
 

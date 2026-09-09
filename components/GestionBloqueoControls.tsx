@@ -15,6 +15,7 @@ type Props = {
   bloqueadoDesde: string | null
   basePath?: string
   listPath?: string
+  autoAsignarGestion?: boolean
 }
 
 export default function GestionBloqueoControls(props: Props) {
@@ -81,6 +82,7 @@ export default function GestionBloqueoControls(props: Props) {
           tipo_recurso: props.tipoRecurso,
           recurso_clave: props.recursoClave,
           sesion_token: token,
+          autoasignar_gestion: props.autoAsignarGestion === true,
         }),
       })
       const data = await response.json().catch(() => null)
