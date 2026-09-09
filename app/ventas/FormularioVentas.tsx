@@ -16,6 +16,45 @@ const inputClass='w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 
 function Campo({label,name,type='text',required=false,placeholder,inputMode,maxLength,pattern}:{label:string;name:string;type?:string;required?:boolean;placeholder?:string;inputMode?:'text'|'numeric'|'tel'|'email';maxLength?:number;pattern?:string}){
  return <label className="block"><span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">{label}{required?' *':''}</span><input className={inputClass} name={name} type={type} required={required} placeholder={placeholder} inputMode={inputMode} maxLength={maxLength} pattern={pattern}/></label>
 }
+
+function CampoTelefono({label,name,required=false}:{label:string;name:string;required?:boolean}){
+ const permitido=/^(?:$|[1-46-9]\d{0,9})$/
+ const teclasControl=new Set(['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'])
+
+ return <label className="block">
+  <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">{label}{required?' *':''}</span>
+  <input
+   className={inputClass}
+   name={name}
+   type="tel"
+   required={required}
+   inputMode="numeric"
+   maxLength={10}
+   pattern="[1-46-9][0-9]{9}"
+   title="Debe contener exactamente 10 dígitos y no comenzar con 0 ni 5."
+   onKeyDown={(e)=>{
+    if(e.ctrlKey||e.metaKey||e.altKey||teclasControl.has(e.key)) return
+    if(!/^\d$/.test(e.key)){e.preventDefault();return}
+    const input=e.currentTarget
+    const inicio=input.selectionStart??input.value.length
+    const fin=input.selectionEnd??inicio
+    const resultado=input.value.slice(0,inicio)+e.key+input.value.slice(fin)
+    if(!permitido.test(resultado)) e.preventDefault()
+   }}
+   onPaste={(e)=>{
+    const input=e.currentTarget
+    const pegado=e.clipboardData.getData('text')
+    const inicio=input.selectionStart??input.value.length
+    const fin=input.selectionEnd??inicio
+    const resultado=input.value.slice(0,inicio)+pegado+input.value.slice(fin)
+    if(!permitido.test(resultado)) e.preventDefault()
+   }}
+   onInput={(e)=>{
+    if(!permitido.test(e.currentTarget.value)) e.currentTarget.value=''
+   }}
+  />
+ </label>
+}
 function Selector({label,name,opciones,required=false,defaultValue=''}:{label:string;name:string;opciones:{value:string;label:string}[];required?:boolean;defaultValue?:string}){
  return <label className="block"><span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">{label}{required?' *':''}</span><select className={inputClass} name={name} required={required} defaultValue={defaultValue}><option value="">Seleccionar</option>{opciones.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label>
 }
@@ -36,7 +75,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
   <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"><b>PLATAFORMA LUCOM</b> · Nueva venta multiproducto. BAF y móviles se registran únicamente en Supabase.</div>
   <section className="mb-3 rounded-2xl border border-green-300 bg-green-50 p-3"><Selector label="Origen del dato" name="origen_dato" opciones={opts(origenes)} required/></section>
   <section className="mb-3 rounded-xl border bg-white px-3 py-2 text-xs text-gray-500">Usuario <b className="text-gray-800">{nombreUsuario}</b> · Vendedor <b className="text-gray-800">{vendedor}</b></section>
-  <Seccion n="01" titulo="Cliente"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Campo label="Nombre" name="nombre" required/><Campo label="Apellido" name="apellido" required/><Selector label="Documento" name="tipo_documento" opciones={opts(tiposDocumento)} defaultValue="DNI" required/><Campo label="Número" name="dni" inputMode="numeric" required/><Campo label="Fecha nacimiento" name="fecha_nacimiento" type="date"/><Campo label="Teléfono" name="telefono" type="tel" inputMode="numeric" pattern="[1-46-9][0-9]{9}" maxLength={10} required/><Campo label="Contacto alternativo" name="telefono_alternativo" type="tel" inputMode="numeric" pattern="[1-46-9][0-9]{9}" maxLength={10}/><Campo label="Correo cliente" name="email" type="email" inputMode="email"/></div></Seccion>
+  <Seccion n="01" titulo="Cliente"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Campo label="Nombre" name="nombre" required/><Campo label="Apellido" name="apellido" required/><Selector label="Documento" name="tipo_documento" opciones={opts(tiposDocumento)} defaultValue="DNI" required/><Campo label="Número" name="dni" inputMode="numeric" required/><Campo label="Fecha nacimiento" name="fecha_nacimiento" type="date"/><CampoTelefono label="Teléfono" name="telefono" required/><CampoTelefono label="Contacto alternativo" name="telefono_alternativo"/><Campo label="Correo cliente" name="email" type="email" inputMode="email" required/></div></Seccion>
   <Seccion n="02" titulo="Domicilio"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><div className="sm:col-span-2"><Campo label="Calle y Nro" name="domicilio" required/></div><Campo label="Entre calles" name="entre_calles"/><Campo label="Piso" name="piso"/><Campo label="Dpto" name="dpto"/><Campo label="Barrio" name="barrio"/><Campo label="Localidad" name="localidad"/><Campo label="Coordenadas" name="coordenadas"/><div className="sm:col-span-2"><Campo label="Datos extras" name="datos_extras"/></div></div></Seccion>
   <Seccion n="03" titulo="Servicios Existentes"><p className="text-sm text-gray-600 mb-3">Registrá solamente servicios Claro que el cliente ya posee. No generan una nueva venta.</p><div className="space-y-3">{existentes.map((s,i)=><div key={s.id} className="rounded-xl border bg-gray-50 p-3"><div className="flex justify-between mb-2"><b className="text-sm">Servicio existente {i+1}</b><button type="button" className="text-xs text-red-600" onClick={()=>setExistentes(a=>a.filter(x=>x.id!==s.id))}>Quitar</button></div><div className="grid sm:grid-cols-3 gap-2"><Selector label="Tipo" name={`existente_tipo_${i}`} opciones={[{value:'BAF',label:'Internet Claro'},{value:'LINEA_MOVIL',label:'Línea móvil Claro'}]} defaultValue={s.tipo} required/><Selector label="Modalidad" name={`existente_modalidad_${i}`} opciones={s.tipo==='BAF'?opts(['2PLAY','3PLAY']):opts(['POSPAGO','PREPAGO'])} defaultValue={s.modalidad} required/><Campo label="Número / referencia" name={`existente_numero_${i}`}/></div></div>)}<button type="button" onClick={agregarExistente} className="rounded-xl border border-dashed border-gray-400 px-4 py-2 text-sm font-semibold">+ Agregar servicio existente</button></div></Seccion>
   <Seccion n="04" titulo="Servicios Nuevos a Contratar"><div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4"><BotonProducto onClick={()=>agregar('BAF')} disabled={nuevos.some(x=>x.tipo==='BAF')}>+ Internet</BotonProducto><BotonProducto onClick={()=>agregar('PORTA')}>+ Portabilidad</BotonProducto><BotonProducto onClick={()=>agregar('LINEA_NUEVA')}>+ Línea Nueva</BotonProducto></div><div className="space-y-3">{nuevos.map((s,i)=>{const lista=s.tipo==='BAF'?baf:s.tipo==='PORTA'?porta:ln;return <div key={s.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-3"><div className="flex justify-between mb-3"><div><b>{s.tipo==='BAF'?'Internet / BAF':s.tipo==='PORTA'?'Portabilidad':'Línea Nueva'}</b><div className="text-[11px] text-gray-500">Servicio nuevo {i+1}</div></div><button type="button" onClick={()=>setNuevos(a=>a.filter(x=>x.id!==s.id))} className="text-xs text-red-600">Quitar</button></div><input type="hidden" name={`nuevo_tipo_${i}`} value={s.tipo}/>{s.tipo==='BAF'?<div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:tituloProducto(p)}))} required/><Selector label="Tipo domicilio" name={`nuevo_tipo_domicilio_${i}`} opciones={opts(tiposDomicilio)}/><Selector label="Modalidad" name={`nuevo_modalidad_${i}`} opciones={opts(['Masivo','Cuit Standard','Cuit BAFE'])} required/><Selector label="TV" name={`nuevo_tv_${i}`} opciones={opts(['NO','SI'])} defaultValue="NO" required/><Selector label="Decos adicionales" name={`nuevo_decos_${i}`} opciones={opts(['0','1','2'])} defaultValue="0"/><Selector label="Zona" name={`nuevo_zona_${i}`} opciones={opts(zonas)}/><div className="sm:col-span-2"><Campo label="Horario contacto / observaciones" name={`nuevo_observaciones_${i}`} required/></div></div>:<div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5">{s.tipo==='PORTA'&&<Campo label="NIM a portar" name={`nuevo_nim_${i}`} type="tel" inputMode="numeric" pattern="[1-46-9][0-9]{9}" maxLength={10} required/>}<Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:tituloProducto(p)}))} required/><Selector label="SIM" name={`nuevo_sim_${i}`} opciones={opts(['ESIM','SIMCARD'])} required/>{s.tipo==='PORTA'&&<><Selector label="Compañía actual" name={`nuevo_compania_${i}`} opciones={opts(companias)} required/><Selector label="PRE / POS" name={`nuevo_modalidad_actual_${i}`} opciones={opts(['POS','PRE'])} required/></>}</div>}</div>})}</div></Seccion>

@@ -127,6 +127,37 @@ export async function POST(request: Request) {
   const operacionId = String(body.operacion_id ?? '').trim()
   const tipo = String(body.tipo ?? '').trim().toUpperCase()
 
+  // Validaciones de campos operativos. Son opcionales, pero si se informan
+  // deben respetar exactamente el formato definido.
+  const sds = body.sds == null ? null : String(body.sds).trim().toUpperCase() || null
+  const ordenTrabajo = body.orden_trabajo == null ? null : String(body.orden_trabajo).trim() || null
+  const sim = body.sim == null ? null : String(body.sim).trim() || null
+
+  if (sds && !/^\d{8}[A-Z]{3}$/.test(sds)) {
+    return NextResponse.json(
+      { error: 'El SDS debe contener exactamente 8 números seguidos de 3 letras. Ejemplo: 12345678FAE.' },
+      { status: 400 }
+    )
+  }
+
+  if (ordenTrabajo && !/^\d{8}$/.test(ordenTrabajo)) {
+    return NextResponse.json(
+      { error: 'La Orden de Trabajo debe contener exactamente 8 dígitos.' },
+      { status: 400 }
+    )
+  }
+
+  if (sim && !/^\d{19}$/.test(sim)) {
+    return NextResponse.json(
+      { error: 'La SIM debe contener exactamente 19 dígitos.' },
+      { status: 400 }
+    )
+  }
+
+  body.sds = sds
+  body.orden_trabajo = ordenTrabajo
+  body.sim = sim
+
   if (!operacionId || !['BAF', 'PORTA'].includes(tipo)) {
     return NextResponse.json({ error: 'Venta inválida.' }, { status: 400 })
   }
