@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '../../utils/supabase/server'
 import AppHeader from '../../components/AppHeader'
+import ExportarMisVentas from '../../components/ExportarMisVentas'
 
 type SearchParams = Promise<{
   q?: string
@@ -441,6 +442,8 @@ export default async function MisVentasPage({
             </a>
           </div>
         </form>
+
+        <ExportarMisVentas />
 
         <div className="mb-3 text-sm text-gray-500">
           {ventas.length} {ventas.length === 1 ? 'venta' : 'ventas'}
