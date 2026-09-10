@@ -8,6 +8,7 @@ type Actual =
   | 'MIS_CONSULTAS'
   | 'COTIZADOR'
   | 'GESTION_VENTAS'
+  | 'VENTAS_GRUPO'
   | 'SUPER'
   | 'ADMIN'
 

@@ -18,6 +18,8 @@ type Actual =
 
   | 'GESTION_VENTAS'
 
+
+  | 'VENTAS_GRUPO'
   | 'SUPER'
 
   | 'ADMIN'
@@ -52,6 +54,8 @@ const items = [
 
   { key: 'GESTION_VENTAS', label: 'Gestión de Ventas', href: '/gestion-ventas', roles: ['VENDEDOR', 'BBOO'] },
 
+  { key: 'VENTAS_GRUPO', label: 'Ventas del Grupo', href: '/ventas-grupo', roles: ['VENDEDOR', 'TERRENO'] },
+
   { key: 'SUPER', label: 'SUPER', href: '/super', roles: ['SUPERVISOR', 'ADMIN'] },
 
   { key: 'ADMIN', label: 'ADMIN', href: '/admin', roles: ['ADMIN'] },
@@ -70,7 +74,7 @@ function Icono({ tipo }: { tipo: Actual }) {
 
   if (tipo === 'COTIZADOR') return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 10h2M12 10h2M16 10h1M8 14h2M12 14h2M16 14h1M8 18h2M12 18h5"/></svg>
 
-  if (tipo === 'GESTION_VENTAS') return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+  if (tipo === 'GESTION_VENTAS' || tipo === 'VENTAS_GRUPO') return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
 
   if (tipo === 'SUPER') return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="m4 7 5-4 5 5 6-6"/></svg>
 
@@ -158,6 +162,104 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
 
   const [abierto, setAbierto] = useState(false)
 
+  const [montado, setMontado] = useState(false)
+
+  const [siglaVendedor, setSiglaVendedor] = useState<string | null>(null)
+
+  const [perfilGrupoCargado, setPerfilGrupoCargado] = useState(false)
+
+  useEffect(() => {
+
+    setMontado(true)
+
+  }, [])
+
+  useEffect(() => {
+
+    let activo = true
+
+    async function cargarPerfilGrupo() {
+
+      if (!['VENDEDOR', 'TERRENO'].includes(rol)) {
+
+        if (activo) {
+
+          setSiglaVendedor(null)
+
+          setPerfilGrupoCargado(true)
+
+        }
+
+        return
+
+      }
+
+      try {
+
+        const respuesta = await fetch('/api/ventas-grupo/perfil', {
+
+          method: 'GET',
+
+          cache: 'no-store',
+
+        })
+
+        if (!respuesta.ok) {
+
+          if (activo) {
+
+            setSiglaVendedor(null)
+
+            setPerfilGrupoCargado(true)
+
+          }
+
+          return
+
+        }
+
+        const datos = await respuesta.json()
+
+        if (activo) {
+
+          setSiglaVendedor(
+
+            typeof datos?.sigla === 'string'
+
+              ? datos.sigla.toUpperCase()
+
+              : null
+
+          )
+
+          setPerfilGrupoCargado(true)
+
+        }
+
+      } catch {
+
+        if (activo) {
+
+          setSiglaVendedor(null)
+
+          setPerfilGrupoCargado(true)
+
+        }
+
+      }
+
+    }
+
+    cargarPerfilGrupo()
+
+    return () => {
+
+      activo = false
+
+    }
+
+  }, [rol])
+
   const visibles = items.filter((item) => {
 
     const rolPermitido = item.roles.some((permitido) => permitido === rol)
@@ -166,9 +268,33 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
 
     if (item.key === 'GESTION_VENTAS') {
 
-      if (rol === 'BBOO') return true
+      if (rol === 'BBOO') return true
 
-      return rol === 'VENDEDOR' && puedeGestionarVentas
+      if (rol === 'VENDEDOR') {
+
+        if (!perfilGrupoCargado) {
+
+          return puedeGestionarVentas
+
+        }
+
+        return siglaVendedor === 'L1'
+
+      }
+
+      return false
+
+    }
+
+    if (item.key === 'VENTAS_GRUPO') {
+
+      if (!['VENDEDOR', 'TERRENO'].includes(rol)) return false
+
+      if (!perfilGrupoCargado) return false
+
+      if (!siglaVendedor) return false
+
+      return siglaVendedor !== 'L1'
 
     }
 
@@ -195,6 +321,18 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
     }
 
   }, [abierto])
+
+  if (!montado) {
+
+    if (modo === 'mobile-trigger') {
+
+      return <div aria-hidden="true" className="h-10 w-10 shrink-0 lg:hidden" />
+
+    }
+
+    return <div aria-hidden="true" className="h-10 w-full" />
+
+  }
 
   if (modo === 'mobile-trigger') {
 

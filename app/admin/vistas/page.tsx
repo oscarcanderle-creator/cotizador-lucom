@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import AppHeader from '../../../components/AppHeader'
 import { createClient } from '../../../utils/supabase/server'
 
-const ROLES = ['BBOO', 'VENDEDOR', 'SUPERVISOR', 'ADMIN'] as const
+const ROLES = ['BBOO', 'VENDEDOR', 'SUPERVISOR', 'ADMIN', 'VENTAS_GRUPO'] as const
 type RolVista = (typeof ROLES)[number]
 
 async function validarAdmin() {
@@ -24,6 +24,12 @@ async function validarAdmin() {
 
 function rolValido(valor: string): valor is RolVista {
   return ROLES.includes(valor as RolVista)
+}
+
+function etiquetaRolVista(rol: RolVista) {
+  if (rol === 'SUPERVISOR') return 'SUPER'
+  if (rol === 'VENTAS_GRUPO') return 'VENTAS GRUPO'
+  return rol
 }
 
 async function guardarVista(formData: FormData) {
@@ -155,7 +161,7 @@ export default async function AdministradorVistasPage({
               className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
                 rol === r ? 'border-red-600 bg-red-600 text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
               }`}>
-              {r === 'SUPERVISOR' ? 'SUPER' : r}
+              {etiquetaRolVista(r)}
             </a>
           ))}
         </div>
@@ -204,7 +210,7 @@ export default async function AdministradorVistasPage({
 
           <div className="mt-4 flex flex-wrap gap-3">
             <button type="submit" className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-700">
-              Guardar vista {rol === 'SUPERVISOR' ? 'SUPER' : rol}
+              Guardar vista {etiquetaRolVista(rol)}
             </button>
           </div>
         </form>
