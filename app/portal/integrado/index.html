@@ -1272,7 +1272,7 @@
             <textarea id="nv-texto" placeholder="El detalle de la promo. Pod&eacute;s usar &lt;strong&gt;negrita&lt;/strong&gt;."></textarea>
           </div>
           <div class="nov-mail">
-            <label><input type="checkbox" id="nv-mail"><span>Avisar por <strong>correo</strong> a los agentes que lo pidieron</span></label>
+            <label><input type="checkbox" id="nv-mail"><span>Avisar por <strong>correo</strong> a todos los usuarios activos de la plataforma</span></label>
             <span style="display:flex;gap:8px;flex-wrap:wrap">
               <button type="button" class="perso-ghost" onclick="novRevisarMail()">Revisar configuraci&oacute;n</button>
               <button type="button" class="perso-ghost" onclick="novProbarMail()">Probar: mand&aacute;rmelo solo a m&iacute;</button>
@@ -3996,33 +3996,52 @@ window.novLimpiarVencidas = async function(){
 /* Le pide al servidor que mande el correo. La clave del servicio de mail
    vive allá, nunca acá: si estuviera en el HTML cualquiera la leería. */
 async function novMandarMail(nov, soloYo){
-  if(DEV_MODE || !SB){
-    msg('msg-nov', 'El envío por correo solo funciona en el portal publicado, no en la copia local.', false);
+  if(DEV_MODE){
+    msg('msg-nov', 'El envío por correo no está disponible en modo demo.', false);
     return;
   }
-  const ses = await SB.auth.getSession();
-  const token = ses && ses.data && ses.data.session ? ses.data.session.access_token : null;
-  if(!token){ msg('msg-nov', 'Se cortó la sesión. Volvé a entrar.', false); return; }
 
   msg('msg-nov', soloYo ? 'Mandando la prueba…' : 'Mandando los correos…', true);
+
   try{
     const r = await fetch('/api/enviar-novedad', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ novedad: nov, soloYo: !!soloYo })
     });
+
     const d = await r.json().catch(() => ({}));
+
     if(!r.ok){
-      msg('msg-nov', 'No se pudo enviar: ' + (d.error || ('error ' + r.status)) + (d.detalle ? ' — ' + d.detalle : ''), false);
+      msg(
+        'msg-nov',
+        'No se pudo enviar: ' + (d.error || d.aviso || ('error ' + r.status)),
+        false
+      );
       return;
     }
-    if(!d.enviados){ msg('msg-nov', d.aviso || 'No había a quién mandarle.', false); return; }
-    msg('msg-nov', soloYo
-      ? ('Resend lo aceptó para ' + (d.destino || 'tu casilla') + '. Si no llega en un par de minutos, ' +
-         'miralo en Resend → Logs' + (d.id ? ' (id ' + d.id + ')' : '') + ': ahí dice si rebotó o quedó en camino.')
-      : ('Correo enviado a ' + d.enviados + ' agente' + (d.enviados === 1 ? '' : 's') + '.'), true);
+
+    if(!d.enviados){
+      msg('msg-nov', d.aviso || 'No había destinatarios para enviar.', false);
+      return;
+    }
+
+    msg(
+      'msg-nov',
+      d.aviso ||
+        (soloYo
+          ? 'Prueba enviada correctamente a tu correo.'
+          : 'Correo enviado a ' + d.enviados + ' usuario' + (d.enviados === 1 ? '' : 's') + '.'),
+      true
+    );
   }catch(e){
-    msg('msg-nov', 'No se pudo contactar al servidor de envíos: ' + (e && e.message ? e.message : 'error'), false);
+    msg(
+      'msg-nov',
+      'No se pudo contactar al servidor de envíos: ' +
+        (e && e.message ? e.message : 'error'),
+      false
+    );
   }
 }
 
@@ -4037,41 +4056,91 @@ function novDelFormulario(){
 }
 
 window.novRevisarMail = async function(){
-  if(DEV_MODE || !SB){ msg('msg-nov','Esto solo funciona en el portal publicado.', false); return; }
-  const ses = await SB.auth.getSession();
-  const token = ses && ses.data && ses.data.session ? ses.data.session.access_token : null;
-  if(!token){ msg('msg-nov','Se cortó la sesión. Volvé a entrar.', false); return; }
-  msg('msg-nov','Revisando…', true);
+  if(DEV_MODE){
+    msg('msg-nov', 'Esto no está disponible en modo demo.', false);
+    return;
+  }
+
+  msg('msg-nov', 'Revisando…', true);
+
   try{
     const r = await fetch('/api/enviar-novedad', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+token },
-      body: JSON.stringify({ diagnostico:true })
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ revisar: true })
     });
-    const d = await r.json().catch(()=>({}));
-    if(!r.ok || !d.diagnostico){ msg('msg-nov','No se pudo revisar: '+(d.error||('error '+r.status)), false); return; }
+
+    const d = await r.json().catch(() => ({}));
+
+    if(!r.ok || !d.ok){
+      msg(
+        'msg-nov',
+        'No se pudo revisar: ' + (d.error || d.aviso || ('error ' + r.status)),
+        false
+      );
+      return;
+    }
+
     const caja = document.getElementById('diag-mail');
-    caja.innerHTML = Object.keys(d.diagnostico).map(function(k){
-      const v = String(d.diagnostico[k]);
-      const mal = /MAL|VAC[ÍI]A|RARO/.test(v);
-      return '<div class="diag-row'+(mal?' mal':'')+'"><b>'+k+'</b><span>'+esc(v)+'</span></div>';
-    }).join('');
-    caja.style.display='block';
-    msg('msg-nov','Listo. Mirá el detalle acá abajo.', true);
-  }catch(e){ msg('msg-nov','No se pudo contactar al servidor: '+(e&&e.message?e.message:'error'), false); }
+
+    caja.innerHTML =
+      '<div class="diag-row"><b>Estado</b><span>Configuración de correo OK</span></div>' +
+      '<div class="diag-row"><b>Destinatarios</b><span>' +
+      esc(String(d.destinatarios || 0)) +
+      ' usuarios activos con correo</span></div>';
+
+    caja.style.display = 'block';
+    msg('msg-nov', d.aviso || 'Configuración revisada.', true);
+  }catch(e){
+    msg(
+      'msg-nov',
+      'No se pudo contactar al servidor: ' +
+        (e && e.message ? e.message : 'error'),
+      false
+    );
+  }
 };
 
 window.novProbarMail = async function(){
-  const nov = novDelFormulario();
-  if(!nov.titulo && !nov.texto){ msg('msg-nov', 'Escribí la novedad antes de probar el correo.', false); return; }
+  let nov = novDelFormulario();
+
+  if(!nov.titulo && !nov.texto){
+    const lista = novLista()
+      .slice()
+      .sort((a,b) =>
+        String(b.creada || '').localeCompare(String(a.creada || ''))
+      );
+
+    nov = lista.length ? lista[0] : null;
+  }
+
+  if(!nov || (!nov.titulo && !nov.texto)){
+    msg(
+      'msg-nov',
+      'No hay ninguna novedad disponible para probar.',
+      false
+    );
+    return;
+  }
+
   await novMandarMail(nov, true);
 };
 
 async function novGuardar(){
   try{ localStorage.setItem('lucom_nov', JSON.stringify(NOVEDADES)); }catch(e){}
-  if(DEV_MODE || !SB) return;
-  try{ await dbGuardar('novedades', { lista: NOVEDADES }); }
-  catch(e){ msg('msg-nov', 'No se pudo publicar: ' + (e && e.message ? e.message : 'error'), false); }
+  if(DEV_MODE) return;
+
+  try{
+    await dbGuardar('novedades', { lista: NOVEDADES });
+  }catch(e){
+    msg(
+      'msg-nov',
+      'No se pudo publicar: ' + (e && e.message ? e.message : 'error'),
+      false
+    );
+    throw e;
+  }
 }
 
 function novCargarLocal(){
