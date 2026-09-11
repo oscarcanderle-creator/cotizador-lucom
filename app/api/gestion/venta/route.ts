@@ -105,13 +105,23 @@ function agregarCambio(
 }
 
 export async function POST(request: Request) {
+  const perfInicio = performance.now()
+  let perfAnterior = perfInicio
+  const perf = (etapa: string) => {
+    const ahoraPerf = performance.now()
+    console.log(`[VENTA PERF] ${etapa}: ${Math.round(ahoraPerf - perfAnterior)}ms | acumulado ${Math.round(ahoraPerf - perfInicio)}ms`)
+    perfAnterior = ahoraPerf
+  }
+  const perfTotal = () => {
+    console.log(`[VENTA PERF] TOTAL: ${Math.round(performance.now() - perfInicio)}ms`)
+  }
+
   const supabase = await createClient()
   const adminClient = createAdminClient()
 
   const {
     data: { user },
   } = await supabase.auth.getUser()
-
   if (!user) {
     return NextResponse.json({ error: 'Sesión no válida.' }, { status: 401 })
   }
@@ -171,7 +181,6 @@ export async function POST(request: Request) {
     .select('id_operacion,tipo,usuario_id,vendedor,grupo_operacion')
     .eq('id_operacion', operacionId)
     .single()
-
   if (operacionError || !operacion) {
     return NextResponse.json(
       { error: operacionError?.message || 'No se encontró la Venta.' },
@@ -187,19 +196,62 @@ export async function POST(request: Request) {
   const productoOperacionId = Number(body.producto_operacion_id ?? 0)
 
   if (Number.isInteger(productoOperacionId) && productoOperacionId > 0) {
-    const { data: productoOperacion, error: productoOperacionError } = await adminClient
-      .from('operacion_productos')
-      .select('id,operacion_id,tipo_producto,responsable_id,producto_snapshot,plan_snapshot')
-      .eq('id', productoOperacionId)
-      .eq('operacion_id', operacionId)
-      .eq('activo', true)
-      .maybeSingle()
+    // Producto, validación del bloqueo y perfil del actor no dependen entre sí.
+    // Se ejecutan en paralelo para evitar tres esperas consecutivas a Supabase.
+    const recursoClaveCanonicoProducto = String(operacion.id_operacion)
+    const recursoClaveProducto = String(body.recurso_clave ?? '').trim()
+    const sesionTokenProducto = String(body.sesion_token ?? '').trim()
+
+    if (
+      !recursoClaveProducto ||
+      !sesionTokenProducto ||
+      recursoClaveProducto !== recursoClaveCanonicoProducto
+    ) {
+      return NextResponse.json(
+        { error: 'La sesión de gestión no corresponde a esta Venta.' },
+        { status: 409 }
+      )
+    }
+
+    const [productoResult, bloqueoResult, actorResult] = await Promise.all([
+      adminClient
+        .from('operacion_productos')
+        .select('id,operacion_id,tipo_producto,responsable_id,producto_snapshot,plan_snapshot')
+        .eq('id', productoOperacionId)
+        .eq('operacion_id', operacionId)
+        .eq('activo', true)
+        .maybeSingle(),
+      supabase.rpc('validar_bloqueo_gestion', {
+        p_tipo_recurso: 'VENTA',
+        p_recurso_clave: recursoClaveCanonicoProducto,
+        p_sesion_token: sesionTokenProducto,
+      }),
+      adminClient
+        .from('profiles')
+        .select('rol,activo,puede_gestionar_ventas,nombre,vendedor')
+        .eq('id', user.id)
+        .maybeSingle(),
+    ])
+    const { data: productoOperacion, error: productoOperacionError } = productoResult
+    const { data: bloqueoValidoProducto, error: bloqueoProductoError } = bloqueoResult
+    const { data: actorProducto, error: actorProductoError } = actorResult
 
     if (productoOperacionError || !productoOperacion) {
       return NextResponse.json(
         { error: productoOperacionError?.message || 'No se encontró el producto de la Venta.' },
         { status: 404 }
       )
+    }
+
+    if (bloqueoProductoError || bloqueoValidoProducto !== true) {
+      return NextResponse.json(
+        { error: 'No se puede guardar: esta sesión ya no posee el bloqueo de gestión de la Venta.' },
+        { status: 409 }
+      )
+    }
+
+    if (actorProductoError || !actorProducto?.activo) {
+      return NextResponse.json({ error: 'No se pudo validar el perfil del usuario.' }, { status: 403 })
     }
 
     const tipoProducto = String(productoOperacion.tipo_producto ?? '').toUpperCase()
@@ -220,38 +272,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // En el modelo multiproducto el bloqueo pertenece a la operación comercial completa.
-    const recursoClaveCanonicoProducto = String(operacion.id_operacion)
-    const recursoClaveProducto = String(body.recurso_clave ?? '').trim()
-    const sesionTokenProducto = String(body.sesion_token ?? '').trim()
-
-    if (
-      !recursoClaveProducto ||
-      !sesionTokenProducto ||
-      recursoClaveProducto !== recursoClaveCanonicoProducto
-    ) {
-      return NextResponse.json(
-        { error: 'La sesión de gestión no corresponde a esta Venta.' },
-        { status: 409 }
-      )
-    }
-
-    const { data: bloqueoValidoProducto, error: bloqueoProductoError } = await supabase.rpc(
-      'validar_bloqueo_gestion',
-      {
-        p_tipo_recurso: 'VENTA',
-        p_recurso_clave: recursoClaveCanonicoProducto,
-        p_sesion_token: sesionTokenProducto,
-      }
-    )
-
-    if (bloqueoProductoError || bloqueoValidoProducto !== true) {
-      return NextResponse.json(
-        { error: 'No se puede guardar: esta sesión ya no posee el bloqueo de gestión de la Venta.' },
-        { status: 409 }
-      )
-    }
-
     const liberarBloqueoProducto = async () => {
       const { error } = await supabase.rpc('liberar_bloqueo_gestion', {
         p_tipo_recurso: 'VENTA',
@@ -260,16 +280,6 @@ export async function POST(request: Request) {
         p_motivo: 'GUARDADO',
       })
       if (error) console.error('La venta multiproducto se guardó pero no se pudo liberar el bloqueo:', error)
-    }
-
-    const { data: actorProducto, error: actorProductoError } = await adminClient
-      .from('profiles')
-      .select('rol,activo,puede_gestionar_ventas,nombre,vendedor')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (actorProductoError || !actorProducto?.activo) {
-      return NextResponse.json({ error: 'No se pudo validar el perfil del usuario.' }, { status: 403 })
     }
 
     const rolActor = String(actorProducto.rol ?? '')
@@ -281,31 +291,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No tiene permisos para gestionar esta Venta.' }, { status: 403 })
     }
 
-    // PORTA/LN: la regla de habilitación se valida también en backend.
-    if (esMovilProducto) {
-      const { error: habilitacionError } = await adminClient.rpc(
-        'validar_habilitacion_producto_movil',
-        { p_producto_operacion_id: productoOperacionId }
-      )
-
-      if (habilitacionError) {
-        return NextResponse.json(
-          { error: habilitacionError.message },
-          { status: 409 }
-        )
-      }
-    }
-
     const tablaGestionProducto = esBafProducto
       ? 'gestion_producto_baf'
       : 'gestion_producto_movil'
 
-    const { data: anteriorProducto, error: anteriorProductoError } = await adminClient
-      .from(tablaGestionProducto)
-      .select('*')
-      .eq('producto_operacion_id', productoOperacionId)
-      .maybeSingle()
+    // La habilitación móvil y la lectura de la gestión anterior son independientes.
+    const [habilitacionResult, anteriorResult] = await Promise.all([
+      esMovilProducto
+        ? adminClient.rpc('validar_habilitacion_producto_movil', {
+            p_producto_operacion_id: productoOperacionId,
+          })
+        : Promise.resolve({ error: null }),
+      adminClient
+        .from(tablaGestionProducto)
+        .select('*')
+        .eq('producto_operacion_id', productoOperacionId)
+        .maybeSingle(),
+    ])
+    if (habilitacionResult.error) {
+      return NextResponse.json(
+        { error: habilitacionResult.error.message },
+        { status: 409 }
+      )
+    }
 
+    const { data: anteriorProducto, error: anteriorProductoError } = anteriorResult
     if (anteriorProductoError) {
       return NextResponse.json({ error: anteriorProductoError.message }, { status: 400 })
     }
@@ -376,45 +386,47 @@ export async function POST(request: Request) {
       let fechaCargaStlEfectiva = anteriorProducto?.fecha_carga_stl ?? null
       let fechaPortaEfectiva = anteriorProducto?.fecha_porta ?? null
 
+      // Las validaciones de Estado Vendedor y Estado BBOO son independientes.
+      // Si ambos estados están informados, se resuelven en paralelo.
+      const [estadoPortaResult, estadoBbooResult] = await Promise.all([
+        estadoPortaEfectivo != null
+          ? adminClient
+              .from('estados_porta')
+              .select('codigo,nombre')
+              .eq('id', estadoPortaEfectivo)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        estadoBbooEfectivo != null
+          ? adminClient
+              .from('estados_bboo')
+              .select('codigo,nombre')
+              .eq('id', estadoBbooEfectivo)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ])
+      if (estadoPortaResult.error) {
+        return NextResponse.json(
+          { error: `No se pudo validar el Estado Vendedor: ${estadoPortaResult.error.message}` },
+          { status: 400 }
+        )
+      }
+
+      if (estadoBbooResult.error) {
+        return NextResponse.json(
+          { error: `No se pudo validar el Estado BBOO: ${estadoBbooResult.error.message}` },
+          { status: 400 }
+        )
+      }
+
       if (estadoPortaEfectivo != null) {
-        const { data: estadoPortaSeleccionado, error: estadoPortaSeleccionadoError } =
-          await adminClient
-            .from('estados_porta')
-            .select('codigo,nombre')
-            .eq('id', estadoPortaEfectivo)
-            .maybeSingle()
-
-        if (estadoPortaSeleccionadoError) {
-          return NextResponse.json(
-            { error: `No se pudo validar el Estado Vendedor: ${estadoPortaSeleccionadoError.message}` },
-            { status: 400 }
-          )
-        }
-
-        const codigoEstadoVendedor = String(estadoPortaSeleccionado?.codigo ?? '').trim().toUpperCase()
+        const codigoEstadoVendedor = String(estadoPortaResult.data?.codigo ?? '').trim().toUpperCase()
 
         if (codigoEstadoVendedor === 'CARGADO_STL' && !fechaCargaStlEfectiva) {
           fechaCargaStlEfectiva = ahora
         }
       }
 
-      // Fecha PORTA depende del Estado BBOO, no del Estado Vendedor.
-      // Se registra solamente la primera vez que BBOO llega a ACTIVA NRO PORTADO.
       if (estadoBbooEfectivo != null) {
-        const { data: estadoBbooSeleccionado, error: estadoBbooSeleccionadoError } =
-          await adminClient
-            .from('estados_bboo')
-            .select('codigo,nombre')
-            .eq('id', estadoBbooEfectivo)
-            .maybeSingle()
-
-        if (estadoBbooSeleccionadoError) {
-          return NextResponse.json(
-            { error: `No se pudo validar el Estado BBOO: ${estadoBbooSeleccionadoError.message}` },
-            { status: 400 }
-          )
-        }
-
         const normalizarEstado = (valor: unknown) =>
           String(valor ?? '')
             .trim()
@@ -422,8 +434,8 @@ export async function POST(request: Request) {
             .replace(/[_-]+/g, ' ')
             .replace(/\s+/g, ' ')
 
-        const codigoBboo = normalizarEstado(estadoBbooSeleccionado?.codigo)
-        const nombreBboo = normalizarEstado(estadoBbooSeleccionado?.nombre)
+        const codigoBboo = normalizarEstado(estadoBbooResult.data?.codigo)
+        const nombreBboo = normalizarEstado(estadoBbooResult.data?.nombre)
 
         if (
           (codigoBboo === 'ACTIVA NRO PORTADO' || nombreBboo === 'ACTIVA NRO PORTADO') &&
@@ -454,22 +466,28 @@ export async function POST(request: Request) {
       }
     }
 
-    let guardarError: any = null
-    if (anteriorProducto?.id) {
-      const resultado = await adminClient
-        .from(tablaGestionProducto)
-        .update(payloadGestion)
-        .eq('producto_operacion_id', productoOperacionId)
-      guardarError = resultado.error
-    } else {
-      const resultado = await adminClient
-        .from(tablaGestionProducto)
-        .insert({ producto_operacion_id: productoOperacionId, ...payloadGestion })
-      guardarError = resultado.error
-    }
+    // Guardar y devolver el registro actualizado en una sola ida a Supabase.
+    // Antes se hacía UPDATE/INSERT y luego un SELECT adicional para releerlo.
+    const resultadoGuardar = anteriorProducto?.id
+      ? await adminClient
+          .from(tablaGestionProducto)
+          .update(payloadGestion)
+          .eq('producto_operacion_id', productoOperacionId)
+          .select('*')
+          .single()
+      : await adminClient
+          .from(tablaGestionProducto)
+          .insert({ producto_operacion_id: productoOperacionId, ...payloadGestion })
+          .select('*')
+          .single()
 
-    if (guardarError) {
-      return NextResponse.json({ error: guardarError.message }, { status: 400 })
+    const posteriorProducto = resultadoGuardar.data
+    const guardarError = resultadoGuardar.error
+    if (guardarError || !posteriorProducto) {
+      return NextResponse.json(
+        { error: guardarError?.message || 'No se pudo recuperar la gestión guardada.' },
+        { status: 400 }
+      )
     }
 
     if (responsableNuevo !== responsableAnterior) {
@@ -486,52 +504,76 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data: posteriorProducto, error: posteriorProductoError } = await adminClient
-      .from(tablaGestionProducto)
-      .select('*')
-      .eq('producto_operacion_id', productoOperacionId)
-      .single()
-
-    if (posteriorProductoError || !posteriorProducto) {
-      await liberarBloqueoProducto()
-      return NextResponse.json({
-        ok: true,
-        cambios: 0,
-        notificacion: 'ERROR',
-        aviso: 'La gestión se guardó, pero no se pudo releer para auditarla.',
-      })
-    }
-
     const cambiosProducto: Cambio[] = []
+
+    // Historial operativo reducido: solo cambios relevantes para la gestión.
     const camposProducto = esBafProducto
       ? [
           ['responsable_id', 'Responsable'],
           ['estado_baf_id', 'Estado BAF'],
-          ['prospector', 'Prospector'],
-          ['cia_celular', 'CIA Celular'],
           ['sds', 'SDS'],
           ['orden_trabajo', 'Orden Trabajo'],
-          ['linea_fija', 'Línea Fija'],
-          ['fecha_instalacion', 'Fecha Instalación'],
-          ['ciclo_cuenta', 'Ciclo Cuenta'],
-          ['motivo_estado', 'Motivo Estado'],
         ]
       : [
           ['responsable_id', 'Responsable'],
           ['estado_porta_id', 'Estado Vendedor'],
           ['estado_bboo_id', 'Estado BBOO'],
           ['bboo_id', 'BBOO'],
-          ['fecha_carga_stl', 'Fecha Carga STL'],
           ['sim', 'SIM'],
-          ['plan_cargado', 'Plan cargado'],
           ['sds', 'SDS'],
           ['pin_lnva_nro', 'PIN / LNVA NRO'],
-          ['documentacion_dni', 'Documentación DNI'],
-          ['medio_despacho_chip_id', 'Medio de despacho CHIP'],
-          ['fecha_porta', 'Fecha PORTA'],
           ['numero_seguimiento', 'Número de seguimiento'],
           ['observaciones_gestion', 'Observaciones gestión'],
         ]
+
+    // Resolver nombres legibles para estados y asignaciones antes de auditar.
+    const idsEstadoBaf = esBafProducto
+      ? [anteriorProducto?.estado_baf_id, posteriorProducto?.estado_baf_id].filter((id): id is number => id != null)
+      : []
+    const idsEstadoVendedor = esMovilProducto
+      ? [anteriorProducto?.estado_porta_id, posteriorProducto?.estado_porta_id].filter((id): id is number => id != null)
+      : []
+    const idsEstadoBboo = esMovilProducto
+      ? [anteriorProducto?.estado_bboo_id, posteriorProducto?.estado_bboo_id].filter((id): id is number => id != null)
+      : []
+    const idsPerfiles = Array.from(new Set(
+      [responsableAnterior, responsableNuevo, anteriorProducto?.bboo_id, posteriorProducto?.bboo_id]
+        .filter((id): id is string => Boolean(id))
+    ))
+
+    const [estadosBafResult, estadosVendedorResult, estadosBbooResult, perfilesResult] = await Promise.all([
+      idsEstadoBaf.length
+        ? adminClient.from('estados_baf').select('id,nombre').in('id', Array.from(new Set(idsEstadoBaf)))
+        : Promise.resolve({ data: [] as Array<{ id: number; nombre: string }> }),
+      idsEstadoVendedor.length
+        ? adminClient.from('estados_porta').select('id,nombre').in('id', Array.from(new Set(idsEstadoVendedor)))
+        : Promise.resolve({ data: [] as Array<{ id: number; nombre: string }> }),
+      idsEstadoBboo.length
+        ? adminClient.from('estados_bboo').select('id,nombre').in('id', Array.from(new Set(idsEstadoBboo)))
+        : Promise.resolve({ data: [] as Array<{ id: number; nombre: string }> }),
+      idsPerfiles.length
+        ? adminClient.from('profiles').select('id,nombre,vendedor').in('id', idsPerfiles)
+        : Promise.resolve({ data: [] as Array<{ id: string; nombre: string | null; vendedor: string | null }> }),
+    ])
+    const nombresEstadoBaf = new Map<number, string>()
+    const nombresEstadoVendedor = new Map<number, string>()
+    const nombresEstadoBboo = new Map<number, string>()
+    const nombresPerfil = new Map<string, string>()
+
+    for (const estado of estadosBafResult.data || []) nombresEstadoBaf.set(Number(estado.id), estado.nombre)
+    for (const estado of estadosVendedorResult.data || []) nombresEstadoVendedor.set(Number(estado.id), estado.nombre)
+    for (const estado of estadosBbooResult.data || []) nombresEstadoBboo.set(Number(estado.id), estado.nombre)
+    for (const perfil of perfilesResult.data || []) {
+      nombresPerfil.set(perfil.id, perfil.vendedor?.trim() || perfil.nombre?.trim() || perfil.id)
+    }
+
+    const formateadorCampo = (campo: string) => {
+      if (campo === 'estado_baf_id') return (id: any) => id == null ? 'Sin estado' : nombresEstadoBaf.get(Number(id)) || `Estado #${id}`
+      if (campo === 'estado_porta_id') return (id: any) => id == null ? 'Sin estado' : nombresEstadoVendedor.get(Number(id)) || `Estado #${id}`
+      if (campo === 'estado_bboo_id') return (id: any) => id == null ? 'Sin estado' : nombresEstadoBboo.get(Number(id)) || `Estado #${id}`
+      if (campo === 'responsable_id' || campo === 'bboo_id') return (id: any) => id ? nombresPerfil.get(String(id)) || String(id) : 'Sin asignar'
+      return texto
+    }
 
     for (const [campo, etiqueta] of camposProducto) {
       const anteriorValor = campo === 'responsable_id'
@@ -540,67 +582,82 @@ export async function POST(request: Request) {
       const nuevoValor = campo === 'responsable_id'
         ? responsableNuevo
         : posteriorProducto?.[campo] ?? null
-      agregarCambio(cambiosProducto, etiqueta, anteriorValor, nuevoValor,
-        campo === 'documentacion_dni' ? booleano : texto)
+      agregarCambio(cambiosProducto, etiqueta, anteriorValor, nuevoValor, formateadorCampo(campo))
     }
 
-    if (cambiosProducto.length > 0) {
-      const filasHistorial = cambiosProducto.map((cambio) => ({
+    const filasHistorial = cambiosProducto.map((cambio) => ({
+      producto_operacion_id: productoOperacionId,
+      tipo_accion: 'MODIFICACION',
+      campo: cambio.campo,
+      etiqueta: cambio.campo,
+      valor_anterior: cambio.anterior,
+      valor_nuevo: cambio.nuevo,
+      usuario_id: user.id,
+      rol_actor: rolActor,
+    }))
+
+    // Historial específico de estados: un evento independiente por tipo de estado.
+    const filasHistorialEstado: Array<Record<string, unknown>> = []
+    const agregarEstado = (tipoEstado: 'BAF' | 'VENDEDOR' | 'BBOO', anterior: unknown, nuevo: unknown) => {
+      if (String(anterior ?? '') === String(nuevo ?? '')) return
+      filasHistorialEstado.push({
         producto_operacion_id: productoOperacionId,
-        tipo_accion: 'MODIFICACION',
-        campo: cambio.campo,
-        etiqueta: cambio.campo,
-        valor_anterior: cambio.anterior,
-        valor_nuevo: cambio.nuevo,
+        tipo_producto: tipoProducto,
+        tipo_estado: tipoEstado,
+        estado_anterior: anterior == null ? null : String(anterior),
+        estado_nuevo: nuevo == null ? 'SIN_ESTADO' : String(nuevo),
         usuario_id: user.id,
-        rol_actor: rolActor,
-      }))
-
-      const { error: historialError } = await adminClient
-        .from('historial_producto')
-        .insert(filasHistorial)
-
-      if (historialError) {
-        console.error('Gestión guardada, pero no se pudo registrar historial_producto:', historialError)
-      }
+        observacion: 'Cambio registrado desde Gestión de Ventas',
+      })
     }
 
-    // Historial específico de estados por producto.
-    const estadoAnterior = esBafProducto
-      ? anteriorProducto?.estado_baf_id ?? null
-      : `${anteriorProducto?.estado_porta_id ?? ''}|${anteriorProducto?.estado_bboo_id ?? ''}`
-    const estadoNuevo = esBafProducto
-      ? posteriorProducto?.estado_baf_id ?? null
-      : `${posteriorProducto?.estado_porta_id ?? ''}|${posteriorProducto?.estado_bboo_id ?? ''}`
-
-    if (String(estadoAnterior ?? '') !== String(estadoNuevo ?? '')) {
-      const { error: historialEstadoError } = await adminClient
-        .from('historial_estados_producto')
-        .insert({
-          producto_operacion_id: productoOperacionId,
-          tipo_producto: tipoProducto,
-          estado_anterior: estadoAnterior == null ? null : String(estadoAnterior),
-          estado_nuevo: estadoNuevo == null ? 'SIN_ESTADO' : String(estadoNuevo),
-          usuario_id: user.id,
-          observacion: 'Cambio registrado desde Gestión de Ventas',
-        })
-
-      if (historialEstadoError) {
-        console.error('No se pudo registrar historial_estados_producto:', historialEstadoError)
-      }
+    if (esBafProducto) {
+      agregarEstado('BAF', anteriorProducto?.estado_baf_id ?? null, posteriorProducto?.estado_baf_id ?? null)
+    } else {
+      agregarEstado('VENDEDOR', anteriorProducto?.estado_porta_id ?? null, posteriorProducto?.estado_porta_id ?? null)
+      agregarEstado('BBOO', anteriorProducto?.estado_bboo_id ?? null, posteriorProducto?.estado_bboo_id ?? null)
     }
 
+    // Ambos historiales son independientes entre sí: escribirlos en paralelo.
+    const [historialResult, historialEstadoResult] = await Promise.all([
+      filasHistorial.length > 0
+        ? adminClient.from('historial_producto').insert(filasHistorial)
+        : Promise.resolve({ error: null }),
+      filasHistorialEstado.length > 0
+        ? adminClient.from('historial_estados_producto').insert(filasHistorialEstado)
+        : Promise.resolve({ error: null }),
+    ])
+
+    if (historialResult.error) {
+      console.error('Gestión guardada, pero no se pudo registrar historial_producto:', historialResult.error)
+    }
+    if (historialEstadoResult.error) {
+      console.error('No se pudo registrar historial_estados_producto:', historialEstadoResult.error)
+    }
     if (cambiosProducto.length === 0) {
       await liberarBloqueoProducto()
       return NextResponse.json({ ok: true, cambios: 0, notificacion: 'NO_CAMBIOS' })
     }
 
-    // Notificación al Vendedor originante. El guardado nunca se revierte si el email falla.
+    // El email de Venta se dispara exclusivamente por una transición real de estado
+    // y nunca cuando quien realizó el cambio es el propio Vendedor originante.
+    const huboCambioEstado = filasHistorialEstado.length > 0
     const vendedorId = operacion.usuario_id
+
+    if (!huboCambioEstado || !vendedorId || user.id === vendedorId) {
+      await liberarBloqueoProducto()
+      return NextResponse.json({
+        ok: true,
+        cambios: cambiosProducto.length,
+        notificacion: 'NO_REQUERIDA',
+      })
+    }
+
+    // Notificación al Vendedor originante. El guardado nunca se revierte si el email falla.
     const responsableNombre =
       actorProducto.vendedor?.trim() || actorProducto.nombre?.trim() || user.email || 'Usuario'
     const asunto = `Notificación de Gestión ${tipoVisibleProducto}`
-    const referencia = `Operación: ${operacionId} · Producto: ${productoOperacionId}`
+    const referencia = `Operación: ${operacionId}`
     const mensaje = [
       asunto,
       '',
@@ -630,7 +687,6 @@ export async function POST(request: Request) {
     } else {
       errorDestinatario = 'La Venta no tiene Vendedor asignado.'
     }
-
     const { data: notificacion, error: notificacionError } = await adminClient
       .from('notificaciones')
       .insert({
@@ -652,7 +708,6 @@ export async function POST(request: Request) {
       })
       .select('id')
       .single()
-
     if (notificacionError || !notificacion) {
       console.error('Gestión guardada, pero no se pudo registrar la notificación:', notificacionError)
       await liberarBloqueoProducto()
@@ -676,18 +731,21 @@ export async function POST(request: Request) {
 
     try {
       await enviarEmailGmail({ destinatario, asunto, mensaje })
-      await adminClient
-        .from('notificaciones')
-        .update({
-          estado: 'ENVIADA',
-          fecha_envio: new Date().toISOString(),
-          error_envio: null,
-          intentos: 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', notificacion.id)
-
-      await liberarBloqueoProducto()
+      // La actualización de la notificación y la liberación del bloqueo no
+      // dependen entre sí; hacerlas en paralelo reduce la cola posterior al email.
+      await Promise.all([
+        adminClient
+          .from('notificaciones')
+          .update({
+            estado: 'ENVIADA',
+            fecha_envio: new Date().toISOString(),
+            error_envio: null,
+            intentos: 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', notificacion.id),
+        liberarBloqueoProducto(),
+      ])
       return NextResponse.json({
         ok: true,
         cambios: cambiosProducto.length,
@@ -695,17 +753,18 @@ export async function POST(request: Request) {
       })
     } catch (error) {
       const detalleError = mensajeError(error)
-      await adminClient
-        .from('notificaciones')
-        .update({
-          estado: 'ERROR',
-          error_envio: detalleError,
-          intentos: 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', notificacion.id)
-
-      await liberarBloqueoProducto()
+      await Promise.all([
+        adminClient
+          .from('notificaciones')
+          .update({
+            estado: 'ERROR',
+            error_envio: detalleError,
+            intentos: 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', notificacion.id),
+        liberarBloqueoProducto(),
+      ])
       return NextResponse.json({
         ok: true,
         cambios: cambiosProducto.length,

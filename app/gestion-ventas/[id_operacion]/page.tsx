@@ -415,196 +415,185 @@ export default async function DetalleVentaPage({
   // Cliente, Domicilio u operaciones_porta al Vendedor Gestor autorizado.
   const admin = createAdminClient()
 
-  const { data: responsables, error: responsablesError } = await supabase
-    .from('profiles')
-    .select('id, nombre, vendedor, rol')
-    .eq('activo', true)
-    .eq('puede_gestionar_ventas', true)
-    .order('nombre', { ascending: true })
-
-  if (responsablesError) {
-    throw new Error(`No se pudieron cargar los responsables: ${responsablesError.message}`)
-  }
-
-  const { data: estadosBaf, error: estadosBafError } = await supabase
-    .from('estados_baf')
-    .select('id, codigo, nombre, orden')
-    .eq('activo', true)
-    .order('orden', { ascending: true })
-    .order('nombre', { ascending: true })
-
-  if (estadosBafError) {
-    throw new Error(`No se pudieron cargar los Estados BAF: ${estadosBafError.message}`)
-  }
-
-  const { data: estadosPorta, error: estadosPortaError } = await supabase
-    .from('estados_porta')
-    .select('id, codigo, nombre, orden')
-    .eq('activo', true)
-    .order('orden', { ascending: true })
-    .order('nombre', { ascending: true })
-
-  if (estadosPortaError) {
-    throw new Error(`No se pudieron cargar los Estados PORTA: ${estadosPortaError.message}`)
-  }
-
-  // Estados BBOO se leen con el cliente administrativo después de autenticar
-  // al usuario. La tabla puede tener RLS que no exponga el catálogo al rol BBOO.
-  const { data: estadosBboo, error: estadosBbooError } = await admin
-    .from('estados_bboo')
-    .select('id, codigo, nombre, orden')
-    .eq('activo', true)
-    .order('orden', { ascending: true })
-    .order('nombre', { ascending: true })
-
-  if (estadosBbooError) {
-    throw new Error(`No se pudieron cargar los Estados BBOO: ${estadosBbooError.message}`)
-  }
-
-  const { data: planesPorta, error: planesPortaError } = await supabase
-    .from('catalogo_planes_porta')
-    .select('nombre, orden')
-    .eq('activo', true)
-    .order('orden', { ascending: true })
-    .order('nombre', { ascending: true })
-
-  if (planesPortaError) {
-    throw new Error(`No se pudieron cargar los planes PORTA/Línea Nueva: ${planesPortaError.message}`)
-  }
-
-  const { data: mediosDespacho, error: mediosDespachoError } = await supabase
-    .from('medios_despacho_chip')
-    .select('id, nombre, orden')
-    .eq('activo', true)
-    .order('orden', { ascending: true })
-    .order('nombre', { ascending: true })
-
-  if (mediosDespachoError) {
-    throw new Error(`No se pudieron cargar los medios de despacho CHIP: ${mediosDespachoError.message}`)
-  }
-
-  const { data: usuariosBboo, error: usuariosBbooError } = await supabase
-    .from('profiles')
-    .select('id, nombre, vendedor')
-    .eq('activo', true)
-    .eq('rol', 'BBOO')
-    .order('nombre', { ascending: true })
-
-  if (usuariosBbooError) {
-    throw new Error(`No se pudieron cargar los usuarios BBOO: ${usuariosBbooError.message}`)
-  }
-
   const { id_operacion } = await params
   const id = decodeURIComponent(id_operacion)
 
-  const { data: operacion, error } = await admin
-    .from('operaciones')
-    .select(`
-      id_operacion,
-      grupo_operacion,
-      tipo,
-      fecha_hora,
-      vendedor,
-      origen_dato,
-      estado_sync,
-      sheet_destino,
-      fila_sheet,
-      error_sync,
-      usuario_id,
-      cliente_id,
-      domicilio_id,
-      cliente:clientes (
-        dni,
-        tipo_documento,
-        nombre,
-        apellido,
-        fecha_nacimiento,
-        email,
-        telefono,
-        telefono_alternativo
-      ),
-      domicilio:domicilios (
-        calle_nro,
-        piso,
-        dpto,
-        entre_calles,
-        barrio,
-        localidad,
-        coordenadas,
-        datos_extras
-      ),
-      operaciones_baf (
-        tipo_domicilio,
-        plan,
-        tv,
-        cantidad_decos,
-        zona,
-        horario_contacto,
-        convergente,
-        linea_convergente,
-        modalidad_plan
-      ),
-      operaciones_porta (
-        nim,
-        es_linea_nueva,
-        gigas_acordados,
-        tipo_sim,
-        compania_actual,
-        prepago_pospago,
-        observaciones,
-        numero_linea
-      ),
-      gestion_baf (
-        responsable_id,
-        fecha_gestion,
-        prospector,
-        detalle_lead,
-        cia_celular,
-        sds,
-        orden_trabajo,
-        linea_fija,
-        fecha_instalacion,
-        ciclo_cuenta,
-        motivo_estado,
-        estado_baf_id,
-        estados_baf (
-          nombre
-        )
-      ),
-      gestion_porta (
-        responsable_id,
-        bboo_id,
-        fecha_carga_stl,
-        sim,
-        plan_cargado,
-        sds,
-        spn,
-        pin_lnva_nro,
-        documentacion_dni,
-        medio_despacho_chip_id,
-        fecha_porta,
-        numero_seguimiento,
-        observaciones_gestion,
-        estado_porta_id,
-        estado_bboo_id,
-        estados_porta (
-          nombre
+  // Estas consultas no dependen entre sí. Ejecutarlas en paralelo reduce
+  // sensiblemente el tiempo de render de Gestión de Ventas.
+  const [
+    responsablesResult,
+    estadosBafResult,
+    estadosPortaResult,
+    estadosBbooResult,
+    planesPortaResult,
+    mediosDespachoResult,
+    usuariosBbooResult,
+    operacionResult,
+  ] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, nombre, vendedor, rol')
+      .eq('activo', true)
+      .eq('puede_gestionar_ventas', true)
+      .order('nombre', { ascending: true }),
+    supabase
+      .from('estados_baf')
+      .select('id, codigo, nombre, orden')
+      .eq('activo', true)
+      .order('orden', { ascending: true })
+      .order('nombre', { ascending: true }),
+    supabase
+      .from('estados_porta')
+      .select('id, codigo, nombre, orden')
+      .eq('activo', true)
+      .order('orden', { ascending: true })
+      .order('nombre', { ascending: true }),
+    admin
+      .from('estados_bboo')
+      .select('id, codigo, nombre, orden')
+      .eq('activo', true)
+      .order('orden', { ascending: true })
+      .order('nombre', { ascending: true }),
+    supabase
+      .from('catalogo_planes_porta')
+      .select('nombre, orden')
+      .eq('activo', true)
+      .order('orden', { ascending: true })
+      .order('nombre', { ascending: true }),
+    supabase
+      .from('medios_despacho_chip')
+      .select('id, nombre, orden')
+      .eq('activo', true)
+      .order('orden', { ascending: true })
+      .order('nombre', { ascending: true }),
+    supabase
+      .from('profiles')
+      .select('id, nombre, vendedor')
+      .eq('activo', true)
+      .eq('rol', 'BBOO')
+      .order('nombre', { ascending: true }),
+    admin
+      .from('operaciones')
+      .select(`
+        id_operacion,
+        grupo_operacion,
+        tipo,
+        fecha_hora,
+        vendedor,
+        origen_dato,
+        estado_sync,
+        sheet_destino,
+        fila_sheet,
+        error_sync,
+        usuario_id,
+        cliente_id,
+        domicilio_id,
+        cliente:clientes (
+          dni,
+          tipo_documento,
+          nombre,
+          apellido,
+          fecha_nacimiento,
+          email,
+          telefono,
+          telefono_alternativo
         ),
-        estados_bboo (
-          nombre
+        domicilio:domicilios (
+          calle_nro,
+          piso,
+          dpto,
+          entre_calles,
+          barrio,
+          localidad,
+          coordenadas,
+          datos_extras
         ),
-        medios_despacho_chip (
-          nombre
+        operaciones_baf (
+          tipo_domicilio,
+          plan,
+          tv,
+          cantidad_decos,
+          zona,
+          horario_contacto,
+          convergente,
+          linea_convergente,
+          modalidad_plan
+        ),
+        operaciones_porta (
+          nim,
+          es_linea_nueva,
+          gigas_acordados,
+          tipo_sim,
+          compania_actual,
+          prepago_pospago,
+          observaciones,
+          numero_linea
+        ),
+        gestion_baf (
+          responsable_id,
+          fecha_gestion,
+          prospector,
+          detalle_lead,
+          cia_celular,
+          sds,
+          orden_trabajo,
+          linea_fija,
+          fecha_instalacion,
+          ciclo_cuenta,
+          motivo_estado,
+          estado_baf_id,
+          estados_baf (
+            nombre
+          )
+        ),
+        gestion_porta (
+          responsable_id,
+          bboo_id,
+          fecha_carga_stl,
+          sim,
+          plan_cargado,
+          sds,
+          spn,
+          pin_lnva_nro,
+          documentacion_dni,
+          medio_despacho_chip_id,
+          fecha_porta,
+          numero_seguimiento,
+          observaciones_gestion,
+          estado_porta_id,
+          estado_bboo_id,
+          estados_porta (
+            nombre
+          ),
+          estados_bboo (
+            nombre
+          ),
+          medios_despacho_chip (
+            nombre
+          )
         )
-      )
-    `)
-    .eq('id_operacion', id)
-    .maybeSingle()
+      `)
+      .eq('id_operacion', id)
+      .maybeSingle(),
+  ])
 
-  if (error) {
-    throw new Error(`No se pudo cargar la venta: ${error.message}`)
-  }
+  const { data: responsables, error: responsablesError } = responsablesResult
+  const { data: estadosBaf, error: estadosBafError } = estadosBafResult
+  const { data: estadosPorta, error: estadosPortaError } = estadosPortaResult
+  const { data: estadosBboo, error: estadosBbooError } = estadosBbooResult
+  const { data: planesPorta, error: planesPortaError } = planesPortaResult
+  const { data: mediosDespacho, error: mediosDespachoError } = mediosDespachoResult
+  const { data: usuariosBboo, error: usuariosBbooError } = usuariosBbooResult
+  const { data: operacion, error } = operacionResult
 
+  if (responsablesError) throw new Error(`No se pudieron cargar los responsables: ${responsablesError.message}`)
+  if (estadosBafError) throw new Error(`No se pudieron cargar los Estados BAF: ${estadosBafError.message}`)
+  if (estadosPortaError) throw new Error(`No se pudieron cargar los Estados PORTA: ${estadosPortaError.message}`)
+  if (estadosBbooError) throw new Error(`No se pudieron cargar los Estados BBOO: ${estadosBbooError.message}`)
+  if (planesPortaError) throw new Error(`No se pudieron cargar los planes PORTA/Línea Nueva: ${planesPortaError.message}`)
+  if (mediosDespachoError) throw new Error(`No se pudieron cargar los medios de despacho CHIP: ${mediosDespachoError.message}`)
+  if (usuariosBbooError) throw new Error(`No se pudieron cargar los usuarios BBOO: ${usuariosBbooError.message}`)
+  if (error) throw new Error(`No se pudo cargar la venta: ${error.message}`)
   if (!operacion) notFound()
 
   const op: any = operacion
@@ -677,15 +666,22 @@ export default async function DetalleVentaPage({
       bafGestionResult,
       movilGestionResult,
       contextoResult,
+      historialProductoResult,
     ] = await Promise.all([
       admin.from('operacion_producto_baf').select('*').in('producto_operacion_id', idsProductos),
       admin.from('operacion_producto_movil').select('*').in('producto_operacion_id', idsProductos),
       admin.from('gestion_producto_baf').select('*').in('producto_operacion_id', idsProductos),
       admin.from('gestion_producto_movil').select('*').in('producto_operacion_id', idsProductos),
       admin.from('operacion_contexto_comercial').select('*').eq('operacion_id', id).maybeSingle(),
+      admin
+        .from('historial_producto')
+        .select('id,producto_operacion_id,tipo_accion,campo,etiqueta,valor_anterior,valor_nuevo,usuario_id,rol_actor,fecha_hora,observacion')
+        .in('producto_operacion_id', idsProductos)
+        .order('fecha_hora', { ascending: false })
+        .order('id', { ascending: false }),
     ])
 
-    for (const resultado of [bafDetalleResult, movilDetalleResult, bafGestionResult, movilGestionResult, contextoResult]) {
+    for (const resultado of [bafDetalleResult, movilDetalleResult, bafGestionResult, movilGestionResult, contextoResult, historialProductoResult]) {
       if (resultado.error) {
         throw new Error(`No se pudo cargar la gestión multiproducto: ${resultado.error.message}`)
       }
@@ -696,17 +692,53 @@ export default async function DetalleVentaPage({
     const bafGestion = new Map((bafGestionResult.data ?? []).map((x: any) => [Number(x.producto_operacion_id), x]))
     const movilGestion = new Map((movilGestionResult.data ?? []).map((x: any) => [Number(x.producto_operacion_id), x]))
     const contexto: any = contextoResult.data ?? null
+    const historialProducto = historialProductoResult.data ?? []
+    const idsActoresHistorial = Array.from(new Set(
+      historialProducto
+        .map((h: any) => String(h.usuario_id ?? '').trim())
+        .filter(Boolean)
+    ))
+    const perfilesHistorialResult = idsActoresHistorial.length
+      ? await admin.from('profiles').select('id,nombre,vendedor').in('id', idsActoresHistorial)
+      : { data: [] as Array<{ id: string; nombre: string | null; vendedor: string | null }>, error: null }
+
+    if (perfilesHistorialResult.error) {
+      throw new Error(`No se pudieron cargar los usuarios del historial: ${perfilesHistorialResult.error.message}`)
+    }
+
+    const nombresActorHistorial = new Map<string, string>()
+    for (const perfilHistorial of perfilesHistorialResult.data ?? []) {
+      nombresActorHistorial.set(
+        perfilHistorial.id,
+        perfilHistorial.vendedor?.trim() || perfilHistorial.nombre?.trim() || perfilHistorial.id
+      )
+    }
+
+    const historialPorProducto = new Map<number, any[]>()
+    for (const evento of historialProducto) {
+      const productoId = Number(evento.producto_operacion_id)
+      const eventos = historialPorProducto.get(productoId) ?? []
+      eventos.push(evento)
+      historialPorProducto.set(productoId, eventos)
+    }
 
     const habilitaciones = new Map<number, any>()
-    for (const producto of productos) {
-      if (['PORTA', 'LINEA_NUEVA'].includes(String(producto.tipo_producto))) {
+    const productosMoviles = productos.filter((producto: any) =>
+      ['PORTA', 'LINEA_NUEVA'].includes(String(producto.tipo_producto))
+    )
+
+    const habilitacionesResult = await Promise.all(
+      productosMoviles.map(async (producto: any) => {
         const { data: h, error: hError } = await admin.rpc('evaluar_habilitacion_producto_movil', {
           p_producto_operacion_id: Number(producto.id),
         })
         if (hError) throw new Error(`No se pudo evaluar la habilitación móvil: ${hError.message}`)
-        const valor = Array.isArray(h) ? h[0] : h
-        habilitaciones.set(Number(producto.id), valor)
-      }
+        return [Number(producto.id), Array.isArray(h) ? h[0] : h] as const
+      })
+    )
+
+    for (const [productoId, valor] of habilitacionesResult) {
+      habilitaciones.set(productoId, valor)
     }
 
     const clienteMulti: any = op.cliente
@@ -971,6 +1003,44 @@ export default async function DetalleVentaPage({
                           </div>
                         </fieldset>
                       </form>
+
+                      <div className="border-t border-gray-200 bg-white p-5">
+                        <details>
+                          <summary className="cursor-pointer select-none text-sm font-semibold text-gray-900">
+                            Historial / Auditoría ({(historialPorProducto.get(productoId) ?? []).length})
+                          </summary>
+                          <div className="mt-4 space-y-3">
+                            {(historialPorProducto.get(productoId) ?? []).length === 0 ? (
+                              <p className="text-sm text-gray-500">Todavía no hay cambios auditados para este producto.</p>
+                            ) : (
+                              (historialPorProducto.get(productoId) ?? []).map((evento: any) => (
+                                <div key={evento.id} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                                  <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                      <div className="text-sm font-semibold text-gray-900">{evento.etiqueta || evento.campo || evento.tipo_accion}</div>
+                                      <div className="mt-1 text-sm text-gray-700">
+                                        <span className="font-medium">{mostrar(evento.valor_anterior)}</span>
+                                        <span className="mx-2 text-gray-400">→</span>
+                                        <span className="font-medium">{mostrar(evento.valor_nuevo)}</span>
+                                      </div>
+                                    </div>
+                                    <div className="text-right text-xs text-gray-500">
+                                      <div>{fechaArgentina(evento.fecha_hora)}</div>
+                                      <div className="mt-1">
+                                        {nombresActorHistorial.get(String(evento.usuario_id)) || 'Usuario no disponible'}
+                                        {evento.rol_actor ? ` · ${evento.rol_actor}` : ''}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {evento.observacion && (
+                                    <div className="mt-2 whitespace-pre-wrap text-xs text-gray-600">{evento.observacion}</div>
+                                  )}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </details>
+                      </div>
                     </div>
                   )
                 })}
@@ -1760,9 +1830,11 @@ export default async function DetalleVentaPage({
                         const actual = String(
                           gestionPorta?.plan_cargado || porta?.gigas_acordados || ''
                         ).trim()
-                        const activos = (planesPorta ?? []).map((plan: any) =>
-                          String(plan.nombre ?? '').trim()
-                        ).filter(Boolean)
+                        const activos = Array.from(new Set(
+                          (planesPorta ?? []).map((plan: any) =>
+                            String(plan.nombre ?? '').trim()
+                          ).filter(Boolean)
+                        ))
                         const opciones = actual && !activos.includes(actual)
                           ? [actual, ...activos]
                           : activos
