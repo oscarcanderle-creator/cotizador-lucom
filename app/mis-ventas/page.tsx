@@ -573,15 +573,21 @@ export default async function MisVentasPage({
                         )}
                       </td>
 
-                      <td className="whitespace-nowrap px-4 py-4 text-right">
-                        <a
-                          href={`/mis-ventas/${encodeURIComponent(
-                            operacion.id_operacion
-                          )}`}
-                          className="font-medium text-red-600 hover:text-red-700"
-                        >
-                          Ver detalle
-                        </a>
+                      <td className="px-4 py-4 text-right">
+                        <div className="flex flex-col items-end gap-2">
+                          <a
+                            href={`/cotizador?venta=${encodeURIComponent(operacion.id_operacion)}`}
+                            className="rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+                          >
+                            Sincronizar datos a Cotizador
+                          </a>
+                          <a
+                            href={`/mis-ventas/${encodeURIComponent(operacion.id_operacion)}`}
+                            className="rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+                          >
+                            Ver detalle
+                          </a>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -694,12 +700,16 @@ export default async function MisVentasPage({
                   <div className="mb-2 truncate font-mono text-[10px] text-gray-400">
                     {operacion.id_operacion}
                   </div>
-                  <div className="text-right">
+                  <div className="flex flex-col items-stretch gap-2">
                     <a
-                      href={`/mis-ventas/${encodeURIComponent(
-                        operacion.id_operacion
-                      )}`}
-                      className="text-sm font-semibold text-red-600 hover:text-red-700"
+                      href={`/cotizador?venta=${encodeURIComponent(operacion.id_operacion)}`}
+                      className="rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+                    >
+                      Sincronizar datos a Cotizador
+                    </a>
+                    <a
+                      href={`/mis-ventas/${encodeURIComponent(operacion.id_operacion)}`}
+                      className="rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
                     >
                       Ver detalle
                     </a>

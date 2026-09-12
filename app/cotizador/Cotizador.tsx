@@ -214,6 +214,9 @@ export default function Cotizador({
 
   const [exportando, setExportando] = useState(false)
 
+  const [ventaSincronizada, setVentaSincronizada] = useState<string | null>(null)
+  const [avisoSincronizacion, setAvisoSincronizacion] = useState<string | null>(null)
+
   const [negocio, setNegocio] =
     useState<Negocio>('MASIVO')
 
@@ -487,6 +490,59 @@ export default function Cotizador({
     setCantidadDecosAdicionales,
 
   ] = useState(0)
+
+  useEffect(() => {
+    const operacionId = new URLSearchParams(window.location.search).get('venta')
+    if (!operacionId) return
+
+    let cancelado = false
+
+    async function sincronizarVenta() {
+      try {
+        setAvisoSincronizacion('Cargando datos de la venta...')
+
+        const respuesta = await fetch(
+          `/api/cotizador/sincronizar?operacion=${encodeURIComponent(String(operacionId))}`,
+          { cache: 'no-store' }
+        )
+
+        const data = await respuesta.json()
+
+        if (!respuesta.ok) {
+          throw new Error(data?.error || 'No se pudo sincronizar la venta.')
+        }
+
+        if (cancelado) return
+
+        setNegocio(data.negocio === 'PYME' ? 'PYME' : 'MASIVO')
+        setDatosCliente(data.cliente)
+        setLineas(data.lineas ?? [])
+        setNextLineaId((data.lineas?.length ?? 0) + 1)
+        setServiciosInternet(data.internet ?? [])
+        setNextInternetId((data.internet?.length ?? 0) + 1)
+        setTvActivo(data.tvActivo === true)
+        setCantidadDecosAdicionales(Number(data.cantidadDecosAdicionales ?? 0))
+        setClienteTieneBAF(data.clienteTieneBAF === true)
+        setClienteTieneLineasClaro(data.clienteTieneLineasClaro === true)
+        setCantidadLineasActuales(Number(data.cantidadLineasActuales ?? 1))
+        setVentaSincronizada(data.operacionId)
+        setAvisoSincronizacion(null)
+      } catch (error) {
+        if (cancelado) return
+        setAvisoSincronizacion(
+          error instanceof Error
+            ? error.message
+            : 'No se pudo sincronizar la venta.'
+        )
+      }
+    }
+
+    sincronizarVenta()
+
+    return () => {
+      cancelado = true
+    }
+  }, [])
 
   /*
 
@@ -1691,6 +1747,22 @@ async function compartirPropuesta() {
 
         <section>
 
+          {ventaSincronizada && (
+            <div className="mb-3 rounded-xl border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-800">
+              <div className="font-bold">Datos sincronizados desde Mis Ventas</div>
+              <div className="mt-1 font-mono text-xs">{ventaSincronizada}</div>
+              <div className="mt-1 text-xs">
+                Revisá los datos y la propuesta antes de comunicar el acuerdo final al cliente.
+              </div>
+            </div>
+          )}
+
+          {avisoSincronizacion && (
+            <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {avisoSincronizacion}
+            </div>
+          )}
+
           {/* MASIVO / PYME */}
 
           <div className="grid grid-cols-2 gap-2 mb-2">
@@ -2395,6 +2467,12 @@ async function compartirPropuesta() {
 
                       >
 
+                        {linea.plan &&
+                          !planesMoviles.some((p) => p.plan === linea.plan) && (
+                            <option value={linea.plan}>
+                              {linea.plan} - Revisar plan
+                            </option>
+                          )}
                         {planesMoviles.map(
 
                           (p) => (
@@ -2735,6 +2813,12 @@ async function compartirPropuesta() {
 
                         >
 
+                          {servicio.plan &&
+                            !planesInternet.some((p) => p.plan === servicio.plan) && (
+                              <option value={servicio.plan}>
+                                {servicio.plan} - Revisar plan
+                              </option>
+                            )}
                           {planesInternet.map(
 
                             (p) => (

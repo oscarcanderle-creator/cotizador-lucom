@@ -141,7 +141,9 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
   <section className="mb-3 rounded-2xl border border-green-300 bg-green-50 p-3"><Selector label="Origen del dato" name="origen_dato" opciones={opts(origenes)} required/></section>
   <section className="mb-3 rounded-xl border bg-white px-3 py-2 text-xs text-gray-500">Usuario <b className="text-gray-800">{nombreUsuario}</b> · Vendedor <b className="text-gray-800">{vendedor}</b></section>
   <Seccion n="01" titulo="Cliente"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Campo label="Nombre" name="nombre" required/><Campo label="Apellido" name="apellido" required/><Selector label="Documento" name="tipo_documento" opciones={opts(tiposDocumento)} defaultValue="DNI" required/><Campo label="Número" name="dni" inputMode="numeric" required/><Campo label="Fecha nacimiento" name="fecha_nacimiento" type="date"/><CampoTelefono label="Teléfono" name="telefono" required/><CampoTelefono label="Contacto alternativo" name="telefono_alternativo"/><Campo label="Correo cliente" name="email" type="email" inputMode="email" required/></div></Seccion>
-  <Seccion n="02" titulo="Domicilio"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><div className="sm:col-span-2"><Campo label="Calle y Nro" name="domicilio" required/></div><Campo label="Entre calles" name="entre_calles"/><Campo label="Piso" name="piso"/><Campo label="Dpto" name="dpto"/><Campo label="Barrio" name="barrio"/><Campo label="Localidad" name="localidad"/><Campo label="Coordenadas" name="coordenadas"/><div className="sm:col-span-2"><Campo label="Datos extras" name="datos_extras"/></div></div></Seccion>
+  <Seccion n="02" titulo="Domicilio"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><div className="sm:col-span-2"><Campo label="Calle y Nro" name="domicilio" required/></div><Campo label="Entre calles" name="entre_calles"/><Campo label="Piso" name="piso"/><Campo label="Dpto" name="dpto"/><Campo label="Barrio" name="barrio"/><Campo label="Localidad" name="localidad"
+            required
+          /><Campo label="Coordenadas" name="coordenadas"/><div className="sm:col-span-2"><Campo label="Datos extras" name="datos_extras"/></div></div></Seccion>
   <Seccion n="03" titulo="Servicios Existentes que Habilitan Convergencia"><p className="text-sm text-gray-600 mb-3">Registrá solamente servicios Claro que el cliente ya posee. No generan una nueva venta.</p><div className="space-y-3">{existentes.map((s,i)=><div key={s.id} className="rounded-xl border bg-gray-50 p-3"><div className="flex justify-between mb-2"><b className="text-sm">Servicio existente {i+1}</b><button type="button" className="text-xs text-red-600" onClick={()=>setExistentes(a=>a.filter(x=>x.id!==s.id))}>Quitar</button></div><div className="grid sm:grid-cols-3 gap-2">
  <label className="block">
   <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">Tipo *</span>
@@ -236,7 +238,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
        REVISAR
       </button>
       <button type="button" className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
-       onClick={()=>{itecConfirmadoRef.current=true;setMostrarConfirmacionItec(false);window.setTimeout(()=>formRef.current?.requestSubmit(),0)}}>
+       onClick={()=>{itecConfirmadoRef.current=true;formRef.current?.requestSubmit();setMostrarConfirmacionItec(false)}}>
        GUARDAR
       </button>
      </div>

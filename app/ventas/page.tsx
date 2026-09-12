@@ -48,7 +48,7 @@ export default async function VentasPage(){
   for(const [i,s] of nuevos.entries()){
    if(!['BAF','PORTA','LINEA_NUEVA'].includes(s.tipo)||!s.productoId)return{ok:false,mensaje:`Servicio nuevo ${i+1} incompleto.`}
    if(s.tipo==='BAF'){
-    if(!s.tipoDomicilio||!s.modalidad||!s.zona||!s.observaciones)return{ok:false,mensaje:'Completá todos los campos obligatorios de Internet / BAF.'}
+    if(!s.tipoDomicilio||!s.modalidad||!s.observaciones)return{ok:false,mensaje:'Completá todos los campos obligatorios de Internet / BAF.'}
     if(!['0','1','2'].includes(String(s.decos)))return{ok:false,mensaje:'La cantidad de decos adicionales no es válida.'}
     if(!s.tv&&s.decos!==0)return{ok:false,mensaje:'Si TV está en NO, Decos adicionales debe ser 0.'}
    }
