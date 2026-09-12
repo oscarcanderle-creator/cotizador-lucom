@@ -32,17 +32,34 @@ export default async function VentasPage(){
   const tipoDoc=texto(fd,'tipo_documento'),dni=digitos(texto(fd,'dni')),nombre=texto(fd,'nombre'),apellido=texto(fd,'apellido'),telefono=texto(fd,'telefono'),telefonoAlternativo=texto(fd,'telefono_alternativo'),email=texto(fd,'email')
   const emailValido=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   if(!['DNI','CUIT','LC','LE'].includes(tipoDoc)||!dni)return{ok:false,mensaje:'Completá correctamente el documento.'};if(!nombre||!apellido||!/^[1-46-9]\d{9}$/.test(telefono))return{ok:false,mensaje:'Completá nombre, apellido y un teléfono válido de 10 dígitos que no comience con 0 ni 5.'};if(telefonoAlternativo&&!/^[1-46-9]\d{9}$/.test(telefonoAlternativo))return{ok:false,mensaje:'El contacto alternativo debe tener 10 dígitos y no comenzar con 0 ni 5.'};if(!emailValido)return{ok:false,mensaje:'Completá Correo Cliente con un email válido.'}
+  const domicilio=texto(fd,'domicilio')
+  const origenDato=texto(fd,'origen_dato')
+  if(!domicilio)return{ok:false,mensaje:'Completá Calle y Nro en la sección Domicilio.'}
+  if(!origenDato)return{ok:false,mensaje:'Seleccioná Origen del dato.'}
   const nuevos=nuevosDesde(fd),existentes=existentesDesde(fd);if(!nuevos.length)return{ok:false,mensaje:'Agregá al menos un servicio nuevo a contratar.'};if(nuevos.filter(x=>x.tipo==='BAF').length>1)return{ok:false,mensaje:'Una venta puede contener como máximo un Internet/BAF nuevo.'}
   const tieneBafNuevo=nuevos.some(x=>x.tipo==='BAF')
   if(cargaItecSolicitada&&!tieneBafNuevo)return{ok:false,mensaje:'La carga ITEC solo puede utilizarse cuando la venta incluye Internet / BAF.'}
   if(cargaItecSolicitada){
    if(!/^[0-9]{8}[A-Z]{3}$/.test(itec.sds))return{ok:false,mensaje:'El SDS de ITEC debe contener exactamente 8 números y 3 letras.'}
    if(!/^[0-9]{8}$/.test(itec.ot))return{ok:false,mensaje:'La Orden de Trabajo de ITEC debe contener exactamente 8 dígitos.'}
-   if(!itec.observaciones)return{ok:false,mensaje:'Completá Observaciones para la carga ITEC.'}
    if(!/^\d{4}-\d{2}-\d{2}$/.test(itec.fechaInstalacion))return{ok:false,mensaje:'Completá Fecha de Instalación para la carga ITEC.'}
    if(!['CLARO','PERSONAL','MOVISTAR','TUENTI'].includes(itec.ciaCelular))return{ok:false,mensaje:'Seleccioná una CIA Celular válida para la carga ITEC.'}
   }
-  for(const [i,s] of nuevos.entries()){if(!['BAF','PORTA','LINEA_NUEVA'].includes(s.tipo)||!s.productoId)return{ok:false,mensaje:`Servicio nuevo ${i+1} incompleto.`};if(s.tipo==='PORTA'&&!/^[1-46-9]\d{9}$/.test(s.nim))return{ok:false,mensaje:`El NIM de la Portabilidad ${i+1} debe tener 10 dígitos.`}}
+  for(const [i,s] of nuevos.entries()){
+   if(!['BAF','PORTA','LINEA_NUEVA'].includes(s.tipo)||!s.productoId)return{ok:false,mensaje:`Servicio nuevo ${i+1} incompleto.`}
+   if(s.tipo==='BAF'){
+    if(!s.tipoDomicilio||!s.modalidad||!s.zona||!s.observaciones)return{ok:false,mensaje:'Completá todos los campos obligatorios de Internet / BAF.'}
+    if(!['0','1','2'].includes(String(s.decos)))return{ok:false,mensaje:'La cantidad de decos adicionales no es válida.'}
+    if(!s.tv&&s.decos!==0)return{ok:false,mensaje:'Si TV está en NO, Decos adicionales debe ser 0.'}
+   }
+   if(s.tipo==='PORTA'){
+    if(!/^[1-46-9]\d{9}$/.test(s.nim))return{ok:false,mensaje:`El NIM de la Portabilidad ${i+1} debe tener 10 dígitos y no comenzar con 0 ni 5.`}
+    if(!s.compania||!s.modalidadActual)return{ok:false,mensaje:`Completá Compañía actual y PRE / POS de la Portabilidad ${i+1}.`}
+   }
+  }
+  for(const [i,s] of existentes.entries()){
+   if(s.tipo==='LINEA_MOVIL'&&!/^[1-46-9]\d{9}$/.test(s.numero))return{ok:false,mensaje:`El Número del servicio existente ${i+1} debe tener exactamente 10 dígitos y no comenzar con 0 ni 5.`}
+  }
   const nims=nuevos.filter(x=>x.tipo==='PORTA').map(x=>x.nim);if(new Set(nims).size!==nims.length)return{ok:false,mensaje:'Hay NIM repetidos en las portabilidades.'}
   const admin=createAdminClient(),m=marcaArgentina(),idOperacion=`${m.id}-${dni}`;let operacionCreada=false;const serviciosCreados:number[]=[]
   let estadoBafCargadoId:number|null=null
@@ -61,9 +78,9 @@ export default async function VentasPage(){
    const {data:ce,error:eb}=await admin.from('clientes').select('id').eq('tipo_documento',tipoDoc).eq('dni',dni).maybeSingle();if(eb)throw eb;let clienteId:number
    const datosCliente={nombre,apellido,fecha_nacimiento:texto(fd,'fecha_nacimiento')||null,email,telefono,telefono_alternativo:telefonoAlternativo||null,updated_at:new Date().toISOString()}
    if(ce){clienteId=ce.id;const {error}=await admin.from('clientes').update(datosCliente).eq('id',clienteId);if(error)throw error}else{const {data:nc,error}=await admin.from('clientes').insert({tipo_documento:tipoDoc,dni,...datosCliente}).select('id').single();if(error)throw error;clienteId=nc.id}
-   const {data:dom,error:ed}=await admin.from('domicilios').insert({cliente_id:clienteId,calle_nro:texto(fd,'domicilio'),piso:texto(fd,'piso')||null,dpto:texto(fd,'dpto')||null,entre_calles:texto(fd,'entre_calles')||null,barrio:texto(fd,'barrio')||null,localidad:texto(fd,'localidad')||null,coordenadas:texto(fd,'coordenadas')||null,datos_extras:texto(fd,'datos_extras')||null}).select('id').single();if(ed)throw ed
+   const {data:dom,error:ed}=await admin.from('domicilios').insert({cliente_id:clienteId,calle_nro:domicilio,piso:texto(fd,'piso')||null,dpto:texto(fd,'dpto')||null,entre_calles:texto(fd,'entre_calles')||null,barrio:texto(fd,'barrio')||null,localidad:texto(fd,'localidad')||null,coordenadas:texto(fd,'coordenadas')||null,datos_extras:texto(fd,'datos_extras')||null}).select('id').single();if(ed)throw ed
    const moviles=nuevos.filter(x=>x.tipo==='PORTA'||x.tipo==='LINEA_NUEVA'),tipoLegacy=tieneBafNuevo?'BAF':'PORTA'
-   const {error:eo}=await admin.from('operaciones').insert({id_operacion:idOperacion,tipo:tipoLegacy,cliente_id:clienteId,domicilio_id:dom.id,usuario_id:user.id,vendedor:perfil.vendedor?.trim()||perfil.nombre?.trim()||user.email||'Vendedor',fecha_hora:m.iso,origen_dato:texto(fd,'origen_dato')||null,estado_sync:'PENDIENTE',sheet_destino:null,grupo_operacion:idOperacion});if(eo)throw eo;operacionCreada=true
+   const {error:eo}=await admin.from('operaciones').insert({id_operacion:idOperacion,tipo:tipoLegacy,cliente_id:clienteId,domicilio_id:dom.id,usuario_id:user.id,vendedor:perfil.vendedor?.trim()||perfil.nombre?.trim()||user.email||'Vendedor',fecha_hora:m.iso,origen_dato:origenDato,estado_sync:'PENDIENTE',sheet_destino:null,grupo_operacion:idOperacion});if(eo)throw eo;operacionCreada=true
    let servicioBafExistenteId:number|null=null
    for(const s of existentes){const {data:cs,error}=await admin.from('cliente_servicios').insert({cliente_id:clienteId,domicilio_id:dom.id,tipo_servicio:s.tipo,modalidad:s.modalidad||null,numero_servicio:s.numero||null,origen:'DECLARADO_CLIENTE',estado_verificacion:'DECLARADO',operacion_origen_id:idOperacion,created_by:user.id,updated_by:user.id}).select('id').single();if(error)throw error;serviciosCreados.push(cs.id);if(s.tipo==='BAF'&&!servicioBafExistenteId)servicioBafExistenteId=cs.id}
    const idsProductos=nuevos.map(x=>x.productoId);const {data:catalogo,error:ec}=await admin.from('productos').select('id,producto,origen,plan,precio_lista,descuento_normal,precio_cliente,beneficios').in('id',idsProductos);if(ec)throw ec;const mapa=new Map((catalogo??[]).map(p=>[Number(p.id),p]));let productoBafId:number|null=null

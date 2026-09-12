@@ -6,6 +6,7 @@ import { createClient } from '../../../utils/supabase/server'
 import AppHeader from '../../../components/AppHeader'
 import GestionBloqueoControls from '../../../components/GestionBloqueoControls'
 import GestionInputValidado from '../../../components/GestionInputValidado'
+import CorreccionesVentaPanel from "../../../components/CorreccionesVentaPanel"
 
 type Params = Promise<{
   id_operacion: string
@@ -768,6 +769,7 @@ export default async function DetalleVentaPage({
         />
 
         <div className="mx-auto max-w-6xl p-4 sm:p-8">
+          <CorreccionesVentaPanel operacionId={id} />
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="mb-2 flex flex-wrap gap-2">
