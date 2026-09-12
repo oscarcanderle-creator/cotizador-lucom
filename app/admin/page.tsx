@@ -111,6 +111,19 @@ export default async function AdminPage() {
             </div>
           </a>
 
+          {/* ABM MODEM FWA 5G */}
+          <a
+            href="/admin/modems-fwa"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
+          >
+            <div className="text-lg font-semibold text-gray-900">
+              ABM Módem FWA 5G
+            </div>
+            <div className="text-sm text-gray-500 mt-2">
+              Administrá equipos FWA, precio y máximo de cuotas contra factura.
+            </div>
+          </a>
+
           {/* ZONAS BAF */}
           <a
             href="/admin/zonas"

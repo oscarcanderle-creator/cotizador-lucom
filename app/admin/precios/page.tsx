@@ -46,6 +46,8 @@ type CatalogoPlanMovil = {
 
   orden: number | null
 
+  solo_linea_nueva: boolean
+
 }
 
 function n(value: FormDataEntryValue | null, fallback = 0) {
@@ -148,7 +150,7 @@ export default async function AdminPreciosPage({
 
     .from('catalogo_planes_porta')
 
-    .select('id, nombre, precio_lista, activo, orden')
+    .select('id, nombre, precio_lista, activo, orden, solo_linea_nueva')
 
     .eq('negocio', negocio)
 
@@ -268,6 +270,25 @@ export default async function AdminPreciosPage({
 
     revalidatePath('/cotizador')
 
+  }
+
+  async function guardarPlanSoloLineaNueva(formData: FormData) {
+
+    'use server'
+
+    const { supabase } = await validarAdmin()
+
+    const { error } = await supabase.rpc('admin_guardar_plan_solo_linea_nueva', {
+      p_catalogo_plan_id: n(formData.get('catalogo_plan_id')),
+      p_precio_lista: n(formData.get('precio_lista')),
+      p_desc_linea_nueva: n(formData.get('linea_nueva')),
+    })
+
+    if (error) throw new Error(error.message)
+
+    revalidatePath('/admin/precios')
+    revalidatePath('/cotizador')
+    revalidatePath('/ventas')
   }
 
   async function crearPlanMovil(formData: FormData) {
@@ -653,12 +674,19 @@ export default async function AdminPreciosPage({
               )
 
               const linea = filas.find((p) => p.producto === 'LINEA NUEVA')
+              const soloLineaNueva = plan.solo_linea_nueva === true
 
-              const completo = Boolean(movistar && personal && tuenti && linea)
+              const completo = soloLineaNueva
+                ? Boolean(linea)
+                : Boolean(movistar && personal && tuenti && linea)
 
               return (
 
-                <form key={plan.id} action={guardarPlanMovil} className="p-5">
+                <form
+                  key={plan.id}
+                  action={soloLineaNueva ? guardarPlanSoloLineaNueva : guardarPlanMovil}
+                  className="p-5"
+                >
 
                   <input type="hidden" name="catalogo_plan_id" value={plan.id} />
 
@@ -669,6 +697,12 @@ export default async function AdminPreciosPage({
                       <div className="text-xs text-gray-500">Plan</div>
 
                       <div className="text-lg font-semibold text-gray-900">{plan.nombre}</div>
+
+                      {soloLineaNueva && (
+                        <div className="mt-1 inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                          Solo Línea Nueva · requiere módem
+                        </div>
+                      )}
 
                       {!plan.activo && (
 
@@ -702,83 +736,87 @@ export default async function AdminPreciosPage({
 
                     </label>
 
-                    <label className="text-xs text-gray-500 xl:w-32">
+                    {!soloLineaNueva && (
+                      <>
+                        <label className="text-xs text-gray-500 xl:w-32">
 
-                      Movistar %
+                          Movistar %
 
-                      <input
+                          <input
 
-                        name="movistar"
+                            name="movistar"
 
-                        type="number"
+                            type="number"
 
-                        min="0"
+                            min="0"
 
-                        max="100"
+                            max="100"
 
-                        step="0.01"
+                            step="0.01"
 
-                        required
+                            required
 
-                        defaultValue={movistar?.descuento_normal ?? 0}
+                            defaultValue={movistar?.descuento_normal ?? 0}
 
-                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+                            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
 
-                      />
+                          />
 
-                    </label>
+                        </label>
 
-                    <label className="text-xs text-gray-500 xl:w-32">
+                        <label className="text-xs text-gray-500 xl:w-32">
 
-                      Personal %
+                          Personal %
 
-                      <input
+                          <input
 
-                        name="personal"
+                            name="personal"
 
-                        type="number"
+                            type="number"
 
-                        min="0"
+                            min="0"
 
-                        max="100"
+                            max="100"
 
-                        step="0.01"
+                            step="0.01"
 
-                        required
+                            required
 
-                        defaultValue={personal?.descuento_normal ?? 0}
+                            defaultValue={personal?.descuento_normal ?? 0}
 
-                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+                            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
 
-                      />
+                          />
 
-                    </label>
+                        </label>
 
-                    <label className="text-xs text-gray-500 xl:w-32">
+                        <label className="text-xs text-gray-500 xl:w-32">
 
-                      Tuenti %
+                          Tuenti %
 
-                      <input
+                          <input
 
-                        name="tuenti"
+                            name="tuenti"
 
-                        type="number"
+                            type="number"
 
-                        min="0"
+                            min="0"
 
-                        max="100"
+                            max="100"
 
-                        step="0.01"
+                            step="0.01"
 
-                        required
+                            required
 
-                        defaultValue={tuenti?.descuento_normal ?? 0}
+                            defaultValue={tuenti?.descuento_normal ?? 0}
 
-                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+                            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
 
-                      />
+                          />
 
-                    </label>
+                        </label>
+                      </>
+                    )}
 
                     <label className="text-xs text-gray-500 xl:w-36">
 
@@ -822,11 +860,15 @@ export default async function AdminPreciosPage({
 
                   <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500">
 
-                    <span>Movistar: {dinero(movistar?.precio_cliente ?? null)}</span>
+                    {!soloLineaNueva && (
+                      <>
+                        <span>Movistar: {dinero(movistar?.precio_cliente ?? null)}</span>
 
-                    <span>Personal: {dinero(personal?.precio_cliente ?? null)}</span>
+                        <span>Personal: {dinero(personal?.precio_cliente ?? null)}</span>
 
-                    <span>Tuenti: {dinero(tuenti?.precio_cliente ?? null)}</span>
+                        <span>Tuenti: {dinero(tuenti?.precio_cliente ?? null)}</span>
+                      </>
+                    )}
 
                     <span>Línea Nueva: {dinero(linea?.precio_cliente ?? null)}</span>
 
@@ -836,7 +878,9 @@ export default async function AdminPreciosPage({
 
                     <div className="mt-2 text-xs text-red-700">
 
-                      Este plan no tiene las cuatro variantes móviles vinculadas y no puede guardarse.
+                      {soloLineaNueva
+                        ? 'Este plan no tiene una variante de Línea Nueva vinculada y no puede guardarse.'
+                        : 'Este plan no tiene las cuatro variantes móviles vinculadas y no puede guardarse.'}
 
                     </div>
 

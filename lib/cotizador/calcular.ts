@@ -23,6 +23,12 @@ export type LineaEntrada = {
   precioLista: number
   descuentoNormal: number
   beneficiosNormal: string | null
+
+  esFwa?: boolean
+  aplicaConexionFull?: boolean
+  aplicaConvergencia?: boolean
+  aplicaClaroPay?: boolean
+  aplicaFlash?: boolean
 }
 
 export type ServicioBAFEntrada = {
@@ -165,6 +171,29 @@ export function calcularCotizacion(
   const hayLineasNuevas =
     cantidadMovilesNuevas > 0
 
+  const cantidadMovilesConexion =
+    lineas.reduce(
+      (total, linea) =>
+        total +
+        ((linea.aplicaConexionFull ?? true)
+          ? linea.cantidad
+          : 0),
+      0
+    )
+
+  const hayLineasNuevasConexion =
+    cantidadMovilesConexion > 0
+
+  const cantidadMovilesConvergencia =
+    lineas.reduce(
+      (total, linea) =>
+        total +
+        ((linea.aplicaConvergencia ?? true)
+          ? linea.cantidad
+          : 0),
+      0
+    )
+
   /*
    * =====================================================
    * INTERNET / BAF NUEVOS
@@ -225,11 +254,11 @@ export function calcularCotizacion(
   const conexionFullClienteNuevo =
     clienteNoClaro &&
     contrataBAF &&
-    hayLineasNuevas
+    hayLineasNuevasConexion
 
   const conexionFullClienteConBAF =
     clienteTieneBAF &&
-    hayLineasNuevas
+    hayLineasNuevasConexion
 
   const hayConexionFull =
     conexionFullClienteNuevo ||
@@ -264,7 +293,10 @@ export function calcularCotizacion(
        * NORMAL
        */
 
-      if (hayConexionFull) {
+      if (
+        hayConexionFull &&
+        (linea.aplicaConexionFull ?? true)
+      ) {
         descuentoAplicado =
           descuentoConexionFull
 
@@ -272,7 +304,8 @@ export function calcularCotizacion(
           'CONEXION_FULL'
       } else {
         const flashVigente =
-          promocionesFlash.find(
+          (linea.aplicaFlash ?? true)
+            ? promocionesFlash.find(
             (promo) => {
               if (!promo.activo) {
                 return false
@@ -301,6 +334,7 @@ export function calcularCotizacion(
               )
             }
           )
+            : undefined
 
         if (flashVigente) {
           descuentoAplicado =
@@ -491,7 +525,7 @@ export function calcularCotizacion(
 
   const totalMoviles =
     movilesExistentes +
-    cantidadMovilesNuevas
+    cantidadMovilesConvergencia
 
   let totalBAF = 0
 
@@ -543,8 +577,31 @@ export function calcularCotizacion(
    * se calcula Claro Pay.
    */
 
+  const subtotalMovilesNoClaroPay =
+    lineasResultado.reduce(
+      (total, lineaResultado) => {
+        const entradaLinea =
+          lineas.find(
+            (linea) =>
+              linea.id === lineaResultado.id
+          )
+
+        return (entradaLinea?.aplicaClaroPay ?? true)
+          ? total
+          : total + lineaResultado.subtotal
+      },
+      0
+    )
+
+  const baseClaroPay =
+    Math.max(
+      0,
+      totalDespuesConvergencia -
+        subtotalMovilesNoClaroPay
+    )
+
   const calculoClaroPay =
-    totalDespuesConvergencia *
+    baseClaroPay *
     (porcentajeClaroPay / 100)
 
   const descuentoClaroPay =

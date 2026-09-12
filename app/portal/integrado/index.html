@@ -2932,8 +2932,9 @@ let TABLE_META={labels:{},hidden:{}}, CUSTOM_TABLES={}, LAST_TABLES={};
 const TABLAS_SINCRONIZADAS = new Set([
   'baf-junio',
   'porta-activaciones',
-  'porta-descuentos'
-]);
+  'porta-descuentos',
+    'fwa-financiacion',
+  ]);
 
 const PAGE_LABELS={home:'Home',baf:'BAF & TV',fwa:'FWA 5G',porta:'Portabilidad'};
 function esc(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -4448,8 +4449,7 @@ window.addEventListener('orientationchange', revisarTablas);
 /* ---------- Arranque ---------- */
 let ENTRANDO = false, ENTRADO_COMO = '';
 
-const COTIZADOR_PRECIOS_API =
-  'https://cotizador-lucom-psi.vercel.app/api/precios/portal';
+const COTIZADOR_PRECIOS_API = '/api/precios/portal';
 
 function aplicarPreciosBAFTV(data){
   try{
@@ -4642,8 +4642,15 @@ function aplicarPreciosBAFTV(data){
 function aplicarPreciosFWA(data){
   try{
     const productos = Array.isArray(data?.productos) ? data.productos : [];
+    const modems = Array.isArray(data?.modems_fwa) ? data.modems_fwa : [];
 
-    const normalizarFWA = v =>
+    console.log('[FWA DEBUG] entrada', {
+      modems_fwa: data?.modems_fwa,
+      modems,
+      cantidad: modems.length
+    });
+
+    const norm = v =>
       String(v ?? '')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -4651,87 +4658,119 @@ function aplicarPreciosFWA(data){
         .replace(/\s+/g, ' ')
         .trim();
 
+    const dinero = valor => {
+      const n = Number(valor ?? 0);
+      if(!Number.isFinite(n)) return null;
+      return '$ ' + Math.round(n).toLocaleString('es-AR');
+    };
+
+    // ABONO FWA
     const fwa = productos.find(p => {
-      const producto = normalizarFWA(p.producto);
-      const origen = normalizarFWA(p.origen);
-      const plan = normalizarFWA(p.plan);
+      const producto = norm(p.producto);
+      const origen = norm(p.origen);
+      const plan = norm(p.plan);
 
       return (
-        origen.includes('FWA') &&
         (
-          plan.includes('400G') ||
-          plan.includes('400 G') ||
-          producto.includes('FWA')
+          plan.includes('FWA') &&
+          plan.includes('5G') &&
+          (plan.includes('400G') || plan.includes('400 G'))
+        ) ||
+        (
+          (producto.includes('FWA') || origen.includes('FWA')) &&
+          (plan.includes('400G') || plan.includes('400 G'))
         )
       );
     });
 
-    if(!fwa){
-      console.warn(
-        '[Portal Lucom] No se encontró FWA 5G 400G en Cotizador.'
-      );
-      return;
-    }
+    if(fwa){
+      const precioMensual = dinero(fwa.precio_cliente ?? fwa.precio_lista);
 
-    const valor = Number(fwa.precio_cliente ?? fwa.precio_lista);
+      if(precioMensual){
+        const homeFwa = Array.from(
+          document.querySelectorAll('#page-home .hl')
+        ).find(el => norm(el.textContent).includes('FWA'));
 
-    if(!Number.isFinite(valor)){
-      console.warn(
-        '[Portal Lucom] Precio FWA inválido:',
-        fwa
-      );
-      return;
-    }
+        if(homeFwa){
+          const precioHome = homeFwa.querySelector('.hl-num');
+          if(precioHome) precioHome.textContent = precioMensual;
+        }
 
-    const fmtPesoFWA = n =>
-      '$ ' + Math.round(n).toLocaleString('es-AR');
+        const tarjetaPlan = Array.from(
+          document.querySelectorAll('#page-fwa .oferta-card')
+        ).find(el => {
+          const txt = norm(el.textContent);
+          return txt.includes('ABONO') && txt.includes('MENSUAL');
+        });
 
-    // HOME · destacado FWA
-    const homeFwa = Array.from(
-      document.querySelectorAll('#page-home .hl')
-    ).find(el => {
-      const tag = el.querySelector('.hl-tag');
-      return tag &&
-        normalizarFWA(tag.textContent).includes('FWA');
-    });
-
-    if(homeFwa){
-      const precioHome = homeFwa.querySelector('.hl-num');
-
-      if(precioHome){
-        precioHome.innerHTML =
-          fmtPesoFWA(valor) + ' <small>/ mes</small>';
+        if(tarjetaPlan){
+          const precioPlan = tarjetaPlan.querySelector('.big');
+          if(precioPlan){
+            precioPlan.innerHTML =
+              precioMensual + ' <small>final / mes</small>';
+          }
+        }
       }
     }
 
-    // PÁGINA FWA · tarjeta de abono mensual
-    const tarjetaPlan = Array.from(
-      document.querySelectorAll('#page-fwa .oferta-card')
-    ).find(el => {
-      const lbl = el.querySelector('.lbl');
-      return lbl &&
-        normalizarFWA(lbl.textContent).includes('ABONO MENSUAL');
-    });
+    // MODEM FWA
+    console.log('[FWA DEBUG] antes modem', modems);
 
-    if(tarjetaPlan){
-      const precioPlan = tarjetaPlan.querySelector('.big');
+    const modem = modems.find(m => m && m.activo !== false) || modems[0];
 
-      if(precioPlan){
-        precioPlan.innerHTML =
-          fmtPesoFWA(valor) + ' <small>final / mes</small>';
+    if(modem){
+      const precioModem = dinero(modem.precio);
+      const cuotas = Number(modem.max_cuotas_factura ?? 24);
+
+      if(precioModem){
+        // 1) Tarjeta comercial superior: "Módem inalámbrico"
+        Array.from(
+          document.querySelectorAll('#page-fwa .oferta-card')
+        )
+        .filter(el => norm(el.textContent).includes('MODEM'))
+        .forEach(el => {
+          const precio = el.querySelector('.big');
+          if(precio) precio.textContent = precioModem;
+
+          const desc = el.querySelector('.desc');
+          if(desc && Number.isFinite(cuotas) && cuotas > 0){
+            desc.innerHTML =
+              'Efectivo, tarjeta del cliente, o hasta <strong>' +
+              cuotas +
+              ' cuotas contra factura</strong>, sujeto a scoring.';
+          }
+
+          const nota = el.querySelector('.fin-line');
+          if(nota){
+            nota.textContent =
+              'El financiamiento con tarjeta depende de las condiciones de la entidad emisora.';
+          }
+        });
+
+        // 2) Ficha visual del equipo: "Valor del equipo"
+        document
+          .querySelectorAll('#page-fwa .device-price')
+          .forEach(el => {
+            const precio = el.querySelector('.v');
+            if(precio) precio.textContent = precioModem;
+
+            const cuotasEl = el.querySelector('.c');
+            if(cuotasEl && Number.isFinite(cuotas) && cuotas > 0){
+              cuotasEl.textContent =
+                'hasta ' + cuotas + ' cuotas contra factura';
+            }
+          });
+
+        console.log(
+          '[Portal Lucom] Módem FWA sincronizado en todos los bloques:',
+          modem.nombre,
+          modem.precio,
+          modem.max_cuotas_factura
+        );
       }
     }
-
-    console.log(
-      '[Portal Lucom] Precio FWA sincronizado desde Cotizador:',
-      valor
-    );
-
   }catch(e){
-    console.error(
-      '[Portal Lucom] Error aplicando precio FWA:',
-      e
-    );
+    console.error('[Portal Lucom] Error aplicando precios FWA:', e);
   }
 }
 
@@ -5432,10 +5471,11 @@ async function manejarSesion(session){
 
     await cargarContenido();
 
-    // Conservamos la sincronización de precios ya validada.
-    await cargarPreciosCotizador();
-
+    // Primero restauramos la personalización guardada.
     try{ applyPerso(); }catch(e){}
+
+    // Los precios sincronizados quedan como última fuente de verdad.
+    await cargarPreciosCotizador();
 
   }catch(e){
     console.error('Error iniciando Portal integrado:', e);

@@ -114,6 +114,8 @@ export default async function CotizadorPage() {
   const productosCotizador =
     (productos ?? []).map((producto) => {
       if (
+        (producto.producto === 'PORTABILIDAD' ||
+          producto.producto === 'LINEA NUEVA') &&
         producto.catalogo_plan_id !== null &&
         producto.catalogo_plan_id !== undefined
       ) {
@@ -132,6 +134,20 @@ export default async function CotizadorPage() {
 
       return producto
     })
+
+  const { data: modemsFwa, error: errorModemsFwa } = await supabase
+    .from('catalogo_modems_fwa')
+    .select('id,nombre,precio,max_cuotas_factura')
+    .eq('activo', true)
+    .order('orden', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(1)
+
+  if (errorModemsFwa) {
+    throw new Error(errorModemsFwa.message)
+  }
+
+  const modemFwa = modemsFwa?.[0] ?? null
 
   /*
 
@@ -302,6 +318,13 @@ export default async function CotizadorPage() {
       rol={profile.rol}
 
       puedeGestionarVentas={profile.puede_gestionar_ventas === true}
+
+      modemFwa={modemFwa ? {
+        id: Number(modemFwa.id),
+        nombre: String(modemFwa.nombre),
+        precio: Number(modemFwa.precio ?? 0),
+        maxCuotasFactura: Number(modemFwa.max_cuotas_factura ?? 24),
+      } : null}
 
     />
 

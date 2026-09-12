@@ -147,6 +147,19 @@ export async function POST() {
 
     if (reglasError) throw new Error(reglasError.message)
 
+    const { data: modemsFwaData, error: modemsFwaError } = await supabase
+      .from('catalogo_modems_fwa')
+      .select('nombre,precio,activo,orden')
+      .eq('activo', true)
+      .order('orden', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(1)
+
+    if (modemsFwaError) throw new Error(modemsFwaError.message)
+
+    const modemFwa = modemsFwaData?.[0]
+    if (!modemFwa) throw new Error('No hay un Módem FWA 5G activo en Administración.')
+
     const productos = (productosData ?? []) as Producto[]
     const promociones = (promocionesData ?? []) as PromocionFlash[]
     const reglas = reglasData ?? []
@@ -308,11 +321,25 @@ export async function POST() {
     precios.push(['CONVERG1', Number(convergencia2.valor ?? 0)])
     precios.push(['CONVERG2', Number(convergencia3.valor ?? 0)])
 
+    // 20: FWA 5G 400G. Precio mensual final, sin descuento propio.
+    const fwa = buscarProducto(
+      productos,
+      (x) =>
+        x.producto === 'LINEA NUEVA' &&
+        x.origen === 'LINEA NUEVA' &&
+        normalizar(x.plan).includes('FWA5G400G'),
+      'FWA 5G 400G'
+    )
+    precios.push(['FWA 5G 400G', Number(fwa.precio_lista ?? 0)])
+
+    // 21: Módem FWA 5G. Cargo único administrado en su ABM.
+    precios.push(['MODEM FWA 5G', Number(modemFwa.precio ?? 0)])
+
     if (descuentos.length !== 24) {
       throw new Error(`Se esperaban 24 descuentos y se generaron ${descuentos.length}.`)
     }
-    if (precios.length !== 19) {
-      throw new Error(`Se esperaban 19 precios y se generaron ${precios.length}.`)
+    if (precios.length !== 21) {
+      throw new Error(`Se esperaban 21 precios y se generaron ${precios.length}.`)
     }
 
     const sheets = googleSheetsClient()
@@ -329,7 +356,7 @@ export async function POST() {
             values: descuentos,
           },
           {
-            range: `${HOJA_PRUEBA}!H2:I20`,
+            range: `${HOJA_PRUEBA}!H2:I22`,
             majorDimension: 'ROWS',
             values: precios,
           },
@@ -342,7 +369,7 @@ export async function POST() {
       message: 'Google Sheets sincronizado correctamente.',
       spreadsheetId: SPREADSHEET_ID_PRUEBA,
       hoja: HOJA_PRUEBA,
-      rangos: [`${HOJA_PRUEBA}!E2:E25`, `${HOJA_PRUEBA}!H2:I20`],
+      rangos: [`${HOJA_PRUEBA}!E2:E25`, `${HOJA_PRUEBA}!H2:I22`],
       descuentosEscritos: descuentos.length,
       preciosEscritos: precios.length,
       fechaEvaluacion: ahora.toISOString(),

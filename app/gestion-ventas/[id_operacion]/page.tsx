@@ -895,6 +895,31 @@ export default async function DetalleVentaPage({
                           </div>
                         </div>
 
+                        {!esBaf && detalle?.es_fwa === true && (
+                          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                            <div className="mb-3 text-sm font-bold text-amber-900">FWA 5G · Módem obligatorio</div>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                              <Campo
+                                label="Precio Módem FWA"
+                                value={detalle?.precio_modem_snapshot != null ? `$ ${Number(detalle.precio_modem_snapshot).toLocaleString('es-AR')}` : '-'}
+                              />
+                              <Campo
+                                label="Pago Módem FWA"
+                                value={
+                                  detalle?.forma_pago_modem === 'CONTRA_FACTURA'
+                                    ? 'Contra Factura'
+                                    : detalle?.forma_pago_modem === 'EFECTIVO'
+                                      ? 'Efectivo'
+                                      : detalle?.forma_pago_modem === 'TARJETA'
+                                        ? 'Tarjeta del Cliente'
+                                        : '-'
+                                }
+                              />
+                              <Campo label="Cuotas Módem" value={detalle?.cuotas_modem} />
+                            </div>
+                          </div>
+                        )}
+
                         {!esBaf && !habilitado && (
                           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                             <div className="font-semibold">Gestión móvil bloqueada</div>

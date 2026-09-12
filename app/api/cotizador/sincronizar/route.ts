@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     .select(`id, tipo_producto, plan_snapshot, producto_id, orden,
       producto:productos (negocio),
       baf:operacion_producto_baf (tv, cantidad_decos),
-      movil:operacion_producto_movil (nim, compania_actual, modalidad_actual)`)
+      movil:operacion_producto_movil (nim, compania_actual, modalidad_actual, es_fwa, forma_pago_modem, cuotas_modem, precio_modem_snapshot)`)
     .eq('operacion_id', operacionId)
     .eq('activo', true)
     .order('orden', { ascending: true })
@@ -95,6 +95,10 @@ export async function GET(request: NextRequest) {
         tipo,
         plan: p.plan_snapshot ?? '',
         cantidad: 1,
+        esFwa: detalle.es_fwa === true,
+        formaPagoModem: detalle.es_fwa === true ? (detalle.forma_pago_modem ?? '') : '',
+        cuotasModem: detalle.es_fwa === true ? Number(detalle.cuotas_modem ?? 1) : 1,
+        precioModem: detalle.es_fwa === true ? Number(detalle.precio_modem_snapshot ?? 0) : 0,
         portabilidades: p.tipo_producto === 'PORTA'
           ? [{ nim: detalle.nim ?? '', origen: String(detalle.modalidad_actual ?? '').toUpperCase() === 'POS' ? 'POS' : 'PRE' }]
           : [],

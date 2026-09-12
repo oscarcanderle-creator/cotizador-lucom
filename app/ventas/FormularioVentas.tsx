@@ -90,6 +90,9 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
  const [ultimoProducto,setUltimoProducto]=useState<'BAF'|'PORTA'|'LINEA_NUEVA'|null>(null)
  const [mostrarConfirmacionItec,setMostrarConfirmacionItec]=useState(false)
  const [companiasPorta,setCompaniasPorta]=useState<Record<number,string>>({})
+ const [productosSeleccionados,setProductosSeleccionados]=useState<Record<number,string>>({})
+ const [pagosModem,setPagosModem]=useState<Record<number,string>>({})
+ const [cuotasModem,setCuotasModem]=useState<Record<number,string>>({})
  const formRef=useRef<HTMLFormElement>(null)
  const itecConfirmadoRef=useRef(false)
  const [guardando,iniciarGuardado]=useTransition(); const [resultado,setResultado]=useState<ResultadoGuardado|null>(null)
@@ -172,6 +175,9 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
     setNuevos([])
     setExistentes([])
     setCargaItec(false)
+    setProductosSeleccionados({})
+    setPagosModem({})
+    setCuotasModem({})
    }
   })
  }
@@ -231,7 +237,14 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
      </div>
     </div>
    )}
-   <div className="space-y-3">{nuevos.map((s,i)=>{const companiaPorta=companiasPorta[s.id]??'';const lista=s.tipo==='BAF'?baf:s.tipo==='PORTA'?(companiaPorta?porta.filter(p=>String(p.origen??'').trim().toUpperCase()===companiaPorta):[]):ln;return <div id={`servicio-nuevo-${s.id}`} key={s.id} className="scroll-mt-24 rounded-2xl border border-gray-200 bg-gray-50 p-3"><div className="flex justify-between mb-3"><div><b>{s.tipo==='BAF'?'Internet / BAF':s.tipo==='PORTA'?'Portabilidad':'Línea Nueva'}</b><div className="text-[11px] text-gray-500">Servicio nuevo {i+1}</div></div><button type="button" onClick={()=>setNuevos(a=>a.filter(x=>x.id!==s.id))} className="text-xs text-red-600">Quitar</button></div><input type="hidden" name={`nuevo_tipo_${i}`} value={s.tipo}/>{s.tipo==='BAF'?<><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:tituloProducto(p)}))} required/><Selector label="Tipo domicilio" name={`nuevo_tipo_domicilio_${i}`} opciones={tiposDomicilioInternet} required/><Selector label="Modalidad" name={`nuevo_modalidad_${i}`} opciones={opts(['Masivo','Cuit Standard','Cuit BAFE'])} required/><label className="block">
+   <div className="space-y-3">{nuevos.map((s,i)=>{
+    const companiaPorta=companiasPorta[s.id]??''
+    const lista=s.tipo==='BAF'?baf:s.tipo==='PORTA'?(companiaPorta?porta.filter(p=>String(p.origen??'').trim().toUpperCase()===companiaPorta):[]):ln
+    const productoSeleccionadoId=productosSeleccionados[s.id]??''
+    const productoSeleccionado=lista.find(p=>String(p.id)===productoSeleccionadoId)
+    const esFwa=s.tipo==='LINEA_NUEVA' && productoSeleccionado ? etiquetaPlanMovil(productoSeleccionado)==='FWA 5G 400G' : false
+    const pagoModem=pagosModem[s.id]??''
+    return <div id={`servicio-nuevo-${s.id}`} key={s.id} className="scroll-mt-24 rounded-2xl border border-gray-200 bg-gray-50 p-3"><div className="flex justify-between mb-3"><div><b>{s.tipo==='BAF'?'Internet / BAF':s.tipo==='PORTA'?'Portabilidad':'Línea Nueva'}</b><div className="text-[11px] text-gray-500">Servicio nuevo {i+1}</div></div><button type="button" onClick={()=>setNuevos(a=>a.filter(x=>x.id!==s.id))} className="text-xs text-red-600">Quitar</button></div><input type="hidden" name={`nuevo_tipo_${i}`} value={s.tipo}/>{s.tipo==='BAF'?<><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:tituloProducto(p)}))} required/><Selector label="Tipo domicilio" name={`nuevo_tipo_domicilio_${i}`} opciones={tiposDomicilioInternet} required/><Selector label="Modalidad" name={`nuevo_modalidad_${i}`} opciones={opts(['Masivo','Cuit Standard','Cuit BAFE'])} required/><label className="block">
  <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">TV *</span>
  <select className={inputClass} name={`nuevo_tv_${i}`} required value={s.tv}
   onChange={(e)=>{const tv=e.target.value as 'NO'|'SI';setNuevos(a=>a.map(x=>x.id===s.id?{...x,tv,decos:tv==='NO'?'0':x.decos}:x))}}>
@@ -262,7 +275,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
        </div>
       </div>
      )}
-    </>:<div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+    </>:<><div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
      {s.tipo==='PORTA'&&<Selector
       label="Compañía actual"
       name={`nuevo_compania_${i}`}
@@ -277,11 +290,71 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
       label="Plan"
       name={`nuevo_producto_${i}`}
       opciones={opcionesPlanesMoviles(lista)}
+      value={productoSeleccionadoId}
+      onChange={(value)=>{
+       setProductosSeleccionados(a=>({...a,[s.id]:value}))
+       const elegido=lista.find(p=>String(p.id)===value)
+       const ahoraFwa=s.tipo==='LINEA_NUEVA' && elegido ? etiquetaPlanMovil(elegido)==='FWA 5G 400G' : false
+       if(!ahoraFwa){
+        setPagosModem(a=>({...a,[s.id]:''}))
+        setCuotasModem(a=>({...a,[s.id]:''}))
+       }
+      }}
       required
      />
      <Selector label="SIM" name={`nuevo_sim_${i}`} opciones={opts(['ESIM','SIMCARD'])} required/>
      {s.tipo==='PORTA'&&<Selector label="PRE / POS" name={`nuevo_modalidad_actual_${i}`} opciones={opts(['POS','PRE'])} required/>}
-    </div>}</div>})}</div></Seccion>
+    </div>
+    {esFwa&&(
+     <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
+      <div className="mb-3">
+       <div className="text-sm font-bold text-amber-900">AVISO · Módem FWA 5G obligatorio</div>
+       <div className="mt-1 text-xs text-amber-800">
+        Este Plan requiere la venta de un Módem FWA 5G con un costo por única vez.
+       </div>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-2.5">
+       <Selector
+        label="Pago Módem"
+        name={`nuevo_pago_modem_${i}`}
+        opciones={[
+         {value:'CONTRA_FACTURA',label:'Contra Factura en Cuotas (sujeto a scoring)'},
+         {value:'EFECTIVO',label:'Pago Efectivo'},
+         {value:'TARJETA',label:'Pago en Cuotas con tarjeta del Cliente'},
+        ]}
+        value={pagoModem}
+        onChange={(value)=>{
+         setPagosModem(a=>({...a,[s.id]:value}))
+         setCuotasModem(a=>({...a,[s.id]:value==='EFECTIVO'?'1':''}))
+        }}
+        required
+       />
+       {pagoModem==='CONTRA_FACTURA'&&(
+        <label className="block">
+         <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">Cuotas contra factura *</span>
+         <input className={inputClass} name={`nuevo_cuotas_modem_${i}`} type="number" min="1" max="24" step="1" required
+          value={cuotasModem[s.id]??''} onChange={(e)=>setCuotasModem(a=>({...a,[s.id]:e.target.value}))}/>
+         <div className="mt-1 text-[11px] text-gray-500">Hasta 24 cuotas, sujeto a scoring del cliente.</div>
+        </label>
+       )}
+       {pagoModem==='TARJETA'&&(
+        <label className="block">
+         <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">Cuotas tarjeta *</span>
+         <input className={inputClass} name={`nuevo_cuotas_modem_${i}`} type="number" min="1" max="60" step="1" required
+          value={cuotasModem[s.id]??''} onChange={(e)=>setCuotasModem(a=>({...a,[s.id]:e.target.value}))}/>
+         <div className="mt-1 text-[11px] text-gray-500">La financiación depende de la tarjeta del cliente.</div>
+        </label>
+       )}
+       {pagoModem==='EFECTIVO'&&(
+        <>
+         <input type="hidden" name={`nuevo_cuotas_modem_${i}`} value="1"/>
+         <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">Pago único del módem.</div>
+        </>
+       )}
+      </div>
+     </div>
+    )}
+    </>}</div>})}</div></Seccion>
   {resultado&&<div className={`mb-3 rounded-xl border px-3 py-3 text-sm font-medium ${resultado.ok?'border-green-200 bg-green-50 text-green-700':'border-red-200 bg-red-50 text-red-700'}`}>{resultado.mensaje}{resultado.idOperacion&&<div className="font-mono text-xs mt-1">ID: {resultado.idOperacion}</div>}</div>}
   <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-2.5 sm:sticky sm:bg-gray-100/95"><button type="submit" disabled={guardando} className="mx-auto block w-full max-w-6xl sm:w-auto sm:min-w-56 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl px-6 py-3 disabled:opacity-50">{guardando?'Guardando...':'Guardar venta'}</button></div>
 

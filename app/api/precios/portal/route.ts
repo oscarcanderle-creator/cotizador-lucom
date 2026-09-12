@@ -24,6 +24,7 @@ export async function GET() {
     const [
       { data: productos, error: errorProductos },
       { data: reglas, error: errorReglas },
+      { data: modemsFwa, error: errorModemsFwa },
     ] = await Promise.all([
       supabase
         .from('productos')
@@ -56,6 +57,13 @@ export async function GET() {
         `)
         .eq('negocio', 'MASIVO')
         .eq('activo', true)
+        .order('id', { ascending: true }),
+
+      supabase
+        .from('catalogo_modems_fwa')
+        .select('id,nombre,precio,max_cuotas_factura,activo,orden,updated_at')
+        .eq('activo', true)
+        .order('orden', { ascending: true })
         .order('id', { ascending: true }),
     ])
 
@@ -95,12 +103,21 @@ export async function GET() {
       )
     }
 
+    if (errorModemsFwa) {
+      console.error('Error obteniendo Módem FWA para Portal Lucom:', errorModemsFwa)
+      return NextResponse.json(
+        { ok: false, error: 'No fue posible obtener el precio del Módem FWA.' },
+        { status: 500, headers: CORS_HEADERS }
+      )
+    }
+
     return NextResponse.json(
       {
         ok: true,
         actualizado: new Date().toISOString(),
         productos: productos ?? [],
         reglas: reglas ?? [],
+        modems_fwa: modemsFwa ?? [],
       },
       {
         status: 200,

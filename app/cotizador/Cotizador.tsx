@@ -66,6 +66,13 @@ type NovedadPropuesta = {
 
 }
 
+type ModemFwa = {
+  id: number
+  nombre: string
+  precio: number
+  maxCuotasFactura: number
+}
+
 type Props = {
 
   productos: Producto[]
@@ -81,6 +88,8 @@ type Props = {
   rol: string
 
   puedeGestionarVentas: boolean
+
+  modemFwa: ModemFwa | null
 
 }
 
@@ -103,6 +112,11 @@ type LineaUI = {
   cantidad: number
 
   portabilidades: PortabilidadUI[]
+
+  esFwa?: boolean
+  formaPagoModem?: '' | 'CONTRA_FACTURA' | 'EFECTIVO' | 'TARJETA'
+  cuotasModem?: number
+  precioModem?: number
 
 }
 
@@ -150,6 +164,17 @@ function dinero(valor: number) {
 
   }).format(valor)
 
+}
+
+function esPlanFwa(plan: string) {
+  const normalizado = String(plan ?? '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return normalizado.includes('FWA') &&
+    normalizado.includes('5G') &&
+    normalizado.includes('400')
 }
 
 function nombreTipo(tipo: TipoLinea) {
@@ -207,6 +232,8 @@ export default function Cotizador({
   rol,
 
   puedeGestionarVentas,
+
+  modemFwa,
 
 }: Props) {
 
@@ -770,6 +797,21 @@ export default function Cotizador({
 
     3000
 
+  const fwaDescuento =
+    reglas.FWA_DESCUENTO ?? 0
+
+  const fwaAplicaConexionFull =
+    Number(reglas.FWA_APLICA_CONEXION_FULL ?? 0) === 1
+
+  const fwaAplicaConvergencia =
+    Number(reglas.FWA_APLICA_CONVERGENCIA ?? 0) === 1
+
+  const fwaAplicaClaroPay =
+    Number(reglas.FWA_APLICA_CLARO_PAY ?? 1) === 1
+
+  const fwaAplicaFlash =
+    Number(reglas.FWA_APLICA_FLASH ?? 0) === 1
+
   /*
 
    * =====================================================
@@ -842,6 +884,54 @@ export default function Cotizador({
 
     )
 
+  }
+
+  function actualizarPlanLinea(
+    id: number,
+    plan: string
+  ) {
+    setLineas((actuales) =>
+      actuales.map((linea) => {
+        if (linea.id !== id) return linea
+
+        const fwa = esPlanFwa(plan)
+
+        return {
+          ...linea,
+          plan,
+          esFwa: fwa,
+          formaPagoModem: fwa
+            ? (linea.formaPagoModem ?? '')
+            : '',
+          cuotasModem: fwa
+            ? (linea.cuotasModem ?? 1)
+            : 1,
+          precioModem: fwa
+            ? Number(linea.precioModem || modemFwa?.precio || 0)
+            : 0,
+        }
+      })
+    )
+  }
+
+  function actualizarDatoFwa(
+    id: number,
+    campo: 'formaPagoModem' | 'cuotasModem',
+    valor: string | number
+  ) {
+    setLineas((actuales) =>
+      actuales.map((linea) =>
+        linea.id === id
+          ? {
+              ...linea,
+              [campo]: valor,
+              ...(campo === 'formaPagoModem' && valor === 'EFECTIVO'
+                ? { cuotasModem: 1 }
+                : {}),
+            }
+          : linea
+      )
+    )
   }
 
   function actualizarPortabilidad(
@@ -1132,6 +1222,8 @@ export default function Cotizador({
 
   ): string | null {
 
+    if (esPlanFwa(plan)) return null
+
     let prefijoRegla: string
 
     if (tipo === 'LINEA NUEVA') {
@@ -1254,6 +1346,8 @@ export default function Cotizador({
 
           }
 
+          const esFwa = esPlanFwa(linea.plan)
+
           return {
 
             id: linea.id,
@@ -1278,15 +1372,13 @@ export default function Cotizador({
 
             descuentoNormal:
 
-              Number(
-
-                producto
-
-                  ?.descuento_normal ??
-
-                  0
-
-              ),
+              esFwa
+                ? Number(fwaDescuento)
+                : Number(
+                    producto
+                      ?.descuento_normal ??
+                      0
+                  ),
 
             beneficiosNormal:
 
@@ -1297,6 +1389,20 @@ export default function Cotizador({
                 linea.plan
 
               ),
+
+            esFwa,
+
+            aplicaConexionFull:
+              esFwa ? fwaAplicaConexionFull : true,
+
+            aplicaConvergencia:
+              esFwa ? fwaAplicaConvergencia : true,
+
+            aplicaClaroPay:
+              esFwa ? fwaAplicaClaroPay : true,
+
+            aplicaFlash:
+              esFwa ? fwaAplicaFlash : true,
 
           }
 
@@ -1311,6 +1417,11 @@ export default function Cotizador({
       productos,
 
       reglas,
+      fwaDescuento,
+      fwaAplicaConexionFull,
+      fwaAplicaConvergencia,
+      fwaAplicaClaroPay,
+      fwaAplicaFlash,
 
     ])
 
@@ -2451,11 +2562,9 @@ async function compartirPropuesta() {
 
                         onChange={(e) =>
 
-                          actualizarLinea(
+                          actualizarPlanLinea(
 
                             linea.id,
-
-                            'plan',
 
                             e.target.value
 
@@ -2600,6 +2709,58 @@ async function compartirPropuesta() {
                     </button>
 
                   </div>
+
+                  {linea.tipo === 'LINEA NUEVA' && esPlanFwa(linea.plan) && (
+                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <div className="text-sm font-bold text-amber-900">
+                        Pago del Módem FWA 5G
+                      </div>
+                      <div className="mt-1 text-xs text-amber-800">
+                        Cargo único: {dinero(Number(linea.precioModem || modemFwa?.precio || 0))}
+                      </div>
+                      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <select
+                          value={linea.formaPagoModem ?? ''}
+                          onChange={(e) =>
+                            actualizarDatoFwa(
+                              linea.id,
+                              'formaPagoModem',
+                              e.target.value
+                            )
+                          }
+                          className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+                        >
+                          <option value="">Seleccionar forma de pago</option>
+                          <option value="CONTRA_FACTURA">Contra Factura en Cuotas (sujeto a scoring)</option>
+                          <option value="EFECTIVO">Pago Efectivo</option>
+                          <option value="TARJETA">Pago en Cuotas con tarjeta del Cliente</option>
+                        </select>
+
+                        {(linea.formaPagoModem === 'CONTRA_FACTURA' ||
+                          linea.formaPagoModem === 'TARJETA') && (
+                          <input
+                            type="number"
+                            min="1"
+                            max={
+                              linea.formaPagoModem === 'CONTRA_FACTURA'
+                                ? Number(modemFwa?.maxCuotasFactura ?? 24)
+                                : 60
+                            }
+                            step="1"
+                            value={Number(linea.cuotasModem ?? 1)}
+                            onChange={(e) =>
+                              actualizarDatoFwa(
+                                linea.id,
+                                'cuotasModem',
+                                Math.max(1, Number(e.target.value))
+                              )
+                            }
+                            className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-sm bg-white text-gray-900"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {linea.tipo !== 'LINEA NUEVA' && linea.portabilidades[0] && (
 
@@ -3732,6 +3893,47 @@ async function compartirPropuesta() {
             </>
 
           )}
+
+{lineas.some((linea) => linea.tipo === 'LINEA NUEVA' && esPlanFwa(linea.plan)) && (
+  <>
+    <div className="text-[11px] font-semibold text-gray-500 mt-4 mb-2">
+      MÓDEM FWA 5G · CARGO ÚNICO
+    </div>
+    <div className="space-y-2">
+      {lineas
+        .filter((linea) => linea.tipo === 'LINEA NUEVA' && esPlanFwa(linea.plan))
+        .map((linea) => {
+          const precioModem = Number(linea.precioModem || modemFwa?.precio || 0)
+          const forma =
+            linea.formaPagoModem === 'CONTRA_FACTURA'
+              ? `Contra Factura · ${linea.cuotasModem ?? 1} cuota(s) · sujeto a scoring`
+              : linea.formaPagoModem === 'EFECTIVO'
+                ? 'Efectivo · pago único'
+                : linea.formaPagoModem === 'TARJETA'
+                  ? `Tarjeta del Cliente · ${linea.cuotasModem ?? 1} cuota(s)`
+                  : 'Forma de pago pendiente'
+
+          return (
+            <div key={`modem-${linea.id}`} className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              <div className="flex flex-wrap justify-between gap-2">
+                <span>Módem FWA 5G</span>
+                <span className="font-semibold">{dinero(precioModem)}</span>
+              </div>
+              <div className="mt-1 text-xs text-gray-700">{forma}</div>
+              {linea.formaPagoModem === 'CONTRA_FACTURA' && Number(linea.cuotasModem ?? 0) > 0 && (
+                <div className="mt-1 text-xs text-gray-600">
+                  Valor de referencia por cuota: {dinero(precioModem / Number(linea.cuotasModem))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+    </div>
+    <div className="mt-2 text-[11px] text-gray-500">
+      Este cargo no integra el total mensual de servicios.
+    </div>
+  </>
+)}
 
 {/* INTERNET */}
 
