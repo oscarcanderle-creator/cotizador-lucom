@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     .select('tipo_servicio, modalidad, numero_servicio')
     .eq('cliente_id', operacion.cliente_id)
     .eq('domicilio_id', operacion.domicilio_id)
-    .eq('origen', 'DECLARADO')
+    .eq('origen', 'DECLARADO_CLIENTE')
 
   const lista: any[] = productos ?? []
 
