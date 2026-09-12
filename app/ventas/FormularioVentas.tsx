@@ -55,10 +55,33 @@ function CampoTelefono({label,name,required=false}:{label:string;name:string;req
   />
  </label>
 }
-function Selector({label,name,opciones,required=false,defaultValue=''}:{label:string;name:string;opciones:{value:string;label:string}[];required?:boolean;defaultValue?:string}){
- return <label className="block"><span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">{label}{required?' *':''}</span><select className={inputClass} name={name} required={required} defaultValue={defaultValue}><option value="">Seleccionar</option>{opciones.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label>
+function Selector({label,name,opciones,required=false,defaultValue='',value,onChange}:{label:string;name:string;opciones:{value:string;label:string}[];required?:boolean;defaultValue?:string;value?:string;onChange?:(value:string)=>void}){
+ const controlado=value!==undefined
+ return <label className="block"><span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">{label}{required?' *':''}</span><select className={inputClass} name={name} required={required} {...(controlado?{value,onChange:(e:React.ChangeEvent<HTMLSelectElement>)=>onChange?.(e.target.value)}:{defaultValue})}><option value="">Seleccionar</option>{opciones.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label>
 }
 const opts=(xs:string[])=>xs.map(x=>({value:x,label:x}))
+
+function etiquetaPlanMovil(p:ProductoCatalogo){
+ const todo=`${p.producto ?? ''} ${p.plan ?? ''}`.toUpperCase().replace(/\s+/g,' ').trim()
+ if(todo.includes('FWA') && todo.includes('5G') && /400\s*G/.test(todo)) return 'FWA 5G 400G'
+
+ const plan=String(p.plan ?? '').toUpperCase().trim()
+ const m=plan.match(/(?:^|\D)(2|4|7|10|30|50)\s*(?:GB|GIGAS?|G)\b/)
+ return m ? `${m[1]}Gb` : null
+}
+
+function opcionesPlanesMoviles(lista:ProductoCatalogo[]){
+ const vistos=new Set<string>()
+ const opciones:{value:string;label:string}[]=[]
+ for(const p of lista){
+  const label=etiquetaPlanMovil(p)
+  if(!label || vistos.has(label)) continue
+  vistos.add(label)
+  opciones.push({value:String(p.id),label})
+ }
+ const orden=new Map([['2Gb',1],['4Gb',2],['7Gb',3],['10Gb',4],['30Gb',5],['50Gb',6],['FWA 5G 400G',7]])
+ return opciones.sort((a,b)=>(orden.get(a.label)??99)-(orden.get(b.label)??99))
+}
 
 export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestionarVentas,origenes,zonas,tiposDomicilio,productos,guardarVenta}:Props){
  const [nuevos,setNuevos]=useState<ServicioNuevo[]>([])
@@ -66,6 +89,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
  const [cargaItec,setCargaItec]=useState(false)
  const [ultimoProducto,setUltimoProducto]=useState<'BAF'|'PORTA'|'LINEA_NUEVA'|null>(null)
  const [mostrarConfirmacionItec,setMostrarConfirmacionItec]=useState(false)
+ const [companiasPorta,setCompaniasPorta]=useState<Record<number,string>>({})
  const formRef=useRef<HTMLFormElement>(null)
  const itecConfirmadoRef=useRef(false)
  const [guardando,iniciarGuardado]=useTransition(); const [resultado,setResultado]=useState<ResultadoGuardado|null>(null)
@@ -80,8 +104,24 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
     return true
    })
  },[productos])
- const porta=useMemo(()=>productos.filter(p=>p.producto.toUpperCase()==='PORTABILIDAD'),[productos])
- const ln=useMemo(()=>productos.filter(p=>p.producto.toUpperCase().includes('LINEA NUEVA') || p.producto.toUpperCase().includes('LÍNEA NUEVA')),[productos])
+ const porta=useMemo(
+  ()=>productos.filter(p=>
+   p.producto.toUpperCase()==='PORTABILIDAD' &&
+   etiquetaPlanMovil(p)!==null &&
+   etiquetaPlanMovil(p)!=='FWA 5G 400G'
+  ),
+  [productos]
+ )
+ const ln=useMemo(
+  ()=>productos.filter(p=>{
+   const producto=p.producto.toUpperCase()
+   const label=etiquetaPlanMovil(p)
+   const esLineaNueva=producto.includes('LINEA NUEVA') || producto.includes('LÍNEA NUEVA')
+   const esFwa=label==='FWA 5G 400G'
+   return label!==null && (esLineaNueva || esFwa)
+  }),
+  [productos]
+ )
  const tiposDomicilioInternet=useMemo(()=>{
   const buscar=(texto:string)=>tiposDomicilio.find(x=>x.toUpperCase().includes(texto))
   return [
@@ -191,7 +231,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
      </div>
     </div>
    )}
-   <div className="space-y-3">{nuevos.map((s,i)=>{const lista=s.tipo==='BAF'?baf:s.tipo==='PORTA'?porta:ln;return <div id={`servicio-nuevo-${s.id}`} key={s.id} className="scroll-mt-24 rounded-2xl border border-gray-200 bg-gray-50 p-3"><div className="flex justify-between mb-3"><div><b>{s.tipo==='BAF'?'Internet / BAF':s.tipo==='PORTA'?'Portabilidad':'Línea Nueva'}</b><div className="text-[11px] text-gray-500">Servicio nuevo {i+1}</div></div><button type="button" onClick={()=>setNuevos(a=>a.filter(x=>x.id!==s.id))} className="text-xs text-red-600">Quitar</button></div><input type="hidden" name={`nuevo_tipo_${i}`} value={s.tipo}/>{s.tipo==='BAF'?<><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:tituloProducto(p)}))} required/><Selector label="Tipo domicilio" name={`nuevo_tipo_domicilio_${i}`} opciones={tiposDomicilioInternet} required/><Selector label="Modalidad" name={`nuevo_modalidad_${i}`} opciones={opts(['Masivo','Cuit Standard','Cuit BAFE'])} required/><label className="block">
+   <div className="space-y-3">{nuevos.map((s,i)=>{const companiaPorta=companiasPorta[s.id]??'';const lista=s.tipo==='BAF'?baf:s.tipo==='PORTA'?(companiaPorta?porta.filter(p=>String(p.origen??'').trim().toUpperCase()===companiaPorta):[]):ln;return <div id={`servicio-nuevo-${s.id}`} key={s.id} className="scroll-mt-24 rounded-2xl border border-gray-200 bg-gray-50 p-3"><div className="flex justify-between mb-3"><div><b>{s.tipo==='BAF'?'Internet / BAF':s.tipo==='PORTA'?'Portabilidad':'Línea Nueva'}</b><div className="text-[11px] text-gray-500">Servicio nuevo {i+1}</div></div><button type="button" onClick={()=>setNuevos(a=>a.filter(x=>x.id!==s.id))} className="text-xs text-red-600">Quitar</button></div><input type="hidden" name={`nuevo_tipo_${i}`} value={s.tipo}/>{s.tipo==='BAF'?<><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:tituloProducto(p)}))} required/><Selector label="Tipo domicilio" name={`nuevo_tipo_domicilio_${i}`} opciones={tiposDomicilioInternet} required/><Selector label="Modalidad" name={`nuevo_modalidad_${i}`} opciones={opts(['Masivo','Cuit Standard','Cuit BAFE'])} required/><label className="block">
  <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">TV *</span>
  <select className={inputClass} name={`nuevo_tv_${i}`} required value={s.tv}
   onChange={(e)=>{const tv=e.target.value as 'NO'|'SI';setNuevos(a=>a.map(x=>x.id===s.id?{...x,tv,decos:tv==='NO'?'0':x.decos}:x))}}>
@@ -222,7 +262,26 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
        </div>
       </div>
      )}
-    </>:<div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5">{s.tipo==='PORTA'&&<Campo label="NIM a portar" name={`nuevo_nim_${i}`} type="tel" inputMode="numeric" pattern="[1-46-9][0-9]{9}" maxLength={10} required/>}<Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:tituloProducto(p)}))} required/><Selector label="SIM" name={`nuevo_sim_${i}`} opciones={opts(['ESIM','SIMCARD'])} required/>{s.tipo==='PORTA'&&<><Selector label="Compañía actual" name={`nuevo_compania_${i}`} opciones={opts(companias)} required/><Selector label="PRE / POS" name={`nuevo_modalidad_actual_${i}`} opciones={opts(['POS','PRE'])} required/></>}</div>}</div>})}</div></Seccion>
+    </>:<div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+     {s.tipo==='PORTA'&&<Selector
+      label="Compañía actual"
+      name={`nuevo_compania_${i}`}
+      opciones={opts(companias)}
+      value={companiaPorta}
+      onChange={(value)=>setCompaniasPorta(a=>({...a,[s.id]:value}))}
+      required
+     />}
+     {s.tipo==='PORTA'&&<Campo label="NIM a portar" name={`nuevo_nim_${i}`} type="tel" inputMode="numeric" pattern="[1-46-9][0-9]{9}" maxLength={10} required/>}
+     <Selector
+      key={`${s.id}-${companiaPorta}`}
+      label="Plan"
+      name={`nuevo_producto_${i}`}
+      opciones={opcionesPlanesMoviles(lista)}
+      required
+     />
+     <Selector label="SIM" name={`nuevo_sim_${i}`} opciones={opts(['ESIM','SIMCARD'])} required/>
+     {s.tipo==='PORTA'&&<Selector label="PRE / POS" name={`nuevo_modalidad_actual_${i}`} opciones={opts(['POS','PRE'])} required/>}
+    </div>}</div>})}</div></Seccion>
   {resultado&&<div className={`mb-3 rounded-xl border px-3 py-3 text-sm font-medium ${resultado.ok?'border-green-200 bg-green-50 text-green-700':'border-red-200 bg-red-50 text-red-700'}`}>{resultado.mensaje}{resultado.idOperacion&&<div className="font-mono text-xs mt-1">ID: {resultado.idOperacion}</div>}</div>}
   <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-2.5 sm:sticky sm:bg-gray-100/95"><button type="submit" disabled={guardando} className="mx-auto block w-full max-w-6xl sm:w-auto sm:min-w-56 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl px-6 py-3 disabled:opacity-50">{guardando?'Guardando...':'Guardar venta'}</button></div>
 
