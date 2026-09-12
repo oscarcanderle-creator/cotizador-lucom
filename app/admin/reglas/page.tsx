@@ -19,6 +19,22 @@ function unidadRegla(
     return 'meses'
   }
 
+  if (codigo.endsWith('_GB') || codigo.endsWith('_PLAN_MIN')) {
+    return 'GB'
+  }
+
+  if (codigo.endsWith('_MESES')) {
+    return 'meses'
+  }
+
+  if (codigo.endsWith('_GB') || codigo.endsWith('_PLAN_MIN')) {
+    return 'GB'
+  }
+
+  if (codigo.endsWith('_MESES')) {
+    return 'meses'
+  }
+
   if (
     tipo === 'CANTIDAD' ||
     codigo === 'DECO_MAXIMO'
