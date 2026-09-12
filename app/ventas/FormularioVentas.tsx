@@ -68,7 +68,14 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
  const baf=useMemo(()=>productos.filter(p=>p.producto.toUpperCase().includes('INTERNET') || p.origen?.toUpperCase()==='BAF'),[productos])
  const porta=useMemo(()=>productos.filter(p=>p.producto.toUpperCase()==='PORTABILIDAD'),[productos])
  const ln=useMemo(()=>productos.filter(p=>p.producto.toUpperCase().includes('LINEA NUEVA') || p.producto.toUpperCase().includes('LÍNEA NUEVA')),[productos])
- const agregar=(tipo:ServicioNuevo['tipo'])=>{ if(tipo==='BAF'&&nuevos.some(x=>x.tipo==='BAF')) return; setNuevos(a=>[...a,{id:Date.now()+Math.random(),tipo}]) }
+ const agregar=(tipo:ServicioNuevo['tipo'])=>{
+  if(tipo==='BAF'&&nuevos.some(x=>x.tipo==='BAF')) return
+  const id=Date.now()+Math.random()
+  setNuevos(a=>[...a,{id,tipo}])
+  window.setTimeout(()=>{
+   document.getElementById(`servicio-nuevo-${id}`)?.scrollIntoView({behavior:'smooth',block:'start'})
+  },0)
+ }
  const agregarExistente=()=>setExistentes(a=>[...a,{id:Date.now()+Math.random(),tipo:'BAF',modalidad:'2PLAY'}])
  async function enviar(e:FormEvent<HTMLFormElement>){e.preventDefault(); if(!nuevos.length){setResultado({ok:false,mensaje:'Agregá al menos un servicio nuevo a contratar.'});return} const form=e.currentTarget; const fd=new FormData(form); fd.set('servicios_nuevos_count',String(nuevos.length)); fd.set('servicios_existentes_count',String(existentes.length)); setResultado(null); iniciarGuardado(async()=>{const r=await guardarVenta(fd);setResultado(r);if(r.ok){form.reset();setNuevos([]);setExistentes([]);setCargaItec(false)}})}
  const tituloProducto=(p:ProductoCatalogo)=>[p.plan,p.origen].filter(Boolean).join(' · ')
@@ -78,7 +85,36 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
   <section className="mb-3 rounded-xl border bg-white px-3 py-2 text-xs text-gray-500">Usuario <b className="text-gray-800">{nombreUsuario}</b> · Vendedor <b className="text-gray-800">{vendedor}</b></section>
   <Seccion n="01" titulo="Cliente"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Campo label="Nombre" name="nombre" required/><Campo label="Apellido" name="apellido" required/><Selector label="Documento" name="tipo_documento" opciones={opts(tiposDocumento)} defaultValue="DNI" required/><Campo label="Número" name="dni" inputMode="numeric" required/><Campo label="Fecha nacimiento" name="fecha_nacimiento" type="date"/><CampoTelefono label="Teléfono" name="telefono" required/><CampoTelefono label="Contacto alternativo" name="telefono_alternativo"/><Campo label="Correo cliente" name="email" type="email" inputMode="email" required/></div></Seccion>
   <Seccion n="02" titulo="Domicilio"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><div className="sm:col-span-2"><Campo label="Calle y Nro" name="domicilio" required/></div><Campo label="Entre calles" name="entre_calles"/><Campo label="Piso" name="piso"/><Campo label="Dpto" name="dpto"/><Campo label="Barrio" name="barrio"/><Campo label="Localidad" name="localidad"/><Campo label="Coordenadas" name="coordenadas"/><div className="sm:col-span-2"><Campo label="Datos extras" name="datos_extras"/></div></div></Seccion>
-  <Seccion n="03" titulo="Servicios Existentes"><p className="text-sm text-gray-600 mb-3">Registrá solamente servicios Claro que el cliente ya posee. No generan una nueva venta.</p><div className="space-y-3">{existentes.map((s,i)=><div key={s.id} className="rounded-xl border bg-gray-50 p-3"><div className="flex justify-between mb-2"><b className="text-sm">Servicio existente {i+1}</b><button type="button" className="text-xs text-red-600" onClick={()=>setExistentes(a=>a.filter(x=>x.id!==s.id))}>Quitar</button></div><div className="grid sm:grid-cols-3 gap-2"><Selector label="Tipo" name={`existente_tipo_${i}`} opciones={[{value:'BAF',label:'Internet Claro'},{value:'LINEA_MOVIL',label:'Línea móvil Claro'}]} defaultValue={s.tipo} required/><Selector label="Modalidad" name={`existente_modalidad_${i}`} opciones={s.tipo==='BAF'?opts(['2PLAY','3PLAY']):opts(['POSPAGO','PREPAGO'])} defaultValue={s.modalidad} required/><Campo label="Número / referencia" name={`existente_numero_${i}`}/></div></div>)}<button type="button" onClick={agregarExistente} className="rounded-xl border border-dashed border-gray-400 px-4 py-2 text-sm font-semibold">+ Agregar servicio existente</button></div></Seccion>
+  <Seccion n="03" titulo="Servicios Existentes"><p className="text-sm text-gray-600 mb-3">Registrá solamente servicios Claro que el cliente ya posee. No generan una nueva venta.</p><div className="space-y-3">{existentes.map((s,i)=><div key={s.id} className="rounded-xl border bg-gray-50 p-3"><div className="flex justify-between mb-2"><b className="text-sm">Servicio existente {i+1}</b><button type="button" className="text-xs text-red-600" onClick={()=>setExistentes(a=>a.filter(x=>x.id!==s.id))}>Quitar</button></div><div className="grid sm:grid-cols-3 gap-2">
+ <label className="block">
+  <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">Tipo *</span>
+  <select
+   className={inputClass}
+   name={`existente_tipo_${i}`}
+   value={s.tipo}
+   required
+   onChange={(e)=>{
+    const tipo=e.target.value as ServicioExistente['tipo']
+    setExistentes(a=>a.map(x=>x.id===s.id?{...x,tipo,modalidad:tipo==='BAF'?'2PLAY':''}:x))
+   }}
+  >
+   <option value="BAF">Internet Claro</option>
+   <option value="LINEA_MOVIL">Línea móvil Claro</option>
+  </select>
+ </label>
+ <Selector
+  key={`${s.id}-${s.tipo}`}
+  label={s.tipo==='BAF'?'Modalidad':'Plan Pos Pago'}
+  name={`existente_modalidad_${i}`}
+  opciones={s.tipo==='BAF'?opts(['2PLAY','3PLAY']):opts(['2Gb','4Gb','7Gb','10Gb','30Gb','50Gb'])}
+  defaultValue={s.modalidad}
+  required
+ />
+ <Campo
+  label={s.tipo==='BAF'?'Observaciones':'NUMERO'}
+  name={`existente_numero_${i}`}
+ />
+</div></div>)}<button type="button" onClick={agregarExistente} className="rounded-xl border border-dashed border-gray-400 px-4 py-2 text-sm font-semibold">+ Agregar servicio existente</button></div></Seccion>
   <Seccion n="04" titulo="Servicios Nuevos a Contratar">
    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4"><BotonProducto onClick={()=>agregar('BAF')} disabled={nuevos.some(x=>x.tipo==='BAF')}>+ Internet</BotonProducto><BotonProducto onClick={()=>agregar('PORTA')}>+ Portabilidad</BotonProducto><BotonProducto onClick={()=>agregar('LINEA_NUEVA')}>+ Línea Nueva</BotonProducto></div>
    {rol==='TERRENO'&&nuevos.some(x=>x.tipo==='BAF')&&(
@@ -95,7 +131,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
      </div>
     </div>
    )}
-   <div className="space-y-3">{nuevos.map((s,i)=>{const lista=s.tipo==='BAF'?baf:s.tipo==='PORTA'?porta:ln;return <div key={s.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-3"><div className="flex justify-between mb-3"><div><b>{s.tipo==='BAF'?'Internet / BAF':s.tipo==='PORTA'?'Portabilidad':'Línea Nueva'}</b><div className="text-[11px] text-gray-500">Servicio nuevo {i+1}</div></div><button type="button" onClick={()=>setNuevos(a=>a.filter(x=>x.id!==s.id))} className="text-xs text-red-600">Quitar</button></div><input type="hidden" name={`nuevo_tipo_${i}`} value={s.tipo}/>{s.tipo==='BAF'?<><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:tituloProducto(p)}))} required/><Selector label="Tipo domicilio" name={`nuevo_tipo_domicilio_${i}`} opciones={opts(tiposDomicilio)}/><Selector label="Modalidad" name={`nuevo_modalidad_${i}`} opciones={opts(['Masivo','Cuit Standard','Cuit BAFE'])} required/><Selector label="TV" name={`nuevo_tv_${i}`} opciones={opts(['NO','SI'])} defaultValue="NO" required/><Selector label="Decos adicionales" name={`nuevo_decos_${i}`} opciones={opts(['0','1','2'])} defaultValue="0"/><Selector label="Zona" name={`nuevo_zona_${i}`} opciones={opts(zonas)}/><div className="sm:col-span-2"><Campo label="Horario contacto / observaciones" name={`nuevo_observaciones_${i}`} required/></div></div>
+   <div className="space-y-3">{nuevos.map((s,i)=>{const lista=s.tipo==='BAF'?baf:s.tipo==='PORTA'?porta:ln;return <div id={`servicio-nuevo-${s.id}`} key={s.id} className="scroll-mt-24 rounded-2xl border border-gray-200 bg-gray-50 p-3"><div className="flex justify-between mb-3"><div><b>{s.tipo==='BAF'?'Internet / BAF':s.tipo==='PORTA'?'Portabilidad':'Línea Nueva'}</b><div className="text-[11px] text-gray-500">Servicio nuevo {i+1}</div></div><button type="button" onClick={()=>setNuevos(a=>a.filter(x=>x.id!==s.id))} className="text-xs text-red-600">Quitar</button></div><input type="hidden" name={`nuevo_tipo_${i}`} value={s.tipo}/>{s.tipo==='BAF'?<><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:tituloProducto(p)}))} required/><Selector label="Tipo domicilio" name={`nuevo_tipo_domicilio_${i}`} opciones={opts(tiposDomicilio)}/><Selector label="Modalidad" name={`nuevo_modalidad_${i}`} opciones={opts(['Masivo','Cuit Standard','Cuit BAFE'])} required/><Selector label="TV" name={`nuevo_tv_${i}`} opciones={opts(['NO','SI'])} defaultValue="NO" required/><Selector label="Decos adicionales" name={`nuevo_decos_${i}`} opciones={opts(['0','1','2'])} defaultValue="0"/><Selector label="Zona" name={`nuevo_zona_${i}`} opciones={opts(zonas)}/><div className="sm:col-span-2"><Campo label="Horario contacto / observaciones" name={`nuevo_observaciones_${i}`} required/></div></div>
      {rol==='TERRENO'&&cargaItec&&(
       <div className="mt-3 rounded-xl border border-blue-200 bg-white p-3">
        <div className="mb-3">
@@ -105,9 +141,9 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
         <Campo label="SDS" name="itec_sds" required pattern="[0-9]{8}[A-Za-z]{3}" maxLength={11} placeholder="8 números + 3 letras"/>
         <Campo label="Orden de Trabajo (OT)" name="itec_ot" required inputMode="numeric" pattern="[0-9]{8}" maxLength={8} placeholder="8 dígitos"/>
-        <Campo label="Línea Fija" name="itec_linea_fija" required/>
         <Campo label="Fecha de Instalación" name="itec_fecha_instalacion" type="date" required/>
         <Selector label="CIA Celular" name="itec_cia_celular" opciones={opts(['CLARO','PERSONAL','MOVISTAR','TUENTI'])} required/>
+        <Campo label="Observaciones" name="itec_observaciones" required/>
        </div>
       </div>
      )}
