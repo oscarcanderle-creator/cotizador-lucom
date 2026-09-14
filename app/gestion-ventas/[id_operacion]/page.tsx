@@ -45,6 +45,46 @@ function fechaSimple(fecha: string | null) {
   return `${dia}/${mes}/${anio}`
 }
 
+function partesFechaInstalacion(valor: unknown) {
+  const original = String(valor ?? '').trim()
+  const match = original.match(
+    /^(\d{4}-\d{2}-\d{2})(?:\s*-\s*(Turno Mañana|Turno Tarde))?$/
+  )
+
+  return {
+    original,
+    fecha: match?.[1] ?? '',
+    turno: match?.[2] ?? '',
+  }
+}
+
+function fechaInstalacionDesdeFormulario(formData: FormData) {
+  const fecha = String(formData.get('fecha_instalacion_fecha') ?? '').trim()
+  const turno = String(formData.get('fecha_instalacion_turno') ?? '').trim()
+  const original = String(formData.get('fecha_instalacion_original') ?? '').trim()
+
+  if (!fecha && !turno) return original || null
+
+  if (fecha && !turno) {
+    if (original === fecha) return original
+    throw new Error('Seleccioná Turno Mañana o Turno Tarde para la Fecha de Instalación.')
+  }
+
+  if (!fecha && turno) {
+    throw new Error('Seleccioná la Fecha de Instalación.')
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    throw new Error('La Fecha de Instalación no tiene un formato válido.')
+  }
+
+  if (!['Turno Mañana', 'Turno Tarde'].includes(turno)) {
+    throw new Error('El turno de instalación no es válido.')
+  }
+
+  return `${fecha} - ${turno}`
+}
+
 function Campo({
   label,
   value,
@@ -130,7 +170,7 @@ async function guardarGestionBaf(formData: FormData) {
       sds: texto('sds'),
       orden_trabajo: texto('orden_trabajo'),
       linea_fija: texto('linea_fija'),
-      fecha_instalacion: texto('fecha_instalacion'),
+      fecha_instalacion: fechaInstalacionDesdeFormulario(formData),
       ciclo_cuenta: texto('ciclo_cuenta'),
       motivo_estado: texto('motivo_estado'),
     }),
@@ -338,7 +378,7 @@ async function guardarGestionProducto(formData: FormData) {
       sds: texto('sds'),
       orden_trabajo: texto('orden_trabajo'),
       linea_fija: texto('linea_fija'),
-      fecha_instalacion: texto('fecha_instalacion'),
+      fecha_instalacion: fechaInstalacionDesdeFormulario(formData),
       ciclo_cuenta: texto('ciclo_cuenta'),
       motivo_estado: texto('motivo_estado'),
     })
@@ -992,7 +1032,9 @@ export default async function DetalleVentaPage({
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Orden Trabajo</label><GestionInputValidado name="orden_trabajo" tipo="OT" defaultValue={gestion?.orden_trabajo ?? ''} placeholder="8 dígitos" className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /><p className="mt-1 text-xs text-gray-500">En Conexión Full con BAF nuevo, esta OT habilita automáticamente PORTA/LN.</p></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Observaciones</label><input name="linea_fija" defaultValue={gestion?.linea_fija ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Ciclo Cuenta</label><input name="ciclo_cuenta" defaultValue={gestion?.ciclo_cuenta ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
-                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Instalación</label><input name="fecha_instalacion" defaultValue={gestion?.fecha_instalacion ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <input type="hidden" name="fecha_instalacion_original" value={gestion?.fecha_instalacion ?? ''} />
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Instalación</label><input type="date" name="fecha_instalacion_fecha" defaultValue={partesFechaInstalacion(gestion?.fecha_instalacion).fecha} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Turno</label><select name="fecha_instalacion_turno" defaultValue={partesFechaInstalacion(gestion?.fecha_instalacion).turno} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar turno</option><option value="Turno Mañana">Turno Mañana</option><option value="Turno Tarde">Turno Tarde</option></select></div>
                               <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Motivo Estado</label><textarea name="motivo_estado" defaultValue={gestion?.motivo_estado ?? ''} rows={3} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                             </div>
                           ) : (
@@ -1688,17 +1730,33 @@ export default async function DetalleVentaPage({
                     />
                   </div>
 
-                  <div className="sm:col-span-2">
+                  <input type="hidden" name="fecha_instalacion_original" value={gestionBaf?.fecha_instalacion ?? ''} />
+
+                  <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Fecha Instalación
                     </label>
                     <input
-                      type="text"
-                      name="fecha_instalacion"
-                      defaultValue={gestionBaf?.fecha_instalacion ?? ''}
-                      placeholder="Texto libre: fecha, rango horario y aclaraciones"
+                      type="date"
+                      name="fecha_instalacion_fecha"
+                      defaultValue={partesFechaInstalacion(gestionBaf?.fecha_instalacion).fecha}
                       className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                     />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Turno
+                    </label>
+                    <select
+                      name="fecha_instalacion_turno"
+                      defaultValue={partesFechaInstalacion(gestionBaf?.fecha_instalacion).turno}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      <option value="">Seleccionar turno</option>
+                      <option value="Turno Mañana">Turno Mañana</option>
+                      <option value="Turno Tarde">Turno Tarde</option>
+                    </select>
                   </div>
 
                   <div className="sm:col-span-2">

@@ -270,8 +270,8 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
         <Campo label="SDS" name="itec_sds" required pattern="[0-9]{8}[A-Za-z]{3}" maxLength={11} placeholder="8 números + 3 letras"/>
         <Campo label="Orden de Trabajo (OT)" name="itec_ot" required inputMode="numeric" pattern="[0-9]{8}" maxLength={8} placeholder="8 dígitos"/>
         <Campo label="Fecha de Instalación" name="itec_fecha_instalacion" type="date" required/>
+        <Selector label="Turno" name="itec_turno" opciones={opts(['Turno Mañana','Turno Tarde'])} required/>
         <Selector label="CIA Celular" name="itec_cia_celular" opciones={opts(['CLARO','PERSONAL','MOVISTAR','TUENTI'])} required/>
-        <Campo label="Observaciones" name="itec_observaciones"/>
        </div>
       </div>
      )}

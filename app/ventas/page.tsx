@@ -25,8 +25,8 @@ export default async function VentasPage(){
   const itec={
    sds:texto(fd,'itec_sds').toUpperCase(),
    ot:digitos(texto(fd,'itec_ot')),
-   observaciones:texto(fd,'itec_observaciones'),
    fechaInstalacion:texto(fd,'itec_fecha_instalacion'),
+   turno:texto(fd,'itec_turno'),
    ciaCelular:texto(fd,'itec_cia_celular').toUpperCase(),
   }
   const tipoDoc=texto(fd,'tipo_documento'),dni=digitos(texto(fd,'dni')),nombre=texto(fd,'nombre'),apellido=texto(fd,'apellido'),telefono=texto(fd,'telefono'),telefonoAlternativo=texto(fd,'telefono_alternativo'),email=texto(fd,'email')
@@ -43,6 +43,7 @@ export default async function VentasPage(){
    if(!/^[0-9]{8}[A-Z]{3}$/.test(itec.sds))return{ok:false,mensaje:'El SDS de ITEC debe contener exactamente 8 números y 3 letras.'}
    if(!/^[0-9]{8}$/.test(itec.ot))return{ok:false,mensaje:'La Orden de Trabajo de ITEC debe contener exactamente 8 dígitos.'}
    if(!/^\d{4}-\d{2}-\d{2}$/.test(itec.fechaInstalacion))return{ok:false,mensaje:'Completá Fecha de Instalación para la carga ITEC.'}
+   if(!['Turno Mañana','Turno Tarde'].includes(itec.turno))return{ok:false,mensaje:'Seleccioná Turno Mañana o Turno Tarde para la carga ITEC.'}
    if(!['CLARO','PERSONAL','MOVISTAR','TUENTI'].includes(itec.ciaCelular))return{ok:false,mensaje:'Seleccioná una CIA Celular válida para la carga ITEC.'}
   }
   for(const [i,s] of nuevos.entries()){
@@ -90,7 +91,7 @@ export default async function VentasPage(){
    const maxCuotasFactura=Number(modemFwa?.max_cuotas_factura??24)
    let productoBafId:number|null=null
    for(const [i,s] of nuevos.entries()){const p=mapa.get(s.productoId);if(!p)throw new Error(`El producto seleccionado en el servicio ${i+1} no existe o ya no está disponible.`);const {data:op,error:eop}=await admin.from('operacion_productos').insert({operacion_id:idOperacion,producto_id:p.id,tipo_producto:s.tipo,responsable_id:null,orden:i+1,activo:true,producto_snapshot:p.producto,origen_snapshot:p.origen,plan_snapshot:p.plan,precio_lista_snapshot:p.precio_lista,descuento_snapshot:p.descuento_normal,precio_cliente_snapshot:p.precio_cliente,beneficios_snapshot:p.beneficios,created_by:user.id,updated_by:user.id}).select('id').single();if(eop)throw eop
-    if(s.tipo==='BAF'){productoBafId=op.id;let tipoDomId:null|number=null,zonaId:null|number=null;if(s.tipoDomicilio){const {data:x}=await admin.from('catalogo_tipos_domicilio').select('id').eq('nombre',s.tipoDomicilio).maybeSingle();tipoDomId=x?.id??null}if(s.zona){const {data:x}=await admin.from('catalogo_zonas').select('id').eq('nombre',s.zona).maybeSingle();zonaId=x?.id??null}const {error}=await admin.from('operacion_producto_baf').insert({producto_operacion_id:op.id,tipo_domicilio_id:tipoDomId,zona_id:zonaId,modalidad_plan:s.modalidad||null,tv:s.tv,cantidad_decos:s.decos,horario_contacto:s.observaciones||null});if(error)throw error;const ahoraGestion=new Date().toISOString();if(cargaItecSolicitada){const {error:eg}=await admin.from('gestion_producto_baf').insert({producto_operacion_id:op.id,responsable_id:user.id,estado_baf_id:estadoBafCargadoId,cia_celular:itec.ciaCelular,sds:itec.sds,orden_trabajo:itec.ot,linea_fija:itec.observaciones,fecha_instalacion:itec.fechaInstalacion,fecha_gestion:ahoraGestion,updated_at:ahoraGestion,updated_by:user.id});if(eg)throw eg}else{const {error:eg}=await admin.from('gestion_producto_baf').insert({producto_operacion_id:op.id,responsable_id:null});if(eg)throw eg}}
+    if(s.tipo==='BAF'){productoBafId=op.id;let tipoDomId:null|number=null,zonaId:null|number=null;if(s.tipoDomicilio){const {data:x}=await admin.from('catalogo_tipos_domicilio').select('id').eq('nombre',s.tipoDomicilio).maybeSingle();tipoDomId=x?.id??null}if(s.zona){const {data:x}=await admin.from('catalogo_zonas').select('id').eq('nombre',s.zona).maybeSingle();zonaId=x?.id??null}const {error}=await admin.from('operacion_producto_baf').insert({producto_operacion_id:op.id,tipo_domicilio_id:tipoDomId,zona_id:zonaId,modalidad_plan:s.modalidad||null,tv:s.tv,cantidad_decos:s.decos,horario_contacto:s.observaciones||null});if(error)throw error;const ahoraGestion=new Date().toISOString();if(cargaItecSolicitada){const {error:eg}=await admin.from('gestion_producto_baf').insert({producto_operacion_id:op.id,responsable_id:user.id,estado_baf_id:estadoBafCargadoId,cia_celular:itec.ciaCelular,sds:itec.sds,orden_trabajo:itec.ot,fecha_instalacion:`${itec.fechaInstalacion} - ${itec.turno}`,fecha_gestion:ahoraGestion,updated_at:ahoraGestion,updated_by:user.id});if(eg)throw eg}else{const {error:eg}=await admin.from('gestion_producto_baf').insert({producto_operacion_id:op.id,responsable_id:null});if(eg)throw eg}}
     else{
      const textoFwa=`${p.producto??''} ${p.plan??''}`.toUpperCase()
      const esFwa=s.tipo==='LINEA_NUEVA'&&textoFwa.includes('FWA')&&textoFwa.includes('5G')&&textoFwa.includes('400')
