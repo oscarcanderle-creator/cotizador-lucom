@@ -819,6 +819,7 @@ export default async function GestionVentasPage({
       case 'estado':
         return estadoVisible(operacion)
       case 'tipo':
+      case 'servicios':
         return tipoVisible(operacion)
       case 'vendedor':
         return String(operacion.vendedor ?? '')
@@ -931,6 +932,7 @@ export default async function GestionVentasPage({
     if (esNueva) {
       switch (campo) {
         case 'tipo': return tipoVisible(operacion)
+        case 'servicios': return tipoVisible(operacion)
         case 'responsable': return nombreAsignacionVista(operacion)
         case 'numero_linea': return valoresMoviles((p) => p.detalle?.numero_linea)
         case 'compania_actual': return valoresMoviles((p) => p.detalle?.compania_actual)
@@ -957,6 +959,7 @@ export default async function GestionVentasPage({
       case 'fecha_ingreso':
         return operacion.fecha_hora || null
       case 'tipo':
+      case 'servicios':
         return tipoVisible(operacion)
       case 'vendedor':
         return operacion.vendedor || '-'
@@ -1035,7 +1038,7 @@ export default async function GestionVentasPage({
       return <span>{fechaSoloArgentinaVisual(valor ? String(valor) : null)}</span>
     }
 
-    if (campo === 'tipo') {
+    if (campo === 'tipo' || campo === 'servicios') {
       return (
         <span className="inline-block max-w-full rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
           {String(valor ?? '-')}

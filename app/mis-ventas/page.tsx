@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '../../utils/supabase/server'
+import { createAdminClient } from '../../utils/supabase/admin'
 import AppHeader from '../../components/AppHeader'
 import ExportarMisVentas from '../../components/ExportarMisVentas'
 
@@ -200,12 +201,17 @@ export default async function MisVentasPage({
 
   const idsOperaciones = (operaciones ?? []).map((o: any) => o.id_operacion)
 
+  // La cabecera ya quedó limitada al usuario autenticado. Para las tablas hijas
+  // usamos admin sólo sobre esos IDs propios, evitando que RLS o relaciones
+  // parciales oculten productos de una venta multiproducto.
+  const admin = createAdminClient()
+
   let productosNuevos: ProductoNuevo[] = []
   const estadosPorProducto = new Map<number, EstadoProducto>()
   const contextosPorOperacion = new Map<string, any>()
 
   if (idsOperaciones.length > 0) {
-    const { data: productos, error: errorProductos } = await supabase
+    const { data: productos, error: errorProductos } = await admin
       .from('operacion_productos')
       .select(`
         id,
@@ -232,7 +238,7 @@ export default async function MisVentasPage({
 
     if (idsProductos.length > 0) {
       const [bafResult, movilResult] = await Promise.all([
-        supabase
+        admin
           .from('gestion_producto_baf')
           .select(`
             producto_operacion_id,
@@ -242,7 +248,7 @@ export default async function MisVentasPage({
             )
           `)
           .in('producto_operacion_id', idsProductos),
-        supabase
+        admin
           .from('gestion_producto_movil')
           .select(`
             producto_operacion_id,
@@ -288,7 +294,7 @@ export default async function MisVentasPage({
 
       await Promise.all(
         productosMoviles.map(async (producto) => {
-          const { data } = await supabase.rpc(
+          const { data } = await admin.rpc(
             'evaluar_habilitacion_producto_movil',
             { p_producto_operacion_id: producto.id }
           )
@@ -310,7 +316,7 @@ export default async function MisVentasPage({
       )
     }
 
-    const { data: contextos, error: errorContextos } = await supabase
+    const { data: contextos, error: errorContextos } = await admin
       .from('operacion_contexto_comercial')
       .select(`
         operacion_id,
