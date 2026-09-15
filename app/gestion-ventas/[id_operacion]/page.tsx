@@ -6,6 +6,8 @@ import { createClient } from '../../../utils/supabase/server'
 import AppHeader from '../../../components/AppHeader'
 import GestionBloqueoControls from '../../../components/GestionBloqueoControls'
 import GestionInputValidado from '../../../components/GestionInputValidado'
+import GestionLogisticaChip from '../../../components/GestionLogisticaChip'
+import EditorDatosVenta from '../../../components/EditorDatosVenta'
 import CorreccionesVentaPanel from "../../../components/CorreccionesVentaPanel"
 
 type Params = Promise<{
@@ -299,6 +301,7 @@ async function guardarGestionPorta(formData: FormData) {
       documentacion_dni: booleano('documentacion_dni'),
       medio_despacho_chip_id: medioDespachoId,
       numero_seguimiento: texto('numero_seguimiento'),
+      legajo_enviado: booleano('legajo_enviado') ?? false,
       observaciones_gestion: texto('observaciones_gestion'),
     }),
     cache: 'no-store',
@@ -394,6 +397,7 @@ async function guardarGestionProducto(formData: FormData) {
       documentacion_dni: booleano('documentacion_dni'),
       medio_despacho_chip_id: numero('medio_despacho_chip_id'),
       numero_seguimiento: texto('numero_seguimiento'),
+      legajo_enviado: booleano('legajo_enviado') ?? false,
       observaciones_gestion: texto('observaciones_gestion'),
     })
   }
@@ -784,6 +788,33 @@ export default async function DetalleVentaPage({
 
     const clienteMulti: any = op.cliente
     const domicilioMulti: any = op.domicilio
+
+    // Edición de carga original: separada de la postgestión.
+    const esVendedorGestor =
+      profile.rol === 'VENDEDOR' &&
+      profile.puede_gestionar_ventas === true
+
+    const idsMovilesOperacion = productos
+      .filter((p: any) => ['PORTA', 'LINEA_NUEVA'].includes(String(p.tipo_producto ?? '').toUpperCase()))
+      .map((p: any) => Number(p.id))
+
+    let cargaOriginalBloqueadaPorValidacion = false
+    if (idsMovilesOperacion.length > 0) {
+      const estadosMoviles = idsMovilesOperacion
+        .map((pid: number) => movilGestion.get(pid)?.estado_porta_id)
+        .filter((v: any) => v != null)
+      if (estadosMoviles.length > 0) {
+        const { data: ev, error: ee } = await admin.from('estados_porta').select('id,nombre').in('id', estadosMoviles)
+        if (ee) throw new Error(`No se pudo verificar Venta Validada: ${ee.message}`)
+        cargaOriginalBloqueadaPorValidacion = (ev ?? []).some(
+          (e: any) => String(e.nombre ?? '').trim().toUpperCase() === 'VENTA VALIDADA'
+        )
+      }
+    }
+
+    const puedeOfrecerEdicionCarga =
+      esVendedorGestor && puedeEditar && !cargaOriginalBloqueadaPorValidacion
+
     const nombreResponsableProducto = (idResponsable: string | null | undefined) => {
       if (!idResponsable) return 'Sin asignar'
       const r = (responsables ?? []).find((x: any) => x.id === idResponsable)
@@ -838,6 +869,24 @@ export default async function DetalleVentaPage({
           />
 
           <div className="space-y-5">
+            {esVendedorGestor && (
+              cargaOriginalBloqueadaPorValidacion ? (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                  <div className="font-semibold">Edición de datos de la venta bloqueada</div>
+                  <div className="mt-1">La venta ya alcanzó Estado Vendedor = Venta Validada. Los datos originales no pueden modificarse.</div>
+                </div>
+              ) : !puedeEditar ? (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                  <div className="font-semibold">Edición de datos de la venta disponible</div>
+                  <div className="mt-1">Primero presioná Gestionar para tomar el bloqueo exclusivo. Luego podrás habilitar por separado la edición de la carga original.</div>
+                </div>
+              ) : (
+                <EditorDatosVenta
+                  operacionId={String(op.id_operacion)}
+                  sesionToken={sesionTokenSolicitado ?? ''}
+                />
+              )
+            )}
             <section className="rounded-2xl border border-gray-200 bg-white p-5">
               <h2 className="mb-4 text-lg font-semibold text-gray-900">Operación</h2>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -979,6 +1028,7 @@ export default async function DetalleVentaPage({
                           ) : (
                             <>
                               <Campo label="NIM / Línea" value={detalle?.nim || detalle?.numero_linea} />
+                              {producto.tipo_producto==='PORTA' && <Campo label="Línea Titular" value={detalle?.linea_titular === true ? 'SI' : 'NO'} />}
                               <Campo label="Compañía actual" value={detalle?.compania_actual} />
                               <Campo label="PRE / POS" value={detalle?.modalidad_actual} />
                               <Campo label="Tipo SIM" value={detalle?.tipo_sim} />
@@ -1061,8 +1111,15 @@ export default async function DetalleVentaPage({
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><GestionInputValidado name="sds" tipo="SDS" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">PIN / LNVA NRO</label><input name="pin_lnva_nro" defaultValue={gestion?.pin_lnva_nro ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Documentación DNI</label><select name="documentacion_dni" defaultValue={gestion?.documentacion_dni === true ? 'SI' : gestion?.documentacion_dni === false ? 'NO' : ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin informar</option><option value="SI">SI</option><option value="NO">NO</option></select></div>
-                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Medio de despacho CHIP</label><select name="medio_despacho_chip_id" defaultValue={gestion?.medio_despacho_chip_id ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin informar</option>{(mediosDespacho ?? []).map((m: any) => <option key={m.id} value={m.id}>{m.nombre}</option>)}</select></div>
-                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Número de seguimiento</label><input name="numero_seguimiento" defaultValue={gestion?.numero_seguimiento ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <GestionLogisticaChip
+                                medios={(mediosDespacho ?? []).map((m:any)=>({id:Number(m.id),nombre:String(m.nombre??'')}))}
+                                medioInicial={gestion?.medio_despacho_chip_id ?? null}
+                                seguimientoInicial={gestion?.numero_seguimiento ?? null}
+                                idEnvio={gestion?.id_envio ?? null}
+                                legajoEnviado={gestion?.legajo_enviado === true}
+                                esBboo={profile.rol === 'BBOO'}
+                                puedeEditar={puedeEditarProducto}
+                              />
                               <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Observaciones gestión</label><textarea name="observaciones_gestion" defaultValue={gestion?.observaciones_gestion ?? ''} rows={3} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                             </div>
                           )}

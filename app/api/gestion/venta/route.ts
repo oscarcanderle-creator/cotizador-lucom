@@ -43,6 +43,7 @@ type BodyGestionVenta = {
   documentacion_dni?: boolean | null
   medio_despacho_chip_id?: number | null
   numero_seguimiento?: string | null
+  legajo_enviado?: boolean | null
   observaciones_gestion?: string | null
 }
 
@@ -380,6 +381,141 @@ export async function POST(request: Request) {
       const bbooIdEfectivo =
         rolActor === 'BBOO' ? user.id : anteriorProducto?.bboo_id ?? null
 
+      // Permisos finos de logística móvil.
+      // PIN y Medio: Vendedor gestor o BBOO (ADMIN/SUPERVISOR conservan acceso general).
+      // Seguimiento y Legajo Enviado: exclusivamente BBOO.
+      const puedeEditarPinMedio =
+        rolActor === 'BBOO' ||
+        (rolActor === 'VENDEDOR' && actorProducto.puede_gestionar_ventas === true) ||
+        ['ADMIN','SUPERVISOR'].includes(rolActor)
+
+      const pinEfectivo = puedeEditarPinMedio
+        ? body.pin_lnva_nro ?? null
+        : anteriorProducto?.pin_lnva_nro ?? null
+      const medioEfectivo = puedeEditarPinMedio
+        ? body.medio_despacho_chip_id ?? null
+        : anteriorProducto?.medio_despacho_chip_id ?? null
+
+      let seguimientoEfectivo = anteriorProducto?.numero_seguimiento ?? null
+      let legajoEnviadoEfectivo = anteriorProducto?.legajo_enviado ?? false
+      let idEnvioEfectivo: string | null = anteriorProducto?.id_envio ?? null
+
+      let nombreMedio = ''
+      if (medioEfectivo != null) {
+        const { data: medioDb, error: medioDbError } = await adminClient
+          .from('medios_despacho_chip')
+          .select('nombre')
+          .eq('id', medioEfectivo)
+          .maybeSingle()
+        if (medioDbError) {
+          return NextResponse.json({ error: `No se pudo validar el Medio de despacho CHIP: ${medioDbError.message}` }, { status: 400 })
+        }
+        nombreMedio = String(medioDb?.nombre ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()
+      }
+
+      const medioPermiteSeguimiento = ['ANDREANI','CADETERIA','TERRENO'].includes(nombreMedio)
+      const medioGeneraId = ['CADETERIA','TERRENO'].includes(nombreMedio)
+
+      if (rolActor === 'BBOO') {
+        seguimientoEfectivo = medioPermiteSeguimiento ? (body.numero_seguimiento ?? null) : null
+        legajoEnviadoEfectivo = body.legajo_enviado === true
+      }
+
+      if (!medioPermiteSeguimiento && rolActor !== 'BBOO') {
+        // Si un vendedor cambia el medio a uno que no admite seguimiento,
+        // no conserva un seguimiento incompatible.
+        seguimientoEfectivo = null
+      }
+
+      // El ID propio de envío NO nace durante la validación del vendedor.
+      // Solo BBOO lo genera cuando la PORTA ya está CARGADO STL, existe SDS y
+      // el medio es CADETERIA o TERRENO. Andreani usa su propio Seguimiento.
+      let estadoBbooNombre = ''
+      if (estadoBbooEfectivo != null) {
+        const { data: estadoBbooDb, error: estadoBbooError } = await adminClient
+          .from('estados_bboo')
+          .select('nombre')
+          .eq('id', estadoBbooEfectivo)
+          .maybeSingle()
+        if (estadoBbooError) {
+          return NextResponse.json({ error: estadoBbooError.message }, { status: 400 })
+        }
+        estadoBbooNombre = String(estadoBbooDb?.nombre ?? '')
+          .normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()
+      }
+
+      // Seguridad adicional: el envío físico solo nace después de que
+      // el vendedor haya validado previamente la venta.
+      let estadoVendedorNombre = ''
+      if (estadoPortaEfectivo != null) {
+        const { data: estadoVendedorDb, error: estadoVendedorError } = await adminClient
+          .from('estados_porta')
+          .select('nombre')
+          .eq('id', estadoPortaEfectivo)
+          .maybeSingle()
+        if (estadoVendedorError) {
+          return NextResponse.json({ error: estadoVendedorError.message }, { status: 400 })
+        }
+        estadoVendedorNombre = String(estadoVendedorDb?.nombre ?? '')
+          .normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()
+      }
+
+      const estaCargadoStl = estadoBbooNombre === 'CARGADO STL'
+      const ventaValidada = estadoVendedorNombre === 'VENTA VALIDADA'
+      const sdsEnvio = String(body.sds ?? anteriorProducto?.sds ?? '').trim().toUpperCase()
+
+      if (
+        rolActor === 'BBOO' &&
+        medioGeneraId &&
+        estaCargadoStl &&
+        ventaValidada &&
+        sdsEnvio
+      ) {
+        const { data: productosHermanos, error: hermanosError } = await adminClient
+          .from('operacion_productos')
+          .select('id,tipo_producto')
+          .eq('operacion_id', operacionId)
+          .eq('activo', true)
+
+        if (hermanosError) {
+          return NextResponse.json({ error: hermanosError.message }, { status: 400 })
+        }
+
+        const idsPorta = (productosHermanos ?? [])
+          .filter((p:any)=>String(p.tipo_producto??'').toUpperCase()==='PORTA')
+          .map((p:any)=>Number(p.id))
+
+        let nimTitular: string | null = null
+
+        if (idsPorta.length) {
+          const { data: detallesPorta, error: detallePortaError } = await adminClient
+            .from('operacion_producto_movil')
+            .select('producto_operacion_id,nim,numero_linea,linea_titular')
+            .in('producto_operacion_id', idsPorta)
+
+          if (detallePortaError) {
+            return NextResponse.json({ error: detallePortaError.message }, { status: 400 })
+          }
+
+          const titulares=(detallesPorta??[]).filter((d:any)=>d.linea_titular===true)
+
+          // En históricos múltiples sin titular no inventamos una línea.
+          // Se permite guardar; el ID queda pendiente hasta corregir Titular.
+          if (titulares.length === 1) {
+            nimTitular=String(titulares[0].nim ?? titulares[0].numero_linea ?? '').replace(/\D/g,'')
+          }
+        }
+
+        if (nimTitular) {
+          idEnvioEfectivo=`${sdsEnvio}-${nimTitular}`
+        }
+      }
+
+      // Fuera de Cadetería/Terreno no existe ID interno Lucom.
+      if (!medioGeneraId) {
+        idEnvioEfectivo=null
+      }
+
       // Fechas automáticas de gestión móvil.
       // Se registran una sola vez: cambiar posteriormente de estado no borra
       // ni reemplaza la primera fecha alcanzada.
@@ -453,11 +589,13 @@ export async function POST(request: Request) {
         plan_cargado: body.plan_cargado ?? null,
         sds: body.sds ?? null,
         spn: anteriorProducto?.spn ?? null,
-        pin_lnva_nro: body.pin_lnva_nro ?? null,
+        pin_lnva_nro: pinEfectivo,
         documentacion_dni: body.documentacion_dni ?? null,
-        medio_despacho_chip_id: body.medio_despacho_chip_id ?? null,
+        medio_despacho_chip_id: medioEfectivo,
         fecha_porta: fechaPortaEfectiva,
-        numero_seguimiento: body.numero_seguimiento ?? null,
+        numero_seguimiento: seguimientoEfectivo,
+        id_envio: idEnvioEfectivo,
+        legajo_enviado: legajoEnviadoEfectivo,
         observaciones_gestion: body.observaciones_gestion ?? null,
         estado_porta_id: estadoPortaEfectivo,
         estado_bboo_id: estadoBbooEfectivo,
