@@ -286,13 +286,19 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
        </div>
       </div>
      )}
-    </>:<><div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+    </>:<><div className={`grid sm:grid-cols-2 ${s.tipo==='PORTA'?'lg:grid-cols-6':'lg:grid-cols-5'} gap-2.5`}>
      {s.tipo==='PORTA'&&<Selector
       label="Compañía actual"
       name={`nuevo_compania_${i}`}
       opciones={opts(companias)}
       value={companiaPorta}
       onChange={(value)=>setCompaniasPorta(a=>({...a,[s.id]:value}))}
+      required
+     />}
+     {s.tipo==='PORTA'&&<Selector
+      label="PRE / POS"
+      name={`nuevo_modalidad_actual_${i}`}
+      opciones={opts(['POS','PRE'])}
       required
      />}
      {s.tipo==='PORTA'&&<div className="sm:col-span-2">
@@ -328,7 +334,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
       required
      />
      <Selector label="Tipo SIM" name={`nuevo_sim_${i}`} opciones={opts(['ESIM','SIMCARD'])} required/>
-     {s.tipo==='PORTA'&&<Selector label="PRE / POS" name={`nuevo_modalidad_actual_${i}`} opciones={opts(['POS','PRE'])} required/>}
+
     </div>
     {esFwa&&(
      <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
