@@ -387,26 +387,39 @@ export default function CorreccionesVentaPanel({
       )}
 
       {(data.historial ?? []).length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <div className="mb-3 font-semibold text-gray-900">Historial de correcciones</div>
-          <div className="space-y-3">
-            {data.historial.map((h) => (
-              <div key={h.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm">
-                <div className="font-medium text-gray-900">{h.campo}</div>
-                <div className="mt-1 grid gap-1 text-gray-700 md:grid-cols-2">
-                  <div><b>Anterior:</b> {h.valor_anterior || "—"}</div>
-                  <div><b>Nuevo:</b> {h.valor_nuevo || "—"}</div>
+        <details className="group rounded-xl border border-gray-200 bg-white">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 font-semibold text-gray-900">
+            <span>
+              Historial de correcciones
+              <span className="ml-2 text-sm font-normal text-gray-500">
+                ({data.historial.length})
+              </span>
+            </span>
+            <span className="text-gray-400 transition-transform group-open:rotate-180">
+              ▼
+            </span>
+          </summary>
+
+          <div className="border-t border-gray-100 px-4 pb-4 pt-3">
+            <div className="space-y-3">
+              {data.historial.map((h) => (
+                <div key={h.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm">
+                  <div className="font-medium text-gray-900">{h.campo}</div>
+                  <div className="mt-1 grid gap-1 text-gray-700 md:grid-cols-2">
+                    <div><b>Anterior:</b> {h.valor_anterior || "—"}</div>
+                    <div><b>Nuevo:</b> {h.valor_nuevo || "—"}</div>
+                  </div>
+                  {h.motivo && (
+                    <div className="mt-1 text-gray-700"><b>Motivo:</b> {h.motivo}</div>
+                  )}
+                  <div className="mt-1 text-xs text-gray-500">
+                    Modificado por {h.modificado_por_nombre || "Usuario"} el {fecha(h.created_at)}
+                  </div>
                 </div>
-                {h.motivo && (
-                  <div className="mt-1 text-gray-700"><b>Motivo:</b> {h.motivo}</div>
-                )}
-                <div className="mt-1 text-xs text-gray-500">
-                  Modificado por {h.modificado_por_nombre || "Usuario"} el {fecha(h.created_at)}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        </details>
       )}
     </section>
   )

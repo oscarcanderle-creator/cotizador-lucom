@@ -5,6 +5,77 @@ import { useEffect, useMemo, useState } from "react"
 const N=(v:any)=>String(v??"").trim().toUpperCase()
 const input="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
 
+function etiquetaPlanMovil(p:any){
+  const todo=`${p.producto ?? ""} ${p.plan ?? ""}`.toUpperCase().replace(/\s+/g," ").trim()
+  if(todo.includes("FWA") && todo.includes("5G") && /400\s*G/.test(todo)) return "FWA 5G 400G"
+
+  const plan=String(p.plan ?? "").toUpperCase().trim()
+  const m=plan.match(/(?:^|\D)(2|4|7|10|30|50)\s*(?:GB|GIGAS?|G)\b/)
+  return m ? `${m[1]}Gb` : null
+}
+
+function catalogoVisible(lista:any[],tipo:string){
+  const vistos=new Set<string>()
+  const salida:{producto:any;label:string}[]=[]
+
+  for(const p of lista){
+    const prod=N(p.producto)
+    const origen=N(p.origen)
+
+    if(tipo==="BAF"){
+      if(!(prod.includes("INTERNET") || origen==="BAF")) continue
+
+      const label=String(p.plan ?? "").trim()
+      if(!label) continue
+
+      const clave=N(label)
+      if(vistos.has(clave)) continue
+      vistos.add(clave)
+
+      salida.push({producto:p,label})
+      continue
+    }
+
+    if(tipo==="PORTA"){
+      if(prod!=="PORTABILIDAD") continue
+
+      const label=etiquetaPlanMovil(p)
+      if(!label || label==="FWA 5G 400G") continue
+      if(vistos.has(label)) continue
+      vistos.add(label)
+
+      salida.push({producto:p,label})
+      continue
+    }
+
+    const label=etiquetaPlanMovil(p)
+    const esLineaNueva=prod.includes("LINEA NUEVA") || prod.includes("LÍNEA NUEVA")
+    const esFwa=label==="FWA 5G 400G"
+
+    if(!label || (!esLineaNueva && !esFwa)) continue
+    if(vistos.has(label)) continue
+    vistos.add(label)
+
+    salida.push({producto:p,label})
+  }
+
+  const orden=new Map([
+    ["2Gb",1],
+    ["4Gb",2],
+    ["7Gb",3],
+    ["10Gb",4],
+    ["30Gb",5],
+    ["50Gb",6],
+    ["FWA 5G 400G",7],
+  ])
+
+  if(tipo==="PORTA" || tipo==="LINEA_NUEVA"){
+    salida.sort((a,b)=>(orden.get(a.label)??99)-(orden.get(b.label)??99))
+  }
+
+  return salida
+}
+
 export default function EditorDatosVenta({operacionId,sesionToken}:{operacionId:string;sesionToken:string}) {
   const [habilitado,setHabilitado]=useState(false)
   const [data,setData]=useState<any>(null)
@@ -97,18 +168,13 @@ export default function EditorDatosVenta({operacionId,sesionToken}:{operacionId:
 
       {(data.productos??[]).map((p:any)=>{
         const id=Number(p.id),tipo=N(p.tipo_producto),detalle:any=tipo==="BAF"?bafMap.get(id):movMap.get(id)
-        const catalogo=(data.catalogo??[]).filter((c:any)=>{
-          const prod=N(c.producto),origen=N(c.origen)
-          if(tipo==="BAF") return prod.includes("INTERNET")||origen==="BAF"
-          if(tipo==="PORTA") return prod==="PORTABILIDAD"
-          return prod.includes("LINEA NUEVA")||prod.includes("LÍNEA NUEVA")||prod.includes("FWA")
-        })
+        const catalogo=catalogoVisible(data.catalogo??[],tipo)
         return <section key={id} className="rounded-xl bg-white p-4">
           <h3 className="mb-3 font-semibold">{tipo==="BAF"?"Internet":tipo==="PORTA"?"Portabilidad":"Línea Nueva"} #{p.orden}</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="sm:col-span-2"><span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Producto / Plan contratado</span>
               <select className={input} value={p.producto_id??""} onChange={e=>setProd(id,"producto_id",Number(e.target.value))}>
-                {catalogo.map((c:any)=><option key={c.id} value={c.id}>{[c.producto,c.plan,c.origen].filter(Boolean).join(" · ")}</option>)}
+                {catalogo.map((c:any)=><option key={c.producto.id} value={c.producto.id}>{c.label}</option>)}
               </select></label>
             {(tipo==="BAF"
               ? [
@@ -128,8 +194,37 @@ export default function EditorDatosVenta({operacionId,sesionToken}:{operacionId:
             ).map(([label,campo])=>
               <label key={campo}>
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</span>
-                <input className={input} value={detalle?.[campo]??""}
-                  onChange={e=>setDetalle(tipo,id,campo,e.target.value)}/>
+                {(campo==="tv" || campo==="linea_titular") ? (
+                  <select
+                    className={input}
+                    value={
+                      detalle?.[campo] === true ||
+                      N(detalle?.[campo]) === "SI" ||
+                      N(detalle?.[campo]) === "TRUE"
+                        ? "SI"
+                        : "NO"
+                    }
+                    onChange={e=>
+                      setDetalle(
+                        tipo,
+                        id,
+                        campo,
+                        campo==="linea_titular"
+                          ? e.target.value==="SI"
+                          : e.target.value
+                      )
+                    }
+                  >
+                    <option value="NO">NO</option>
+                    <option value="SI">SI</option>
+                  </select>
+                ) : (
+                  <input
+                    className={input}
+                    value={detalle?.[campo]??""}
+                    onChange={e=>setDetalle(tipo,id,campo,e.target.value)}
+                  />
+                )}
               </label>
             )}
           </div>

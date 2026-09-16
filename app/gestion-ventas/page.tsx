@@ -112,6 +112,32 @@ function tiposOperacion(operacion: any): string[] {
 }
 
 function tipoVisible(operacion: any) {
+  const productos = Array.isArray(operacion.productos_nuevos)
+    ? operacion.productos_nuevos
+    : []
+
+  if (productos.length > 0) {
+    const tieneBaf = productos.some(
+      (p: any) => p.tipo_producto === 'BAF'
+    )
+
+    const moviles = productos.filter(
+      (p: any) =>
+        p.tipo_producto === 'PORTA' ||
+        p.tipo_producto === 'LINEA_NUEVA'
+    )
+
+    // BAF + al menos una línea móvil
+    if (tieneBaf && moviles.length > 0) {
+      return 'Venta Multiproducto'
+    }
+
+    // Dos o más líneas móviles sin BAF
+    if (!tieneBaf && moviles.length >= 2) {
+      return 'Líneas Múltiples'
+    }
+  }
+
   return tiposOperacion(operacion).join(' + ')
 }
 
@@ -1211,7 +1237,14 @@ export default async function GestionVentasPage({
           </p>
         </div>
 
-        <ExportarVentas puedeExportar={profile.rol === 'BBOO' || profile.rol === 'SUPERVISOR' || profile.rol === 'ADMIN'} />
+        <ExportarVentas
+          puedeExportar={
+            profile.rol === 'BBOO' ||
+            profile.rol === 'SUPERVISOR' ||
+            profile.rol === 'ADMIN' ||
+            (profile.rol === 'VENDEDOR' && profile.puede_gestionar_ventas === true)
+          }
+        />
 
         <BandejasGestionVentas
           bandejas={(bandejasResultado ?? []).map((b: any) => ({

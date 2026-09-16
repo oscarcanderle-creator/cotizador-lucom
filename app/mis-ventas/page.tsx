@@ -104,6 +104,28 @@ function etiquetaTipoProducto(tipo: string) {
   return tipo
 }
 
+function etiquetaOperacion(productos: ProductoNuevo[]) {
+  const tieneBaf = productos.some(
+    (p) => p.tipo_producto === 'BAF'
+  )
+
+  const moviles = productos.filter(
+    (p) =>
+      p.tipo_producto === 'PORTA' ||
+      p.tipo_producto === 'LINEA_NUEVA'
+  )
+
+  if (tieneBaf && moviles.length > 0) {
+    return 'Venta Multiproducto'
+  }
+
+  if (!tieneBaf && moviles.length >= 2) {
+    return 'Líneas Múltiples'
+  }
+
+  return null
+}
+
 function resumenProducto(producto: ProductoNuevo) {
   const tipo = etiquetaTipoProducto(producto.tipo_producto)
   const plan = String(producto.plan_snapshot ?? '').trim()
@@ -507,6 +529,12 @@ export default async function MisVentasPage({
                       <td className="min-w-[300px] px-4 py-4">
                         {esNuevaArquitectura ? (
                           <div className="space-y-2">
+                            {etiquetaOperacion(productos) && (
+                              <div className="mb-2 text-sm font-bold text-gray-800">
+                                {etiquetaOperacion(productos)}
+                              </div>
+                            )}
+
                             {productos.map((producto) => (
                               <div
                                 key={producto.id}

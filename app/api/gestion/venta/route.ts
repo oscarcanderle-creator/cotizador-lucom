@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '../../../../utils/supabase/admin'
 import { createClient } from '../../../../utils/supabase/server'
 import { enviarEmailGmail } from '../../../../utils/google/gmail'
+import { validarSimGestion } from '@/lib/validarSim'
 
 export const runtime = 'nodejs'
 
@@ -368,6 +369,49 @@ export async function POST(request: Request) {
         updated_by: user.id,
       }
     } else {
+      // ------------------------------------------------------------
+      // SIM operativo
+      // tipo_sim = acuerdo comercial original: ESIM / SIMCARD
+      // sim      = SIM operativo: ESIM o ICCID físico de 19 dígitos
+      // ------------------------------------------------------------
+      const { data: detalleMovil, error: detalleMovilError } = await adminClient
+        .from('operacion_producto_movil')
+        .select('tipo_sim')
+        .eq('producto_operacion_id', productoOperacionId)
+        .maybeSingle()
+
+      if (detalleMovilError) {
+        return NextResponse.json(
+          { error: `No se pudo validar el Tipo SIM: ${detalleMovilError.message}` },
+          { status: 400 }
+        )
+      }
+
+      const tipoSimOriginal = String(detalleMovil?.tipo_sim ?? '')
+        .trim()
+        .toUpperCase()
+
+      let simEfectivo: string | null = null
+
+      if (tipoSimOriginal === 'ESIM') {
+        simEfectivo = 'ESIM'
+      } else {
+        const validacionSim = await validarSimGestion(
+          adminClient,
+          body.sim,
+          productoOperacionId
+        )
+
+        if (!validacionSim.ok) {
+          return NextResponse.json(
+            { error: validacionSim.error },
+            { status: 409 }
+          )
+        }
+
+        simEfectivo = validacionSim.sim
+      }
+
       const estadoPortaEfectivo =
         rolActor === 'BBOO'
           ? anteriorProducto?.estado_porta_id ?? null
@@ -585,7 +629,7 @@ export async function POST(request: Request) {
         responsable_id: responsableNuevo,
         bboo_id: bbooIdEfectivo,
         fecha_carga_stl: fechaCargaStlEfectiva,
-        sim: body.sim ?? null,
+        sim: simEfectivo,
         plan_cargado: body.plan_cargado ?? null,
         sds: body.sds ?? null,
         spn: anteriorProducto?.spn ?? null,

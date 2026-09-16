@@ -47,14 +47,20 @@ export default function RecuperarPasswordPage() {
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-red-600">
-            Claro
-          </h1>
+        <div className="mb-8 text-center">
+          <img
+            src="/logo-lucom.png"
+            alt="Grupo Lucom"
+            className="mx-auto mb-5 h-auto w-60 object-contain"
+          />
 
-          <p className="text-gray-500 mt-1">
-            Cotizador Comercial
-          </p>
+          <div className="text-xl font-bold text-slate-800">
+            Plataforma de Gestión de Ventas
+          </div>
+
+          <div className="mt-1 text-lg font-bold text-slate-800">
+            Grupo Lucom
+          </div>
         </div>
 
         <h2 className="text-xl font-semibold text-gray-800 mb-2">

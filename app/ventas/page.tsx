@@ -109,9 +109,18 @@ export default async function VentasPage(){
      const {error}=await admin.from('operacion_producto_movil').insert({producto_operacion_id:op.id,numero_linea:s.tipo==='PORTA'?s.nim:null,nim:s.tipo==='PORTA'?s.nim:null,compania_actual:s.tipo==='PORTA'?s.compania:null,modalidad_actual:s.tipo==='PORTA'?s.modalidadActual:null,tipo_sim:s.sim||null,linea_titular:s.tipo==='PORTA'?s.lineaTitular:false,es_fwa:esFwa,forma_pago_modem:esFwa?s.pagoModem:null,cuotas_modem:esFwa?s.cuotasModem:null,precio_modem_snapshot:esFwa?precioModemActual:null});if(error)throw error;const {error:eg}=await admin.from('gestion_producto_movil').insert({producto_operacion_id:op.id,responsable_id:null});if(eg)throw eg}
    }
    const esFull=moviles.length>0&&(!!productoBafId||!!servicioBafExistenteId);if(esFull){const modalidad=productoBafId?'BAF_NUEVO':'BAF_EXISTENTE';const cantidad=1+moviles.length;const {error}=await admin.from('operacion_contexto_comercial').insert({operacion_id:idOperacion,es_conexion_full:true,modalidad_conexion_full:modalidad,servicio_existente_id:productoBafId?null:servicioBafExistenteId,producto_baf_id:productoBafId,tipo_referencia_habilitante:productoBafId?'OT':'COMBO',referencia_habilitante:productoBafId?null:'COMBO',cantidad_servicios:cantidad,descuento_convergencia:cantidad>=3?5000:4000,created_by:user.id,updated_by:user.id});if(error)throw error}
+   const esVentaMultiproducto=!!productoBafId&&moviles.length>0
+   const esLineasMultiples=!productoBafId&&moviles.length>=2
+
+   const mensajeSimple=esVentaMultiproducto
+    ? 'Venta multiproducto guardada correctamente.'
+    : esLineasMultiples
+      ? 'Líneas múltiples guardadas correctamente.'
+      : 'Venta guardada correctamente.'
+
    const mensajeGuardado=cargaItecSolicitada
     ? (esFull?'Venta guardada por ITEC. BAF registrado con estado CARGADO y OT disponible para el circuito de Conexión Full.':'Venta guardada por ITEC. BAF registrado directamente con estado CARGADO.')
-    : (esFull?(productoBafId?'Venta guardada. Conexión Full detectada: la gestión móvil quedará pendiente hasta contar con OT.':'Venta guardada. Conexión Full con BAF existente: referencia COMBO.'):'Venta multiproducto guardada correctamente.')
+    : (esFull?(productoBafId?'Venta guardada. Conexión Full detectada: la gestión móvil quedará pendiente hasta contar con OT.':'Venta guardada. Conexión Full con BAF existente: referencia COMBO.'):mensajeSimple)
    return{ok:true,mensaje:mensajeGuardado,idOperacion}
   }catch(error){console.error(error);if(operacionCreada)await admin.from('operaciones').delete().eq('id_operacion',idOperacion);else if(serviciosCreados.length)await admin.from('cliente_servicios').delete().in('id',serviciosCreados);return{ok:false,mensaje:error instanceof Error?error.message:'No se pudo guardar la venta.'}}
  }

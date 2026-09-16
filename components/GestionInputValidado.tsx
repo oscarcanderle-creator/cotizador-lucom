@@ -6,6 +6,7 @@ type Props = {
   tipo: 'SDS' | 'OT' | 'SIM'
   className?: string
   placeholder?: string
+  esEsim?: boolean
 }
 
 export default function GestionInputValidado({
@@ -14,6 +15,7 @@ export default function GestionInputValidado({
   tipo,
   className,
   placeholder,
+  esEsim = false,
 }: Props) {
   const configurar = () => {
     if (tipo === 'SDS') {
@@ -46,19 +48,23 @@ export default function GestionInputValidado({
   }
 
   const cfg = configurar()
+  const esim = tipo === 'SIM' && esEsim
 
   return (
     <input
       type="text"
       name={name}
-      inputMode={tipo === 'SDS' ? 'text' : 'numeric'}
-      defaultValue={defaultValue ?? ''}
-      maxLength={cfg.maxLength}
-      pattern={cfg.pattern}
-      title={cfg.title}
+      inputMode={esim ? 'text' : tipo === 'SDS' ? 'text' : 'numeric'}
+      defaultValue={esim ? 'ESIM' : defaultValue ?? ''}
+      maxLength={esim ? undefined : cfg.maxLength}
+      pattern={esim ? undefined : cfg.pattern}
+      title={esim ? 'Tipo SIM acordado: ESIM' : cfg.title}
       placeholder={placeholder}
+      readOnly={esim}
       onInput={(e) => {
-        e.currentTarget.value = cfg.normalizar(e.currentTarget.value)
+        if (!esim) {
+          e.currentTarget.value = cfg.normalizar(e.currentTarget.value)
+        }
       }}
       className={className}
     />

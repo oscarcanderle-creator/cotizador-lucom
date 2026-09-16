@@ -18,10 +18,14 @@ export async function POST(request: Request){
     const supabase=await createClient()
     const {data:{user}}=await supabase.auth.getUser()
     if(!user) return NextResponse.json({error:'No autenticado.'},{status:401})
-    const {data:profile}=await supabase.from('profiles').select('rol, activo').eq('id',user.id).maybeSingle()
+    const {data:profile}=await supabase.from('profiles').select('rol, activo, puede_gestionar_ventas').eq('id',user.id).maybeSingle()
     if(!profile?.activo) return NextResponse.json({error:'Usuario inactivo.'},{status:403})
     const rol=String(profile.rol||'').toUpperCase()
-    if(!['BBOO','SUPERVISOR','ADMIN'].includes(rol)) return NextResponse.json({error:'No tiene permisos para exportar ventas.'},{status:403})
+    const puedeExportar =
+      ['BBOO','SUPERVISOR','ADMIN'].includes(rol) ||
+      (rol === 'VENDEDOR' && profile.puede_gestionar_ventas === true)
+
+    if(!puedeExportar) return NextResponse.json({error:'No tiene permisos para exportar ventas.'},{status:403})
 
     const body=await request.json().catch(()=>({}))
     const desde=String(body.desde??''); const hasta=String(body.hasta??'')

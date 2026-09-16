@@ -327,7 +327,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
       }}
       required
      />
-     <Selector label="SIM" name={`nuevo_sim_${i}`} opciones={opts(['ESIM','SIMCARD'])} required/>
+     <Selector label="Tipo SIM" name={`nuevo_sim_${i}`} opciones={opts(['ESIM','SIMCARD'])} required/>
      {s.tipo==='PORTA'&&<Selector label="PRE / POS" name={`nuevo_modalidad_actual_${i}`} opciones={opts(['POS','PRE'])} required/>}
     </div>
     {esFwa&&(
