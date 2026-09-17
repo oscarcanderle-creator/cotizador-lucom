@@ -25,9 +25,22 @@ type EstadoCatalogo = {
   tipo_pedido_id?: number | null
 }
 
+type VentaRellamado = {
+  id_operacion: string
+  fecha_hora: string
+  vendedor: string
+  cliente: {
+    dni: string | null
+    nombre: string | null
+    apellido: string | null
+    telefono: string | null
+  } | null
+}
+
 type Consulta = {
   id: number
   marca_temporal: string
+  operacion_id: string | null
   vendedor_id: string
   cliente: string | null
   dni: string | null
@@ -100,6 +113,7 @@ const ETIQUETAS_CONSULTA: Record<string, string> = {
   DEUDA_CLIENTE: 'Deuda (Cliente)',
   DOMICILIO_COBERTURA: 'Cobertura BAF (domicilio)',
   DOMICILIO_DEUDA: 'Deuda y Cobertura',
+  RELLAMADO_VENTA_GESTION: 'Rellamado Venta en Gestión',
 }
 
 const ETIQUETAS_PEDIDO: Record<string, string> = {
@@ -150,6 +164,9 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
   const [entrecalles, setEntrecalles] = useState('')
   const [localidad, setLocalidad] = useState('')
   const [observacionesConsulta, setObservacionesConsulta] = useState('')
+  const [ventasRellamado, setVentasRellamado] = useState<VentaRellamado[]>([])
+  const [operacionRellamadoId, setOperacionRellamadoId] = useState('')
+  const [busquedaVentaRellamado, setBusquedaVentaRellamado] = useState('')
 
   const [tipoPedidoId, setTipoPedidoId] = useState('')
   const [dniPedido, setDniPedido] = useState('')
@@ -224,6 +241,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
         .select(`
           id,
           marca_temporal,
+          operacion_id,
           vendedor_id,
           cliente,
           dni,
@@ -291,6 +309,33 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
 
     setTiposConsulta(tc.data || [])
     setTiposPedido(tp.data || [])
+
+    const { data: ventasPropias, error: ventasError } = await supabase
+      .from('operaciones')
+      .select(`
+        id_operacion,
+        fecha_hora,
+        vendedor,
+        cliente:clientes (
+          dni,
+          nombre,
+          apellido,
+          telefono
+        )
+      `)
+      .eq('usuario_id', userId)
+      .in('tipo', ['BAF', 'PORTA'])
+      .order('fecha_hora', { ascending: false })
+
+    if (ventasError) {
+      setError(ventasError.message)
+      setCargando(false)
+      return
+    }
+
+    setVentasRellamado(
+      (ventasPropias || []) as unknown as VentaRellamado[]
+    )
     setEstadosConsulta((ec.data || []) as EstadoCatalogo[])
     setEstadosPedido((ep.data || []) as EstadoCatalogo[])
 
@@ -311,6 +356,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
           .select(`
             id,
             marca_temporal,
+            operacion_id,
             vendedor_id,
             cliente,
             dni,
@@ -437,6 +483,8 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     setEntrecalles('')
     setLocalidad('')
     setObservacionesConsulta('')
+    setOperacionRellamadoId('')
+    setBusquedaVentaRellamado('')
   }
 
   function limpiarPedido() {
@@ -461,12 +509,52 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     setCantPreventas('')
   }
 
+  const consultaSeleccionada = tiposConsulta.find(
+    (x) => String(x.id) === tipoConsultaId
+  )
+
+  const esConsultaRellamado =
+    consultaSeleccionada?.codigo === 'RELLAMADO_VENTA_GESTION'
+
+  const ventasRellamadoFiltradas = (() => {
+    const q = busquedaVentaRellamado.trim().toLowerCase()
+
+    if (!q) return []
+
+    return ventasRellamado
+      .filter((venta) => {
+        const nombreCompleto = [
+          venta.cliente?.nombre,
+          venta.cliente?.apellido,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+
+        const dni = (venta.cliente?.dni || '').toLowerCase()
+        const telefono = (venta.cliente?.telefono || '').toLowerCase()
+        const operacion = venta.id_operacion.toLowerCase()
+
+        return (
+          nombreCompleto.includes(q) ||
+          dni.includes(q) ||
+          telefono.includes(q) ||
+          operacion.includes(q)
+        )
+      })
+      .slice(0, 10)
+  })()
+
   async function guardarConsulta(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setMensaje('')
 
     if (!tipoConsultaId) return setError('Seleccioná el tipo de Consulta.')
+
+    if (esConsultaRellamado && !operacionRellamadoId) {
+      return setError('Seleccioná la venta que necesita el Rellamado.')
+    }
     if (!validarTelefono(telefonoConsulta)) {
       return setError('El teléfono debe tener exactamente 10 dígitos y no puede comenzar con 0 ni 5.')
     }
@@ -476,6 +564,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     const { error: insertError } = await supabase.from('consultas').insert({
       tipo_consulta_id: Number(tipoConsultaId),
       vendedor_id: userId,
+      operacion_id: esConsultaRellamado ? operacionRellamadoId : null,
       cliente: normalizar(cliente),
       dni: normalizar(dni),
       telefono: telefonoConsulta,
@@ -880,7 +969,98 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                   </select>
                 </Campo>
 
-                <Campo label="Teléfono *">
+                {esConsultaRellamado && (
+                  <div className="md:col-span-2 space-y-3">
+                    <Campo label="Buscar mi venta *">
+                      <input
+                        type="text"
+                        value={busquedaVentaRellamado}
+                        onChange={(e) => {
+                          setBusquedaVentaRellamado(e.target.value)
+                          setOperacionRellamadoId('')
+                        }}
+                        className={inputClass}
+                        placeholder="Cliente, DNI, teléfono o N° de operación"
+                      />
+                    </Campo>
+
+                    {busquedaVentaRellamado.trim() && !operacionRellamadoId && (
+                      <div className="space-y-2">
+                        {ventasRellamadoFiltradas.length === 0 ? (
+                          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+                            No se encontraron ventas propias con ese criterio.
+                          </div>
+                        ) : (
+                          ventasRellamadoFiltradas.map((venta) => {
+                            const nombreCompleto = [
+                              venta.cliente?.nombre,
+                              venta.cliente?.apellido,
+                            ]
+                              .filter(Boolean)
+                              .join(' ')
+
+                            return (
+                              <button
+                                key={venta.id_operacion}
+                                type="button"
+                                onClick={() => {
+                                  setOperacionRellamadoId(venta.id_operacion)
+
+                                  setCliente(nombreCompleto)
+                                  setDni(venta.cliente?.dni || '')
+                                  setTelefonoConsulta(
+                                    (venta.cliente?.telefono || '')
+                                      .replace(/\D/g, '')
+                                      .slice(0, 10)
+                                  )
+                                }}
+                                className="w-full rounded-lg border border-gray-200 bg-white p-3 text-left hover:border-red-300 hover:bg-red-50"
+                              >
+                                <div className="font-semibold text-gray-900">
+                                  {nombreCompleto || 'Sin nombre'}
+                                </div>
+                                <div className="mt-1 text-sm text-gray-600">
+                                  DNI {venta.cliente?.dni || 's/d'} · Tel. {venta.cliente?.telefono || 's/d'}
+                                </div>
+                                <div className="mt-1 text-xs text-gray-500">
+                                  Operación {venta.id_operacion}
+                                </div>
+                              </button>
+                            )
+                          })
+                        )}
+                      </div>
+                    )}
+
+                    {operacionRellamadoId && (
+                      <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-green-700">
+                          Venta seleccionada
+                        </div>
+                        <div className="mt-1 font-semibold text-gray-900">
+                          {cliente || 'Sin nombre'}
+                        </div>
+                        <div className="mt-1 text-sm text-gray-700">
+                          DNI {dni || 's/d'} · Operación {operacionRellamadoId}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOperacionRellamadoId('')
+                            setCliente('')
+                            setDni('')
+                            setTelefonoConsulta('')
+                          }}
+                          className="mt-2 text-sm font-semibold text-red-600 hover:text-red-700"
+                        >
+                          Cambiar venta
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <Campo label={esConsultaRellamado ? "Teléfono para el Rellamado *" : "Teléfono *"}>
                   <input required inputMode="numeric" maxLength={10} value={telefonoConsulta} onChange={(e) => setTelefonoConsulta(e.target.value.replace(/\D/g, '').slice(0, 10))} className={inputClass} placeholder="10 dígitos" />
                 </Campo>
 
@@ -892,6 +1072,8 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                   <input value={dni} onChange={(e) => setDni(e.target.value)} className={inputClass} />
                 </Campo>
 
+                {!esConsultaRellamado && (
+                  <>
                 <Campo label="Tipo de domicilio">
                   <select value={tipoDomicilioConsulta} onChange={(e) => setTipoDomicilioConsulta(e.target.value)} className={inputClass}>
                     <option value="">Seleccionar...</option>
@@ -910,6 +1092,8 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                 <Campo label="Localidad">
                   <input value={localidad} onChange={(e) => setLocalidad(e.target.value)} className={inputClass} />
                 </Campo>
+                  </>
+                )}
               </div>
 
               <Campo label="Observaciones">
