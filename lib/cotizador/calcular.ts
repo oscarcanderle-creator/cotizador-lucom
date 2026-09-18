@@ -382,7 +382,9 @@ export function calcularCotizacion(
           'CONEXION_FULL',
 
         beneficiosNormal:
-          linea.beneficiosNormal,
+          tipoDescuento === 'CONEXION_FULL'
+            ? null
+            : linea.beneficiosNormal,
       }
     })
 
