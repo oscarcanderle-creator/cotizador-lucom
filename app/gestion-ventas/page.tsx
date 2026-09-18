@@ -1704,7 +1704,7 @@ export default async function GestionVentasPage({
             iniciales={filtrosAvanzados}
           />
 
-          <div className="flex items-end gap-2 md:col-span-2 xl:col-span-6">
+          <div className="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-6">
             <button
               type="submit"
               className={`rounded-lg bg-red-600 px-5 py-2 font-semibold text-white hover:bg-red-700 ${
@@ -1728,7 +1728,7 @@ export default async function GestionVentasPage({
           {ventas.length} {ventas.length === 1 ? 'registro' : 'registros'}
         </div>
 
-        <div className="hidden overflow-x-auto rounded-2xl border border-gray-200 bg-white md:block">
+        <div className="hidden overflow-x-auto rounded-2xl border border-gray-200 bg-white lg:block">
           <table
             className="table-fixed text-left text-[13px]"
             style={{ width: `${anchoTabla}px`, minWidth: '100%' }}
@@ -1831,7 +1831,7 @@ export default async function GestionVentasPage({
           </table>
         </div>
 
-        <div className="space-y-3 md:hidden">
+        <div className="space-y-3 lg:hidden">
           {ventas.map((operacion: any) => (
             <div
               key={
