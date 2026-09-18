@@ -12,6 +12,7 @@ type FiltroAvanzado = {
 }
 
 type FiltrosGuardados = {
+  registro?: string
   tipo?: string
   vendedor?: string
   responsable?: string
@@ -36,6 +37,7 @@ function hrefBandeja(bandeja: Bandeja) {
   const params = new URLSearchParams()
   const filtros = bandeja.filtros ?? {}
 
+  if (filtros.registro) params.set('registro', filtros.registro)
   if (filtros.tipo) params.set('tipo', filtros.tipo)
   if (filtros.vendedor) params.set('vendedor', filtros.vendedor)
   if (filtros.responsable) params.set('responsable', filtros.responsable)

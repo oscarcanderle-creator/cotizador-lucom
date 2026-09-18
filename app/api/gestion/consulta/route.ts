@@ -18,6 +18,7 @@ type ConsultaGestion = {
   entrecalles: string | null
   localidad: string | null
   observaciones: string | null
+  estado_consulta_id: number | null
   estado_deuda_id: number | null
   estado_cobertura_id: number | null
 }
@@ -38,6 +39,7 @@ type BodyGestionConsulta = {
   entrecalles: string | null
   localidad: string | null
   observaciones: string | null
+  estado_consulta_id: number | null
   estado_deuda_id: number | null
   estado_cobertura_id: number | null
 }
@@ -54,6 +56,7 @@ const CAMPOS_CONSULTA = `
   entrecalles,
   localidad,
   observaciones,
+  estado_consulta_id,
   estado_deuda_id,
   estado_cobertura_id
 `
@@ -69,6 +72,7 @@ const ETIQUETAS_TIPO_CONSULTA: Record<string, string> = {
   DEUDA_CLIENTE: 'Consulta Deuda Cliente',
   DOMICILIO_COBERTURA: 'Consulta Cobertura BAF',
   DOMICILIO_DEUDA: 'Consulta Deuda Cliente + Cobertura BAF',
+  RELLAMADO_VENTA_GESTION: 'Rellamado Venta en Gestión',
 }
 
 function texto(valor: unknown) {
@@ -200,6 +204,7 @@ export async function POST(request: Request) {
       p_entrecalles: body.entrecalles,
       p_localidad: body.localidad,
       p_observaciones: body.observaciones,
+      p_estado_consulta_id: body.estado_consulta_id,
       p_estado_deuda_id: body.estado_deuda_id,
       p_estado_cobertura_id: body.estado_cobertura_id,
     }
@@ -238,6 +243,8 @@ export async function POST(request: Request) {
   const idsEstado = Array.from(
     new Set(
       [
+        anterior.estado_consulta_id,
+        posterior.estado_consulta_id,
         anterior.estado_deuda_id,
         posterior.estado_deuda_id,
         anterior.estado_cobertura_id,
@@ -295,6 +302,13 @@ export async function POST(request: Request) {
   agregarCambio('Entre calles', anterior.entrecalles, posterior.entrecalles)
   agregarCambio('Localidad', anterior.localidad, posterior.localidad)
   agregarCambio('Observaciones', anterior.observaciones, posterior.observaciones)
+  agregarCambio(
+    'Estado Consulta',
+    anterior.estado_consulta_id,
+    posterior.estado_consulta_id,
+    nombreEstado
+  )
+
   agregarCambio(
     'Estado Deuda',
     anterior.estado_deuda_id,

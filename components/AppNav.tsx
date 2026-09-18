@@ -40,6 +40,30 @@ type Props = {
 
 }
 
+let perfilGrupoPromise: Promise<any> | null = null
+
+function cargarPerfilGrupoCompartido() {
+  if (!perfilGrupoPromise) {
+    perfilGrupoPromise = fetch('/api/ventas-grupo/perfil', {
+      method: 'GET',
+      cache: 'no-store',
+    })
+      .then(async (respuesta) => {
+        if (!respuesta.ok) {
+          throw new Error('No se pudo cargar el perfil de grupo')
+        }
+
+        return respuesta.json()
+      })
+      .catch((error) => {
+        perfilGrupoPromise = null
+        throw error
+      })
+  }
+
+  return perfilGrupoPromise
+}
+
 const items = [
 
   { key: 'VENTAS', label: 'Ventas', href: '/ventas', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN', 'BBOO', 'TERRENO'] },
@@ -196,29 +220,7 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
 
       try {
 
-        const respuesta = await fetch('/api/ventas-grupo/perfil', {
-
-          method: 'GET',
-
-          cache: 'no-store',
-
-        })
-
-        if (!respuesta.ok) {
-
-          if (activo) {
-
-            setSiglaVendedor(null)
-
-            setPerfilGrupoCargado(true)
-
-          }
-
-          return
-
-        }
-
-        const datos = await respuesta.json()
+        const datos = await cargarPerfilGrupoCompartido()
 
         if (activo) {
 

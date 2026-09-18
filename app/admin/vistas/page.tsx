@@ -85,10 +85,30 @@ async function restaurarVista(formData: FormData) {
 
   if (catalogoError) throw new Error(`No se pudo cargar el catálogo: ${catalogoError.message}`)
 
-  const visiblesBase = new Set([
-    'fecha_ingreso','tipo','vendedor','responsable','cliente',
-    'numero_linea','plan_cargado','estado_vendedor','estado_bboo',
-  ])
+  const visiblesBase =
+    rol === 'VENDEDOR'
+      ? new Set([
+          'fecha_ingreso',
+          'registro',
+          'tipo',
+          'vendedor',
+          'responsable',
+          'cliente',
+          'dni',
+          'telefono',
+          'estado',
+        ])
+      : new Set([
+          'fecha_ingreso',
+          'tipo',
+          'vendedor',
+          'responsable',
+          'cliente',
+          'numero_linea',
+          'plan_cargado',
+          'estado_vendedor',
+          'estado_bboo',
+        ])
 
   const filas = (catalogo ?? []).map((item) => ({
     rol,
@@ -125,7 +145,7 @@ export default async function AdministradorVistasPage({
     await Promise.all([
       supabase
         .from('catalogo_columnas_gestion_ventas')
-        .select('campo, etiqueta_default, ancho_default, orden_default, aplica_baf, aplica_porta, aplica_ln')
+        .select('campo, etiqueta_default, ancho_default, orden_default, aplica_baf, aplica_porta, aplica_ln, aplica_consulta')
         .eq('activo', true)
         .order('orden_default'),
       supabase
@@ -200,7 +220,7 @@ export default async function AdministradorVistasPage({
                         className="w-24 rounded-lg border border-gray-300 px-3 py-2" />
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">
-                      {[fila.aplica_baf && 'BAF', fila.aplica_porta && 'PORTA', fila.aplica_ln && 'LN'].filter(Boolean).join(' · ')}
+                      {[fila.aplica_baf && 'BAF', fila.aplica_porta && 'PORTA', fila.aplica_ln && 'LN', fila.aplica_consulta && 'CONSULTA'].filter(Boolean).join(' · ')}
                     </td>
                   </tr>
                 ))}

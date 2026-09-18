@@ -16,14 +16,20 @@ type Props = {
   responsables: string[]
   mediosDespacho: string[]
   companias: string[]
+  tiposConsulta?: string[]
   iniciales?: Filtro[]
 }
 
 const CAMPOS = [
+  ['registro', 'Registro'],
   ['estado', 'Estado'],
   ['tipo', 'Tipo'],
   ['vendedor', 'Vendedor'],
   ['responsable', 'Responsable'],
+  ['domicilio', 'Domicilio'],
+  ['localidad', 'Localidad'],
+  ['operacion_vinculada', 'Operación vinculada'],
+  ['observaciones', 'Observaciones'],
   ['medio_despacho', 'Medio de despacho'],
   ['tipo_sim', 'Tipo SIM'],
   ['compania_actual', 'Compañía actual'],
@@ -61,7 +67,15 @@ function condiciones(campo: string) {
     ]
   }
 
-  if (campo === 'numero_seguimiento') {
+  if (
+    [
+      'numero_seguimiento',
+      'domicilio',
+      'localidad',
+      'operacion_vinculada',
+      'observaciones',
+    ].includes(campo)
+  ) {
     return [
       ['contiene', 'contiene'],
       ['es', 'es'],
@@ -94,6 +108,7 @@ export default function FiltrosAvanzadosVentas({
   responsables,
   mediosDespacho,
   companias,
+  tiposConsulta = [],
   iniciales = [],
 }: Props) {
   const [filtros, setFiltros] = useState<Filtro[]>(
@@ -109,8 +124,9 @@ export default function FiltrosAvanzadosVentas({
   }
 
   const opcionesValor = (campo: string) => {
+    if (campo === 'registro') return ['VENTA', 'CONSULTA']
     if (campo === 'estado') return estados
-    if (campo === 'tipo') return ['BAF', 'PORTA', 'LN']
+    if (campo === 'tipo') return ['BAF', 'PORTA', 'LN', ...tiposConsulta]
     if (campo === 'vendedor') return vendedores
     if (campo === 'responsable') return responsables.filter((v) => v !== 'Sin responsable')
     if (campo === 'medio_despacho') return mediosDespacho
@@ -216,13 +232,29 @@ export default function FiltrosAvanzadosVentas({
                         />
                       )}
                     </>
-                  ) : filtro.campo === 'numero_seguimiento' ? (
+                  ) : [
+                    'numero_seguimiento',
+                    'domicilio',
+                    'localidad',
+                    'operacion_vinculada',
+                    'observaciones',
+                  ].includes(filtro.campo) ? (
                     <input
                       type="text"
                       name={`f${indice + 1}_value`}
                       value={filtro.valor}
                       onChange={(e) => cambiar(indice, { valor: e.target.value })}
-                      placeholder="Número de seguimiento..."
+                      placeholder={
+                        filtro.campo === 'numero_seguimiento'
+                          ? 'Número de seguimiento...'
+                          : filtro.campo === 'domicilio'
+                            ? 'Domicilio...'
+                            : filtro.campo === 'localidad'
+                              ? 'Localidad...'
+                              : filtro.campo === 'operacion_vinculada'
+                                ? 'Operación vinculada...'
+                                : 'Observaciones...'
+                      }
                       className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900"
                     />
                   ) : (

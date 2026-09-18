@@ -8,6 +8,7 @@ import ExportarVentas from '../../components/ExportarVentas'
 
 type SearchParams = Promise<{
   q?: string
+  registro?: string
   tipo?: string
   vendedor?: string
   responsable?: string
@@ -301,6 +302,7 @@ export default async function GestionVentasPage({
 
   const params = await searchParams
   const q = String(params?.q ?? '').trim().toLowerCase()
+  const filtroRegistro = String(params?.registro ?? '').trim().toUpperCase()
   const filtroTipo = String(params?.tipo ?? '').trim().toUpperCase()
   const filtroVendedor = String(params?.vendedor ?? '').trim()
   const filtroResponsable = String(params?.responsable ?? '').trim()
@@ -335,6 +337,40 @@ export default async function GestionVentasPage({
     throw new Error(`No se pudieron cargar las ventas: ${error.message}`)
   }
 
+  const { data: consultasBase, error: errorConsultas } = esVendedorGestor
+    ? await admin
+        .from('consultas')
+        .select(`
+          id,
+          marca_temporal,
+          tipo_consulta_id,
+          vendedor_id,
+          responsable_id,
+          cliente_id,
+          cliente,
+          dni,
+          telefono,
+          tipo_domicilio,
+          domicilio,
+          entrecalles,
+          localidad,
+          observaciones,
+          estado_consulta_id,
+          estado_deuda_id,
+          estado_cobertura_id,
+          fecha_estado,
+          fecha_gestion,
+          operacion_id
+        `)
+        .order('marca_temporal', { ascending: false })
+    : { data: [], error: null }
+
+  if (errorConsultas) {
+    throw new Error(`No se pudieron cargar las consultas: ${errorConsultas.message}`)
+  }
+
+  const consultas = consultasBase ?? []
+
   const operaciones = operacionesBase ?? []
   const idsOperaciones = operaciones.map((o: any) => o.id_operacion)
   const idsClientes = Array.from(
@@ -354,6 +390,8 @@ export default async function GestionVentasPage({
     perfilesResultado,
     mediosDespachoResultado,
     productosNuevosResultado,
+    tiposConsultaResultado,
+    estadosConsultaResultado,
   ] = await Promise.all([
     idsClientes.length > 0
       ? admin
@@ -416,6 +454,16 @@ export default async function GestionVentasPage({
           .eq('activo', true)
           .order('orden', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
+    admin
+      .from('tipos_consulta')
+      .select('id, codigo, nombre')
+      .eq('activo', true)
+      .order('orden', { ascending: true }),
+    admin
+      .from('estados_consulta')
+      .select('id, codigo, nombre, tipo_estado, ambito')
+      .eq('activo', true)
+      .order('orden', { ascending: true }),
   ])
 
   if (clientesResultado.error) {
@@ -465,6 +513,26 @@ export default async function GestionVentasPage({
       `No se pudieron cargar los productos de la nueva arquitectura: ${productosNuevosResultado.error.message}`
     )
   }
+
+  if (tiposConsultaResultado.error) {
+    throw new Error(
+      `No se pudieron cargar los tipos de consulta: ${tiposConsultaResultado.error.message}`
+    )
+  }
+
+  if (estadosConsultaResultado.error) {
+    throw new Error(
+      `No se pudieron cargar los estados de consulta: ${estadosConsultaResultado.error.message}`
+    )
+  }
+
+  const tipoConsultaPorId = new Map(
+    (tiposConsultaResultado.data ?? []).map((t: any) => [t.id, t])
+  )
+
+  const estadoConsultaPorId = new Map(
+    (estadosConsultaResultado.data ?? []).map((e: any) => [e.id, e])
+  )
 
   const productosNuevos = productosNuevosResultado.data ?? []
   const idsProductosNuevos = productosNuevos.map((p: any) => p.id)
@@ -616,6 +684,35 @@ export default async function GestionVentasPage({
   const gestionBafNuevaPorProducto = new Map((gestionBafNuevaResultado.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
   const gestionMovilNuevaPorProducto = new Map((gestionMovilNuevaResultado.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
 
+  const habilitacionesMoviles = new Map<number, any>()
+
+  const productosMovilesParaEvaluar = productosNuevos.filter(
+    (producto: any) =>
+      ['PORTA', 'LINEA_NUEVA'].includes(String(producto.tipo_producto))
+  )
+
+  if (productosMovilesParaEvaluar.length > 0) {
+    const { data: habilitacionesResultado, error: errorHabilitaciones } =
+      await admin.rpc('evaluar_habilitaciones_productos_moviles', {
+        p_producto_operacion_ids: productosMovilesParaEvaluar.map(
+          (producto: any) => producto.id
+        ),
+      })
+
+    if (errorHabilitaciones) {
+      throw new Error(
+        `No se pudieron evaluar las habilitaciones móviles: ${errorHabilitaciones.message}`
+      )
+    }
+
+    for (const habilitacion of habilitacionesResultado ?? []) {
+      habilitacionesMoviles.set(
+        Number(habilitacion.producto_operacion_id),
+        habilitacion
+      )
+    }
+  }
+
   const productosPorOperacion = new Map<string, any[]>()
   for (const producto of productosNuevos) {
     const gestionBase = producto.tipo_producto === 'BAF'
@@ -635,11 +732,8 @@ export default async function GestionVentasPage({
       ? detalleBafNuevoPorProducto.get(producto.id) ?? null
       : detalleMovilNuevoPorProducto.get(producto.id) ?? null
 
-    let habilitacion: any = null
-    if (['PORTA', 'LINEA_NUEVA'].includes(producto.tipo_producto)) {
-      const { data } = await admin.rpc('evaluar_habilitacion_producto_movil', { p_producto_operacion_id: producto.id })
-      habilitacion = Array.isArray(data) ? data[0] ?? null : data
-    }
+    const habilitacion =
+      habilitacionesMoviles.get(producto.id) ?? null
 
     const completo = { ...producto, detalle, gestion, habilitacion }
     const lista = productosPorOperacion.get(producto.operacion_id) ?? []
@@ -647,21 +741,48 @@ export default async function GestionVentasPage({
     productosPorOperacion.set(producto.operacion_id, lista)
   }
 
-  const operacionesCompletas = operaciones.map((operacion: any) => ({
-    ...operacion,
-    cliente: operacion.cliente_id
-      ? clientesPorId.get(operacion.cliente_id) ?? null
-      : null,
-    operaciones_baf:
-      bafPorOperacion.get(operacion.id_operacion) ?? null,
-    operaciones_porta:
-      portaPorOperacion.get(operacion.id_operacion) ?? null,
-    gestion_baf:
-      gestionBafPorOperacion.get(operacion.id_operacion) ?? null,
-    gestion_porta:
-      gestionPortaPorOperacion.get(operacion.id_operacion) ?? null,
-    productos_nuevos: productosPorOperacion.get(operacion.id_operacion) ?? [],
-  }))
+  const operacionesCompletas = operaciones.map((operacion: any) => {
+    const gestionPorta =
+      gestionPortaPorOperacion.get(operacion.id_operacion) ?? null
+
+    const productosNuevos =
+      productosPorOperacion.get(operacion.id_operacion) ?? []
+
+    const tratadaNueva = productosNuevos.some(
+      (producto: any) =>
+        producto.tipo_producto === 'BAF'
+          ? Boolean(producto.gestion?.estado_nombre)
+          : ['PORTA', 'LINEA_NUEVA'].includes(
+              String(producto.tipo_producto)
+            ) &&
+            Boolean(producto.gestion?.estado_vendedor_nombre)
+    )
+
+    const tratadaHistorica =
+      operacion.tipo === 'BAF'
+        ? Boolean(
+            gestionBafPorOperacion.get(operacion.id_operacion)?.estado_nombre
+          )
+        : operacion.tipo === 'PORTA'
+          ? Boolean(gestionPorta?.estado_vendedor_nombre)
+          : false
+
+    return {
+      ...operacion,
+      cliente: operacion.cliente_id
+        ? clientesPorId.get(operacion.cliente_id) ?? null
+        : null,
+      operaciones_baf:
+        bafPorOperacion.get(operacion.id_operacion) ?? null,
+      operaciones_porta:
+        portaPorOperacion.get(operacion.id_operacion) ?? null,
+      gestion_baf:
+        gestionBafPorOperacion.get(operacion.id_operacion) ?? null,
+      gestion_porta: gestionPorta,
+      productos_nuevos: productosNuevos,
+      tratada: tratadaNueva || tratadaHistorica,
+    }
+  })
 
   const cantidadLineasGrupo = new Map<string, number>()
 
@@ -761,24 +882,123 @@ export default async function GestionVentasPage({
     return operacion.gestion_porta?.updated_at || null
   }
 
+  const consultasCompletas = consultas.map((consulta: any) => {
+    const tipoConsulta = tipoConsultaPorId.get(consulta.tipo_consulta_id) as any
+    const codigoTipo = String(tipoConsulta?.codigo ?? '')
+    const vendedorConsulta = perfiles.find((p: any) => p.id === consulta.vendedor_id)
+    const responsableConsulta = consulta.responsable_id
+      ? perfiles.find((p: any) => p.id === consulta.responsable_id)
+      : null
+
+    const nombreEstado = (id: any) => {
+      if (id == null) return null
+      const estadoConsulta = estadoConsultaPorId.get(id) as any
+      return estadoConsulta?.nombre ? String(estadoConsulta.nombre) : null
+    }
+
+    const estadoEsGestionado = (id: any) => {
+      if (id == null) return false
+      const estadoConsulta = estadoConsultaPorId.get(id) as any
+      return String(estadoConsulta?.tipo_estado ?? '').toUpperCase() === 'GESTIONADO'
+    }
+
+    let estado = 'Sin gestión'
+    let gestionada = false
+
+    if (codigoTipo === 'RELLAMADO_VENTA_GESTION') {
+      estado = nombreEstado(consulta.estado_consulta_id) ?? 'Sin gestión'
+      gestionada = estadoEsGestionado(consulta.estado_consulta_id)
+    } else if (codigoTipo === 'DEUDA_CLIENTE') {
+      estado = nombreEstado(consulta.estado_deuda_id) ?? 'Sin gestión'
+      gestionada = estadoEsGestionado(consulta.estado_deuda_id)
+    } else if (codigoTipo === 'DOMICILIO_COBERTURA') {
+      estado = nombreEstado(consulta.estado_cobertura_id) ?? 'Sin gestión'
+      gestionada = estadoEsGestionado(consulta.estado_cobertura_id)
+    } else if (codigoTipo === 'DOMICILIO_DEUDA') {
+      const estadoDeuda = nombreEstado(consulta.estado_deuda_id)
+      const estadoCobertura = nombreEstado(consulta.estado_cobertura_id)
+
+      if (estadoDeuda || estadoCobertura) {
+        estado = [
+          estadoDeuda ? `Deuda: ${estadoDeuda}` : 'Deuda: Sin gestión',
+          estadoCobertura ? `Cobertura: ${estadoCobertura}` : 'Cobertura: Sin gestión',
+        ].join(' | ')
+      }
+
+      gestionada =
+        estadoEsGestionado(consulta.estado_deuda_id) &&
+        estadoEsGestionado(consulta.estado_cobertura_id)
+    } else {
+      estado = nombreEstado(consulta.estado_consulta_id) ?? 'Sin gestión'
+      gestionada = estadoEsGestionado(consulta.estado_consulta_id)
+    }
+
+    return {
+      clase: 'CONSULTA' as const,
+      id: String(consulta.id),
+      fecha_ingreso: consulta.marca_temporal,
+      registro: 'CONSULTA',
+      tipo: tipoConsulta?.nombre || codigoTipo || 'Consulta',
+      tipo_codigo: codigoTipo,
+      vendedor:
+        vendedorConsulta?.vendedor ||
+        vendedorConsulta?.nombre ||
+        'Usuario no disponible',
+      responsable:
+        responsableConsulta?.vendedor ||
+        responsableConsulta?.nombre ||
+        'Sin asignar',
+      cliente: consulta.cliente || '-',
+      dni: consulta.dni || '-',
+      telefono: consulta.telefono || '-',
+      estado,
+      gestionada,
+      operacion_vinculada: consulta.operacion_id || '-',
+      domicilio: consulta.domicilio || '-',
+      localidad: consulta.localidad || '-',
+      observaciones: consulta.observaciones || '-',
+      original: consulta,
+    }
+  })
+
   const vendedores = Array.from(
-    new Set(
-      operacionesCompletas
+    new Set([
+      ...operacionesCompletas
         .map((o: any) => String(o.vendedor ?? '').trim())
-        .filter(Boolean)
-    )
+        .filter(Boolean),
+      ...consultasCompletas
+        .map((c: any) => String(c.vendedor ?? '').trim())
+        .filter(Boolean),
+    ])
   ) as string[]
 
   const responsables = Array.from(
-    new Set(
-      operacionesCompletas.flatMap((o: any) => nombresAsignacionVista(o))
-    )
+    new Set([
+      ...operacionesCompletas.flatMap((o: any) => nombresAsignacionVista(o)),
+      ...consultasCompletas
+        .map((c: any) => String(c.responsable ?? '').trim())
+        .filter((nombre: string) => nombre && nombre !== 'Sin asignar'),
+    ])
   ) as string[]
 
   const estados = Array.from(
-    new Set(
-      operacionesCompletas.flatMap((o: any) => { const p=o.productos_nuevos??[]; return p.length ? p.map((x:any)=> x.tipo_producto==='BAF' ? (x.gestion?.estado_nombre||'Sin gestión') : (x.habilitacion?.habilitado===false ? 'Pendiente OT' : (x.gestion?.estado_nombre||'Sin gestión'))) : [estadoVisible(o)] })
-    )
+    new Set([
+      ...operacionesCompletas.flatMap((o: any) => {
+        const p = o.productos_nuevos ?? []
+        return p.length
+          ? p.map((x: any) =>
+              x.tipo_producto === 'BAF'
+                ? x.gestion?.estado_nombre || 'Sin gestión'
+                : x.habilitacion?.habilitado === false
+                  ? 'Pendiente OT'
+                  : x.gestion?.estado_nombre || 'Sin gestión'
+            )
+          : [estadoVisible(o)]
+      }),
+      ...consultasCompletas
+        .map((c: any) => String(c.estado ?? '').trim())
+        .filter(Boolean),
+    ])
   ) as string[]
 
   vendedores.sort((a, b) => a.localeCompare(b, 'es'))
@@ -808,7 +1028,19 @@ export default async function GestionVentasPage({
     })
     .filter((filtro) => filtro.campo && filtro.condicion)
 
+  const hayFiltrosAplicados = Boolean(
+    q ||
+    filtroRegistro ||
+    filtroTipo ||
+    filtroVendedor ||
+    filtroResponsable ||
+    filtroEstado ||
+    bandejaActiva ||
+    filtrosAvanzados.length > 0
+  )
+
   const filtrosActualesParaBandeja = {
+    registro: filtroRegistro,
     tipo: filtroTipo,
     vendedor: filtroVendedor,
     responsable: filtroResponsable,
@@ -817,6 +1049,7 @@ export default async function GestionVentasPage({
   }
 
   const puedeGuardarBandeja = Boolean(
+    filtroRegistro ||
     filtroTipo ||
     filtroVendedor ||
     filtroResponsable ||
@@ -838,10 +1071,48 @@ export default async function GestionVentasPage({
   }
 
   const valorCampoAvanzado = (operacion: any, campo: string) => {
+    if (operacion.clase === 'CONSULTA') {
+      switch (campo) {
+        case 'registro':
+          return 'CONSULTA'
+        case 'estado':
+          return String(operacion.estado ?? '')
+        case 'tipo':
+        case 'servicios':
+          return String(operacion.tipo ?? '')
+        case 'vendedor':
+          return String(operacion.vendedor ?? '')
+        case 'responsable':
+          return operacion.responsable === 'Sin asignar'
+            ? ''
+            : String(operacion.responsable ?? '')
+        case 'domicilio':
+          return operacion.domicilio === '-'
+            ? ''
+            : String(operacion.domicilio ?? '')
+        case 'localidad':
+          return operacion.localidad === '-'
+            ? ''
+            : String(operacion.localidad ?? '')
+        case 'operacion_vinculada':
+          return operacion.operacion_vinculada === '-'
+            ? ''
+            : String(operacion.operacion_vinculada ?? '')
+        case 'observaciones':
+          return operacion.observaciones === '-'
+            ? ''
+            : String(operacion.observaciones ?? '')
+        default:
+          return ''
+      }
+    }
+
     const porta = operacion.operaciones_porta
     const gestionPorta = operacion.gestion_porta
 
     switch (campo) {
+      case 'registro':
+        return 'VENTA'
       case 'estado':
         return estadoVisible(operacion)
       case 'tipo':
@@ -900,7 +1171,10 @@ export default async function GestionVentasPage({
 
     if (filtro.condicion === 'es') return actualNormalizado === esperadoNormalizado
     if (filtro.condicion === 'no_es') return actualNormalizado !== esperadoNormalizado
-    if (filtro.condicion === 'contiene') return actualNormalizado.includes(esperadoNormalizado)
+    if (filtro.condicion === 'contiene') {
+      if (!esperadoNormalizado) return false
+      return actualNormalizado.includes(esperadoNormalizado)
+    }
 
     return true
   }
@@ -945,6 +1219,44 @@ export default async function GestionVentasPage({
   }
 
   const valorColumna = (operacion: any, campo: string) => {
+    if (operacion.clase === 'CONSULTA') {
+      switch (campo) {
+        case 'fecha_ingreso':
+          return operacion.fecha_ingreso || null
+        case 'registro':
+          return 'CONSULTA'
+        case 'tipo':
+        case 'servicios':
+          return operacion.tipo || 'Consulta'
+        case 'vendedor':
+          return operacion.vendedor || '-'
+        case 'responsable':
+          return operacion.responsable || 'Sin asignar'
+        case 'cliente':
+          return operacion.cliente || '-'
+        case 'dni':
+          return operacion.dni || '-'
+        case 'telefono':
+          return operacion.telefono || '-'
+        case 'estado':
+          return operacion.estado || 'Sin gestión'
+        case 'operacion_vinculada':
+          return operacion.operacion_vinculada || '-'
+        case 'domicilio':
+          return operacion.domicilio || '-'
+        case 'localidad':
+          return operacion.localidad || '-'
+        case 'observaciones':
+          return operacion.observaciones || '-'
+        case 'general_1':
+        case 'general_2':
+        case 'general_3':
+          return '-'
+        default:
+          return '-'
+      }
+    }
+
     const cliente = operacion.cliente
     const porta = operacion.operaciones_porta
     const gestionPorta = operacion.gestion_porta
@@ -984,9 +1296,13 @@ export default async function GestionVentasPage({
     switch (campo) {
       case 'fecha_ingreso':
         return operacion.fecha_hora || null
+      case 'registro':
+        return 'VENTA'
       case 'tipo':
       case 'servicios':
         return tipoVisible(operacion)
+      case 'estado':
+        return estadoVisible(operacion)
       case 'vendedor':
         return operacion.vendedor || '-'
       case 'responsable':
@@ -1098,56 +1414,106 @@ export default async function GestionVentasPage({
     columnasVista.reduce((total: number, columna: any) => total + columna.ancho, 0) +
     anchoAccion
 
-  const ventasFiltradas = operacionesCompletas.filter((operacion: any) => {
-    const tipos = tiposOperacion(operacion)
+  const registrosGestion = [
+    ...operacionesCompletas,
+    ...consultasCompletas,
+  ]
 
-    if (filtroTipo && !tipos.includes(filtroTipo)) return false
+  const registrosFiltrados = registrosGestion.filter((registro: any) => {
+    const esConsulta = registro.clase === 'CONSULTA'
 
-    if (
-      filtroVendedor &&
-      operacion.vendedor !== filtroVendedor
-    ) {
-      return false
+    if (filtroRegistro) {
+      const claseRegistro = esConsulta ? 'CONSULTA' : 'VENTA'
+      if (claseRegistro !== filtroRegistro) return false
     }
 
-    if (
-      filtroResponsable &&
-      !nombresAsignacionVista(operacion).includes(filtroResponsable)
-    ) {
-      return false
+    if (filtroTipo) {
+      if (esConsulta) {
+        if (String(registro.tipo_codigo ?? '').toUpperCase() !== filtroTipo) {
+          return false
+        }
+      } else {
+        const tipos = tiposOperacion(registro)
+        if (!tipos.includes(filtroTipo)) return false
+      }
     }
 
-    if (
-      filtroEstado &&
-      !estadoVisible(operacion).includes(filtroEstado)
-    ) {
-      return false
+    if (filtroVendedor) {
+      if (String(registro.vendedor ?? '') !== filtroVendedor) return false
     }
 
-    if (!cumpleFiltrosAvanzados(operacion)) return false
+    if (filtroResponsable) {
+      if (esConsulta) {
+        if (String(registro.responsable ?? '') !== filtroResponsable) return false
+      } else {
+        if (!nombresAsignacionVista(registro).includes(filtroResponsable)) {
+          return false
+        }
+      }
+    }
+
+    if (filtroEstado) {
+      if (esConsulta) {
+        if (String(registro.estado ?? '') !== filtroEstado) return false
+      } else {
+        if (!estadoVisible(registro).includes(filtroEstado)) return false
+      }
+    }
+
+    if (!cumpleFiltrosAvanzados(registro)) return false
 
     if (!q) return true
 
-    const cliente = operacion.cliente
-    const porta = operacion.operaciones_porta
+    if (esConsulta) {
+      const texto = [
+        registro.id,
+        registro.registro,
+        registro.tipo,
+        registro.tipo_codigo,
+        registro.vendedor,
+        registro.responsable,
+        registro.cliente,
+        registro.dni,
+        registro.telefono,
+        registro.estado,
+        registro.operacion_vinculada,
+        registro.domicilio,
+        registro.localidad,
+        registro.observaciones,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+
+      return texto.includes(q)
+    }
+
+    const cliente = registro.cliente
+    const porta = registro.operaciones_porta
 
     const texto = [
-      operacion.id_operacion,
-      operacion.vendedor,
-      nombreResponsable(operacion),
-      nombreBboo(operacion),
-      operacion.origen_dato,
+      registro.id_operacion,
+      registro.vendedor,
+      nombreResponsable(registro),
+      nombreBboo(registro),
+      registro.origen_dato,
       cliente?.dni,
       cliente?.nombre,
       cliente?.apellido,
       cliente?.telefono,
       porta?.nim,
       porta?.numero_linea,
-      lineaVisible(operacion, cantidadLineasGrupo),
-      productoVisible(operacion),
-      estadoVisible(operacion),
-      productoVisible(operacion),
-      ...(operacion.productos_nuevos ?? []).flatMap((p: any) => [p.tipo_producto, p.plan_snapshot, p.producto_snapshot, p.detalle?.nim, p.detalle?.numero_linea, p.detalle?.compania_actual]),
+      lineaVisible(registro, cantidadLineasGrupo),
+      productoVisible(registro),
+      estadoVisible(registro),
+      ...(registro.productos_nuevos ?? []).flatMap((p: any) => [
+        p.tipo_producto,
+        p.plan_snapshot,
+        p.producto_snapshot,
+        p.detalle?.nim,
+        p.detalle?.numero_linea,
+        p.detalle?.compania_actual,
+      ]),
     ]
       .filter(Boolean)
       .join(' ')
@@ -1157,60 +1523,19 @@ export default async function GestionVentasPage({
   })
 
   /*
-   * Orden automático de la vista:
-   * - 1.ª columna visible = criterio principal.
-   * - 2.ª columna visible = criterio secundario.
-   * - Fechas y números: descendente.
-   * - Textos: ascendente.
-   * - Vacíos siempre al final.
-   * - Como desempate final conservamos Fecha Ingreso descendente.
+   * Orden cronológico fijo de Gestión de Ventas.
+   * Los filtros y la disposición de columnas no alteran el orden de las filas.
+   * Más reciente primero, según la fecha original de ingreso.
    */
-  const camposFecha = new Set([
-    'fecha_ingreso',
-    'fecha_carga_stl',
-    'fecha_porta',
-    'fecha_instalacion',
-  ])
-  const camposNumero = new Set(['numero_linea'])
-  const criteriosOrden = columnasVista.slice(0, 2).map((columna: any) => columna.campo)
+  const ventas = [...registrosFiltrados].sort((a: any, b: any) => {
+    const fechaA = new Date(
+      a.clase === 'CONSULTA' ? a.fecha_ingreso : a.fecha_hora || 0
+    ).getTime()
 
-  const compararCampo = (a: any, b: any, campo: string) => {
-    const valorA = valorColumna(a, campo)
-    const valorB = valorColumna(b, campo)
+    const fechaB = new Date(
+      b.clase === 'CONSULTA' ? b.fecha_ingreso : b.fecha_hora || 0
+    ).getTime()
 
-    const vacioA = valorA === null || valorA === undefined || String(valorA).trim() === '' || valorA === '-'
-    const vacioB = valorB === null || valorB === undefined || String(valorB).trim() === '' || valorB === '-'
-
-    if (vacioA && vacioB) return 0
-    if (vacioA) return 1
-    if (vacioB) return -1
-
-    if (camposFecha.has(campo)) {
-      const tiempoA = new Date(String(valorA)).getTime()
-      const tiempoB = new Date(String(valorB)).getTime()
-      if (!Number.isNaN(tiempoA) && !Number.isNaN(tiempoB)) return tiempoB - tiempoA
-    }
-
-    if (camposNumero.has(campo)) {
-      const numeroA = Number(valorA)
-      const numeroB = Number(valorB)
-      if (Number.isFinite(numeroA) && Number.isFinite(numeroB)) return numeroB - numeroA
-    }
-
-    return String(valorA).localeCompare(String(valorB), 'es', {
-      sensitivity: 'base',
-      numeric: true,
-    })
-  }
-
-  const ventas = [...ventasFiltradas].sort((a: any, b: any) => {
-    for (const campo of criteriosOrden) {
-      const resultado = compararCampo(a, b, campo)
-      if (resultado !== 0) return resultado
-    }
-
-    const fechaA = new Date(a.fecha_hora || 0).getTime()
-    const fechaB = new Date(b.fecha_hora || 0).getTime()
     return fechaB - fechaA
   })
 
@@ -1274,6 +1599,23 @@ export default async function GestionVentasPage({
             />
           </div>
 
+          {!esBboo && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">
+                Registro
+              </label>
+              <select
+                name="registro"
+                defaultValue={filtroRegistro}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+              >
+                <option value="">Todos</option>
+                <option value="VENTA">Venta</option>
+                <option value="CONSULTA">Consulta</option>
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-500">
               Tipo
@@ -1287,6 +1629,12 @@ export default async function GestionVentasPage({
               <option value="BAF">BAF</option>
               <option value="PORTA">PORTA</option>
               <option value="LN">Línea Nueva</option>
+              {!esBboo &&
+                (tiposConsultaResultado.data ?? []).map((tipo: any) => (
+                  <option key={`consulta-${tipo.id}`} value={tipo.codigo}>
+                    {tipo.nombre}
+                  </option>
+                ))}
             </select>
           </div>
 
@@ -1350,13 +1698,20 @@ export default async function GestionVentasPage({
             responsables={responsables}
             mediosDespacho={mediosDespacho.map((m: any) => String(m.nombre ?? '')).filter(Boolean)}
             companias={companias}
+            tiposConsulta={(tiposConsultaResultado.data ?? [])
+              .map((tipo: any) => String(tipo.codigo ?? ''))
+              .filter(Boolean)}
             iniciales={filtrosAvanzados}
           />
 
           <div className="flex items-end gap-2 md:col-span-2 xl:col-span-6">
             <button
               type="submit"
-              className="rounded-lg bg-red-600 px-5 py-2 font-semibold text-white hover:bg-red-700"
+              className={`rounded-lg bg-red-600 px-5 py-2 font-semibold text-white hover:bg-red-700 ${
+                hayFiltrosAplicados
+                  ? 'animate-pulse ring-2 ring-red-300 ring-offset-2'
+                  : ''
+              }`}
             >
               Aplicar filtros
             </button>
@@ -1370,7 +1725,7 @@ export default async function GestionVentasPage({
         </form>
 
         <div className="mb-3 text-sm text-gray-500">
-          {ventas.length} {ventas.length === 1 ? 'venta' : 'ventas'}
+          {ventas.length} {ventas.length === 1 ? 'registro' : 'registros'}
         </div>
 
         <div className="hidden overflow-x-auto rounded-2xl border border-gray-200 bg-white md:block">
@@ -1404,10 +1759,25 @@ export default async function GestionVentasPage({
             </thead>
 
             <tbody className="divide-y divide-gray-100">
-              {ventas.map((operacion: any) => (
+              {ventas.map((operacion: any) => {
+                const esConsultaFila = operacion.clase === 'CONSULTA'
+
+                return (
                 <tr
-                  key={operacion.id_operacion}
-                  className="align-top hover:bg-gray-50"
+                  key={
+                    esConsultaFila
+                      ? `consulta-${operacion.id}`
+                      : `venta-${operacion.id_operacion}`
+                  }
+                  className={
+                    esConsultaFila
+                      ? operacion.gestionada
+                        ? 'align-top bg-green-50 hover:bg-green-100'
+                        : 'align-top bg-yellow-100 hover:bg-yellow-200'
+                      : operacion.tratada
+                        ? 'align-top bg-green-200 hover:bg-green-300'
+                        : 'align-top hover:bg-gray-50'
+                  }
                 >
                   {columnasVista.map((columna: any) => (
                     <td
@@ -1423,17 +1793,29 @@ export default async function GestionVentasPage({
                   ))}
 
                   <td className="px-2 py-3 text-right">
-                    <a
-                      href={`/gestion-ventas/${encodeURIComponent(
-                        operacion.id_operacion
-                      )}`}
-                      className="whitespace-nowrap font-semibold text-red-600 hover:text-red-700"
-                    >
-                      Gestionar
-                    </a>
+                    {esConsultaFila ? (
+                      <a
+                        href={`/gestion-ventas/consulta/${encodeURIComponent(
+                          String(operacion.id)
+                        )}`}
+                        className="whitespace-nowrap font-semibold text-amber-700 hover:text-amber-800"
+                      >
+                        Gestionar
+                      </a>
+                    ) : (
+                      <a
+                        href={`/gestion-ventas/${encodeURIComponent(
+                          operacion.id_operacion
+                        )}`}
+                        className="whitespace-nowrap font-semibold text-red-600 hover:text-red-700"
+                      >
+                        Gestionar
+                      </a>
+                    )}
                   </td>
                 </tr>
-              ))}
+                )
+              })}
 
               {ventas.length === 0 && (
                 <tr>
@@ -1441,7 +1823,7 @@ export default async function GestionVentasPage({
                     colSpan={columnasVista.length + 1}
                     className="px-4 py-10 text-center text-gray-500"
                   >
-                    No se encontraron ventas.
+                    No se encontraron registros.
                   </td>
                 </tr>
               )}
@@ -1452,8 +1834,20 @@ export default async function GestionVentasPage({
         <div className="space-y-3 md:hidden">
           {ventas.map((operacion: any) => (
             <div
-              key={operacion.id_operacion}
-              className="rounded-2xl border border-gray-200 bg-white p-4"
+              key={
+                operacion.clase === 'CONSULTA'
+                  ? `consulta-${operacion.id}`
+                  : `venta-${operacion.id_operacion}`
+              }
+              className={
+                operacion.clase === 'CONSULTA'
+                  ? operacion.gestionada
+                    ? 'rounded-2xl border border-green-100 bg-green-50 p-4 hover:bg-green-100'
+                    : 'rounded-2xl border border-yellow-200 bg-yellow-100 p-4 hover:bg-yellow-200'
+                  : operacion.tratada
+                    ? 'rounded-2xl border border-green-300 bg-green-200 p-4 hover:bg-green-300'
+                    : 'rounded-2xl border border-gray-200 bg-white p-4'
+              }
             >
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {columnasVista.map((columna: any) => (
@@ -1469,21 +1863,32 @@ export default async function GestionVentasPage({
               </div>
 
               <div className="mt-4 border-t border-gray-100 pt-3 text-right">
-                <a
-                  href={`/gestion-ventas/${encodeURIComponent(
-                    operacion.id_operacion
-                  )}`}
-                  className="text-sm font-semibold text-red-600 hover:text-red-700"
-                >
-                  Gestionar
-                </a>
+                {operacion.clase === 'CONSULTA' ? (
+                  <a
+                    href={`/gestion-ventas/consulta/${encodeURIComponent(
+                      String(operacion.id)
+                    )}`}
+                    className="text-sm font-semibold text-amber-700 hover:text-amber-800"
+                  >
+                    Gestionar
+                  </a>
+                ) : (
+                  <a
+                    href={`/gestion-ventas/${encodeURIComponent(
+                      operacion.id_operacion
+                    )}`}
+                    className="text-sm font-semibold text-red-600 hover:text-red-700"
+                  >
+                    Gestionar
+                  </a>
+                )}
               </div>
             </div>
           ))}
 
           {ventas.length === 0 && (
             <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">
-              No se encontraron ventas.
+              No se encontraron registros.
             </div>
           )}
         </div>

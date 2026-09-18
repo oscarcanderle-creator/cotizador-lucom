@@ -769,6 +769,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
           entrecalles: normalizar(consultaEdit.entrecalles || ''),
           localidad: normalizar(consultaEdit.localidad || ''),
           observaciones: normalizar(consultaEdit.observaciones || ''),
+          estado_consulta_id: consultaEdit.estado_consulta_id,
           estado_deuda_id: consultaEdit.estado_deuda_id,
           estado_cobertura_id: consultaEdit.estado_cobertura_id,
         }),
@@ -1525,6 +1526,40 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
 
                   <div className="border-t border-red-100 pt-5">
                     <div className="grid gap-4 md:grid-cols-2">
+                      {consultaEdit.tipos_consulta?.codigo ===
+                        'RELLAMADO_VENTA_GESTION' && (
+                        <Campo label="Estado Rellamado">
+                          <select
+                            value={consultaEdit.estado_consulta_id ?? ''}
+                            onChange={(e) =>
+                              setConsultaEdit({
+                                ...consultaEdit,
+                                estado_consulta_id: e.target.value
+                                  ? Number(e.target.value)
+                                  : null,
+                              })
+                            }
+                            className={inputClass}
+                          >
+                            <option value="">Sin calificar</option>
+                            {estadosConsulta
+                              .filter(
+                                (estado) =>
+                                  estado.ambito !== 'DEUDA' &&
+                                  estado.ambito !== 'COBERTURA' &&
+                                  (estado.activo ||
+                                    estado.id === consultaEdit.estado_consulta_id)
+                              )
+                              .map((estado) => (
+                                <option key={estado.id} value={estado.id}>
+                                  {estado.nombre}
+                                  {!estado.activo ? ' (inactivo)' : ''}
+                                </option>
+                              ))}
+                          </select>
+                        </Campo>
+                      )}
+
                       {['DEUDA_CLIENTE', 'DOMICILIO_DEUDA'].includes(
                         consultaEdit.tipos_consulta?.codigo || ''
                       ) && (
