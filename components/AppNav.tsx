@@ -328,7 +328,7 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
 
     if (modo === 'mobile-trigger') {
 
-      return <div aria-hidden="true" className="h-10 w-10 shrink-0 lg:hidden" />
+      return <div aria-hidden="true" className="h-10 w-10 shrink-0 xl:hidden" />
 
     }
 
@@ -342,7 +342,7 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
 
       <>
 
-        <button type="button" onClick={() => setAbierto(true)} aria-label="Abrir menú" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/15 lg:hidden">
+        <button type="button" onClick={() => setAbierto(true)} aria-label="Abrir menú" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/15 xl:hidden">
 
           <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
 
@@ -350,7 +350,7 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
 
         {abierto && (
 
-          <div className="fixed inset-0 z-[100] lg:hidden">
+          <div className="fixed inset-0 z-[100] xl:hidden">
 
             <button type="button" aria-label="Cerrar menú" onClick={() => setAbierto(false)} className="absolute inset-0 bg-black/45 backdrop-blur-[1px]" />
 

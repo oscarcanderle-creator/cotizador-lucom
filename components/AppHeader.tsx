@@ -46,7 +46,7 @@ export default function AppHeader({
       <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-[8%] hidden w-20 skew-x-[-25deg] bg-black/[0.04] lg:block" />
 
       <div className="relative mx-auto w-full max-w-[1780px] px-3 sm:px-5 lg:px-6 xl:px-8">
-        <div className="flex min-h-[72px] items-center gap-3 py-2 lg:hidden">
+        <div className="flex min-h-[72px] items-center gap-3 py-2 xl:hidden">
           <AppNav
             rol={rol}
             actual={actual}
@@ -86,7 +86,7 @@ export default function AppHeader({
           </div>
         </div>
 
-        <div className="hidden min-h-[82px] items-center gap-5 py-1.5 lg:flex">
+        <div className="hidden min-h-[82px] items-center gap-5 py-1.5 xl:flex">
           <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3 lg:gap-4">
             <div className="relative h-11 w-11 shrink-0 sm:h-13 sm:w-13 lg:h-14 lg:w-14 xl:h-16 xl:w-16">
               <Image
@@ -118,7 +118,7 @@ export default function AppHeader({
             </div>
           </div>
 
-          <div className="hidden min-w-0 flex-1 lg:block">
+          <div className="hidden min-w-0 flex-1 xl:block">
             <AppNav
               rol={rol}
               actual={actual}
