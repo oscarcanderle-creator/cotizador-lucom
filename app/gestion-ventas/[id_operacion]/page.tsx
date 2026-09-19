@@ -852,7 +852,20 @@ export default async function DetalleVentaPage({
               <h1 className="text-2xl font-bold text-gray-900">Gestión de Venta</h1>
               <p className="mt-1 break-all text-sm text-gray-500">Operación: {op.id_operacion}</p>
             </div>
-            <a href="/gestion-ventas" className="text-sm font-medium text-gray-600 hover:text-gray-900">Volver a Gestión de Ventas</a>
+            <div className="flex flex-wrap items-center gap-3">
+              <a
+                href={`/cotizador?venta=${encodeURIComponent(String(op.id_operacion))}`}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                Armar propuesta
+              </a>
+              <a
+                href="/gestion-ventas"
+                className="text-sm font-medium text-gray-600 hover:text-gray-900"
+              >
+                Volver a Gestión de Ventas
+              </a>
+            </div>
           </div>
 
           <GestionBloqueoControls
@@ -1400,12 +1413,20 @@ export default async function DetalleVentaPage({
             </p>
           </div>
 
-          <a
-            href="/gestion-ventas"
-            className="text-sm font-medium text-gray-600 hover:text-gray-900"
-          >
-            Volver a Gestión de Ventas
-          </a>
+          <div className="flex flex-wrap items-center gap-3">
+            <a
+              href={`/cotizador?venta=${encodeURIComponent(String(op.id_operacion))}`}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+            >
+              Armar propuesta
+            </a>
+            <a
+              href="/gestion-ventas"
+              className="text-sm font-medium text-gray-600 hover:text-gray-900"
+            >
+              Volver a Gestión de Ventas
+            </a>
+          </div>
         </div>
 
         <GestionBloqueoControls

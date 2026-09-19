@@ -10,20 +10,47 @@ export async function GET(request: NextRequest) {
   const operacionId = String(request.nextUrl.searchParams.get('operacion') ?? '').trim()
   if (!operacionId) return NextResponse.json({ error: 'Falta la operación.' }, { status: 400 })
 
-  const { data: operacion, error } = await supabase
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('rol, activo, puede_gestionar_ventas')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.activo) {
+    return NextResponse.json({ error: 'Usuario no habilitado.' }, { status: 403 })
+  }
+
+  const admin = createAdminClient()
+
+  const { data: operacion, error } = await admin
     .from('operaciones')
     .select(`id_operacion, usuario_id, cliente_id, domicilio_id,
       cliente:clientes (nombre, apellido, dni, telefono, email),
       domicilio:domicilios (calle_nro, entre_calles, localidad, barrio, piso, dpto, datos_extras)`)
     .eq('id_operacion', operacionId)
-    .eq('usuario_id', user.id)
+
     .maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!operacion) return NextResponse.json({ error: 'La venta no existe o no pertenece al usuario actual.' }, { status: 404 })
+  if (!operacion) {
+    return NextResponse.json({ error: 'La venta no existe.' }, { status: 404 })
+  }
+
+  const esPropietario = operacion.usuario_id === user.id
+
+  const esVendedorGestor =
+    profile.rol === 'VENDEDOR' &&
+    profile.puede_gestionar_ventas === true
+
+  if (!esPropietario && !esVendedorGestor) {
+    return NextResponse.json(
+      { error: 'No tiene permisos para sincronizar esta venta.' },
+      { status: 403 }
+    )
+  }
 
 
-  const admin = createAdminClient()
+
 
   const { data: productos, error: errorProductos } = await admin
     .from('operacion_productos')

@@ -326,6 +326,8 @@ export default function Cotizador({
 
     })
 
+  const [mostrarDatosCliente, setMostrarDatosCliente] = useState(false)
+
   const fechaEmision = useMemo(
 
     () => fechaArgentina(new Date()),
@@ -543,6 +545,7 @@ export default function Cotizador({
 
         setNegocio(data.negocio === 'PYME' ? 'PYME' : 'MASIVO')
         setDatosCliente(data.cliente)
+        setMostrarDatosCliente(true)
         setLineas(data.lineas ?? [])
         setNextLineaId((data.lineas?.length ?? 0) + 1)
         setServiciosInternet(data.internet ?? [])
@@ -1910,13 +1913,42 @@ async function compartirPropuesta() {
             </div>
           )}
 
+          {!cotizadorAnonimo && (
+            <div className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+              <div>
+                <div className="font-semibold text-gray-900">
+                  Datos del cliente y domicilio
+                </div>
+                <div className="mt-1 text-sm text-gray-500">
+                  Activar para completar los datos necesarios para generar y compartir la propuesta.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={mostrarDatosCliente}
+                onClick={() => setMostrarDatosCliente((actual) => !actual)}
+                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${
+                  mostrarDatosCliente ? 'bg-red-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                    mostrarDatosCliente ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
+
           {/* ==================================================
 
               DATOS DEL CLIENTE
 
           ================================================== */}
 
-          {!cotizadorAnonimo && (
+          {!cotizadorAnonimo && mostrarDatosCliente && (
 
             <>
 
