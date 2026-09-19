@@ -327,6 +327,7 @@ export default async function GestionVentasPage({
       fecha_hora,
       vendedor,
       origen_dato,
+      obs,
       cliente_id,
       grupo_operacion
     `)
@@ -1263,6 +1264,13 @@ export default async function GestionVentasPage({
     const gestionBaf = operacion.gestion_baf
     const productosNuevos = Array.isArray(operacion.productos_nuevos) ? operacion.productos_nuevos : []
     const esNueva = productosNuevos.length > 0
+
+    if (campo === 'id_mis_referidos') {
+      return String(operacion.origen_dato || '').toUpperCase() === 'PSR'
+        ? operacion.obs || '-'
+        : '-'
+    }
+
     const bafNuevo = productosNuevos.find((p: any) => p.tipo_producto === 'BAF')
     const movilesNuevos = productosNuevos.filter((p: any) => ['PORTA', 'LINEA_NUEVA'].includes(p.tipo_producto))
     const valoresMoviles = (fn: (p: any) => any) => movilesNuevos.map(fn).filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '').join(' | ') || '-'
@@ -1497,6 +1505,7 @@ export default async function GestionVentasPage({
       nombreResponsable(registro),
       nombreBboo(registro),
       registro.origen_dato,
+      registro.obs,
       cliente?.dni,
       cliente?.nombre,
       cliente?.apellido,

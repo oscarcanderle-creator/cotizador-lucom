@@ -526,6 +526,7 @@ export default async function DetalleVentaPage({
         fecha_hora,
         vendedor,
         origen_dato,
+        obs,
         estado_sync,
         sheet_destino,
         fila_sheet,
@@ -906,6 +907,9 @@ export default async function DetalleVentaPage({
                 <Campo label="Fecha / Hora" value={fechaArgentina(op.fecha_hora)} />
                 <Campo label="Vendedor" value={op.vendedor} />
                 <Campo label="Origen del dato" value={op.origen_dato} />
+                {String(op.origen_dato || '').toUpperCase() === 'PSR' && (
+                  <Campo label="ID Mis Referidos" value={op.obs} />
+                )}
                 <Campo label="Cantidad de productos" value={productos.length} />
               </div>
             </section>
@@ -1492,6 +1496,9 @@ export default async function DetalleVentaPage({
               <Campo label="Fecha / Hora" value={fechaArgentina(op.fecha_hora)} />
               <Campo label="Vendedor" value={op.vendedor} />
               <Campo label="Origen del dato" value={op.origen_dato} />
+              {String(op.origen_dato || '').toUpperCase() === 'PSR' && (
+                <Campo label="ID Mis Referidos" value={op.obs} />
+              )}
               <Campo label="Grupo operación" value={op.grupo_operacion} />
             </div>
           </section>

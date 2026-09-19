@@ -88,6 +88,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
  const [existentes,setExistentes]=useState<ServicioExistente[]>([])
  const [cargaItec,setCargaItec]=useState(false)
  const [ultimoProducto,setUltimoProducto]=useState<'BAF'|'PORTA'|'LINEA_NUEVA'|null>(null)
+ const [origenDato,setOrigenDato]=useState('')
  const [mostrarConfirmacionItec,setMostrarConfirmacionItec]=useState(false)
  const [companiasPorta,setCompaniasPorta]=useState<Record<number,string>>({})
  const [portaTitularId,setPortaTitularId]=useState<number|null>(null)
@@ -174,6 +175,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
    setResultado(r)
    if(r.ok){
     form.reset()
+    setOrigenDato('')
     setNuevos([])
     setExistentes([])
     setCargaItec(false)
@@ -187,7 +189,25 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
  const tituloProducto=(p:ProductoCatalogo)=>[p.plan,p.origen].filter(Boolean).join(' · ')
  return <main className="min-h-screen bg-gray-100 text-gray-900"><AppHeader rol={rol} usuario={nombreUsuario} actual="VENTAS" puedeGestionarVentas={puedeGestionarVentas}/><form ref={formRef} onSubmit={enviar} className="max-w-6xl mx-auto px-2.5 py-3 sm:px-5 sm:py-5 pb-24">
   <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"><b>PLATAFORMA LUCOM</b> · Nueva venta multiproducto. BAF y móviles se registran únicamente en Supabase.</div>
-  <section className="mb-3 rounded-2xl border border-green-300 bg-green-50 p-3"><Selector label="Origen del dato" name="origen_dato" opciones={opts(origenes)} required/></section>
+  <section className="mb-3 rounded-2xl border border-green-300 bg-green-50 p-3">
+   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+    <Selector
+     label="Origen del dato"
+     name="origen_dato"
+     opciones={opts(origenes)}
+     value={origenDato}
+     onChange={setOrigenDato}
+     required
+    />
+    {origenDato === 'PSR' && (
+     <Campo
+      label="OBS · ID Prospecto Mis Referidos"
+      name="obs"
+      required
+     />
+    )}
+   </div>
+  </section>
   <section className="mb-3 rounded-xl border bg-white px-3 py-2 text-xs text-gray-500">Usuario <b className="text-gray-800">{nombreUsuario}</b> · Vendedor <b className="text-gray-800">{vendedor}</b></section>
   <Seccion n="01" titulo="Cliente"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Campo label="Nombre" name="nombre" required/><Campo label="Apellido" name="apellido" required/><Selector label="Documento" name="tipo_documento" opciones={opts(tiposDocumento)} defaultValue="DNI" required/><Campo label="Número" name="dni" inputMode="numeric" required/><Campo label="Fecha nacimiento" name="fecha_nacimiento" type="date"/><CampoTelefono label="Teléfono" name="telefono" required/><CampoTelefono label="Contacto alternativo" name="telefono_alternativo"/><Campo label="Correo cliente" name="email" type="email" inputMode="email" required/></div></Seccion>
   <Seccion n="02" titulo="Domicilio"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><div className="sm:col-span-2"><Campo label="Calle y Nro" name="domicilio" required/></div><Campo label="Entre calles" name="entre_calles"/><Campo label="Piso" name="piso"/><Campo label="Dpto" name="dpto"/><Campo label="Barrio" name="barrio"/><Campo label="Localidad" name="localidad"
