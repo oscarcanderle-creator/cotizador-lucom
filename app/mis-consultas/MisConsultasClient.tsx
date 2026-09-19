@@ -537,6 +537,34 @@ export default function MisConsultasClient({ userId, nombreUsuario, rol, puedeGe
     if (esConsultaRellamado && !operacionRellamadoId) {
       return setError('Seleccioná la venta que necesita el Rellamado.')
     }
+
+    const codigoConsulta = consultaSeleccionada?.codigo
+
+    if (
+      ['RELLAMADO_VENTA_GESTION', 'DEUDA_CLIENTE', 'DOMICILIO_DEUDA'].includes(
+        codigoConsulta || ''
+      ) &&
+      (!cliente.trim() || !dni.trim())
+    ) {
+      return setError('Completá los campos obligatorios: Cliente y DNI.')
+    }
+
+    if (
+      ['DOMICILIO_COBERTURA', 'DOMICILIO_DEUDA'].includes(
+        codigoConsulta || ''
+      ) &&
+      (
+        !tipoDomicilioConsulta.trim() ||
+        !domicilioConsulta.trim() ||
+        !entrecalles.trim() ||
+        !localidad.trim()
+      )
+    ) {
+      return setError(
+        'Completá los campos obligatorios: Tipo Domicilio, Domicilio, Entre Calles y Localidad.'
+      )
+    }
+
     if (!validarTelefono(telefonoConsulta)) {
       return setError('El teléfono debe tener exactamente 10 dígitos y no puede comenzar con 0 ni 5.')
     }
@@ -590,6 +618,38 @@ export default function MisConsultasClient({ userId, nombreUsuario, rol, puedeGe
     setMensaje('')
 
     if (!tipoPedidoId) return setError('Seleccioná el tipo de Pedido.')
+
+    if (esAmpliacionCuadraSaturada) {
+  if (
+    !domicilioPedido.trim() ||
+    !entreCallesPedido.trim() ||
+    !barrioPedido.trim() ||
+    !acronimoOltProxima.trim() ||
+    !idVentaCargada.trim()
+  ) {
+    return setError(
+      'Completá los campos obligatorios: Domicilio, Entre Calles, Barrio, Acrónimo OLT Próxima e ID Venta Cargada.'
+    )
+  }
+} else {
+  if (
+    !domicilioPedido.trim() ||
+    !entreCallesPedido.trim() ||
+    !barrioPedido.trim() ||
+    !nombreEdificio.trim() ||
+    !torrePedido.trim() ||
+    !cantUnidades.trim() ||
+    !administrador.trim() ||
+    !telefonoAdm.trim() ||
+    !encargado.trim() ||
+    !telefonoEnc.trim() ||
+    !idVentaCargada.trim()
+  ) {
+    return setError(
+      'Completá todos los campos obligatorios del Pedido.'
+    )
+  }
+}    
 
     if (
       esAmpliacionCuadraSaturada &&
@@ -1059,33 +1119,63 @@ export default function MisConsultasClient({ userId, nombreUsuario, rol, puedeGe
                   <input required inputMode="numeric" maxLength={10} value={telefonoConsulta} onChange={(e) => setTelefonoConsulta(e.target.value.replace(/\D/g, '').slice(0, 10))} className={inputClass} placeholder="10 dígitos" />
                 </Campo>
 
-                <Campo label="Cliente">
-                  <input value={cliente} onChange={(e) => setCliente(e.target.value)} className={inputClass} />
+                <Campo
+                  label={
+                    ['RELLAMADO_VENTA_GESTION', 'DEUDA_CLIENTE', 'DOMICILIO_DEUDA'].includes(
+                      consultaSeleccionada?.codigo || ''
+                    )
+                      ? 'Cliente *'
+                      : 'Cliente'
+                  }
+                >
+                  <input
+                    required={['RELLAMADO_VENTA_GESTION', 'DEUDA_CLIENTE', 'DOMICILIO_DEUDA'].includes(
+                      consultaSeleccionada?.codigo || ''
+                    )}
+                    value={cliente}
+                    onChange={(e) => setCliente(e.target.value)}
+                    className={inputClass}
+                  />
                 </Campo>
 
-                <Campo label="DNI">
-                  <input value={dni} onChange={(e) => setDni(e.target.value)} className={inputClass} />
+                <Campo
+                  label={
+                    ['RELLAMADO_VENTA_GESTION', 'DEUDA_CLIENTE', 'DOMICILIO_DEUDA'].includes(
+                      consultaSeleccionada?.codigo || ''
+                    )
+                      ? 'DNI *'
+                      : 'DNI'
+                  }
+                >
+                  <input
+                    required={['RELLAMADO_VENTA_GESTION', 'DEUDA_CLIENTE', 'DOMICILIO_DEUDA'].includes(
+                      consultaSeleccionada?.codigo || ''
+                    )}
+                    value={dni}
+                    onChange={(e) => setDni(e.target.value)}
+                    className={inputClass}
+                  />
                 </Campo>
 
                 {!esConsultaRellamado && (
                   <>
-                <Campo label="Tipo de domicilio">
-                  <select value={tipoDomicilioConsulta} onChange={(e) => setTipoDomicilioConsulta(e.target.value)} className={inputClass}>
+                <Campo label={['DOMICILIO_COBERTURA', 'DOMICILIO_DEUDA'].includes(consultaSeleccionada?.codigo || '') ? 'Tipo de domicilio *' : 'Tipo de domicilio'}>
+                  <select required={['DOMICILIO_COBERTURA', 'DOMICILIO_DEUDA'].includes(consultaSeleccionada?.codigo || '')} value={tipoDomicilioConsulta} onChange={(e) => setTipoDomicilioConsulta(e.target.value)} className={inputClass}>
                     <option value="">Seleccionar...</option>
                     {TIPOS_DOMICILIO.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
                   </select>
                 </Campo>
 
-                <Campo label="Domicilio">
-                  <input value={domicilioConsulta} onChange={(e) => setDomicilioConsulta(e.target.value)} className={inputClass} />
+                <Campo label={['DOMICILIO_COBERTURA', 'DOMICILIO_DEUDA'].includes(consultaSeleccionada?.codigo || '') ? 'Domicilio *' : 'Domicilio'}>
+                  <input required={['DOMICILIO_COBERTURA', 'DOMICILIO_DEUDA'].includes(consultaSeleccionada?.codigo || '')} value={domicilioConsulta} onChange={(e) => setDomicilioConsulta(e.target.value)} className={inputClass} />
                 </Campo>
 
-                <Campo label="Entre calles">
-                  <input value={entrecalles} onChange={(e) => setEntrecalles(e.target.value)} className={inputClass} />
+                <Campo label={['DOMICILIO_COBERTURA', 'DOMICILIO_DEUDA'].includes(consultaSeleccionada?.codigo || '') ? 'Entre calles *' : 'Entre calles'}>
+                  <input required={['DOMICILIO_COBERTURA', 'DOMICILIO_DEUDA'].includes(consultaSeleccionada?.codigo || '')} value={entrecalles} onChange={(e) => setEntrecalles(e.target.value)} className={inputClass} />
                 </Campo>
 
-                <Campo label="Localidad">
-                  <input value={localidad} onChange={(e) => setLocalidad(e.target.value)} className={inputClass} />
+                <Campo label={['DOMICILIO_COBERTURA', 'DOMICILIO_DEUDA'].includes(consultaSeleccionada?.codigo || '') ? 'Localidad *' : 'Localidad'}>
+                  <input required={['DOMICILIO_COBERTURA', 'DOMICILIO_DEUDA'].includes(consultaSeleccionada?.codigo || '')} value={localidad} onChange={(e) => setLocalidad(e.target.value)} className={inputClass} />
                 </Campo>
                   </>
                 )}
@@ -1118,16 +1208,16 @@ export default function MisConsultasClient({ userId, nombreUsuario, rol, puedeGe
                   <input value={nombreUsuario} readOnly className={`${inputClass} bg-gray-100 text-gray-600`} />
                 </Campo>
 
-                <Campo label={esAmpliacionCuadraSaturada ? 'Domicilio a ampliar' : 'Domicilio'}>
-                  <input value={domicilioPedido} onChange={(e) => setDomicilioPedido(e.target.value)} className={inputClass} />
+                <Campo label={esAmpliacionCuadraSaturada ? 'Domicilio a ampliar *' : 'Domicilio *'}>
+                  <input required value={domicilioPedido} onChange={(e) => setDomicilioPedido(e.target.value)} className={inputClass} />
                 </Campo>
 
-                <Campo label="Entre Calles">
-                  <input value={entreCallesPedido} onChange={(e) => setEntreCallesPedido(e.target.value)} className={inputClass} />
+                <Campo label="Entre Calles *">
+                  <input required value={entreCallesPedido} onChange={(e) => setEntreCallesPedido(e.target.value)} className={inputClass} />
                 </Campo>
 
-                <Campo label="Barrio">
-                  <input value={barrioPedido} onChange={(e) => setBarrioPedido(e.target.value)} className={inputClass} />
+                <Campo label="Barrio *">
+                  <input required value={barrioPedido} onChange={(e) => setBarrioPedido(e.target.value)} className={inputClass} />
                 </Campo>
 
                 {esAmpliacionCuadraSaturada ? (
@@ -1150,30 +1240,30 @@ export default function MisConsultasClient({ userId, nombreUsuario, rol, puedeGe
                     <Campo label="Coordenadas">
                       <input value={coordenadasPedido} onChange={(e) => setCoordenadasPedido(e.target.value)} className={inputClass} />
                     </Campo>
-                    <Campo label="Acrónimo OLT Próxima">
-                      <input value={acronimoOltProxima} onChange={(e) => setAcronimoOltProxima(e.target.value)} className={inputClass} />
+                    <Campo label="Acrónimo OLT Próxima *">
+                      <input required value={acronimoOltProxima} onChange={(e) => setAcronimoOltProxima(e.target.value)} className={inputClass} />
                     </Campo>
                   </>
                 ) : (
                   <>
-                    <Campo label="Nombre Edificio"><input value={nombreEdificio} onChange={(e) => setNombreEdificio(e.target.value)} className={inputClass} /></Campo>
-                    <Campo label="Torre"><input value={torrePedido} onChange={(e) => setTorrePedido(e.target.value)} className={inputClass} /></Campo>
-                    <Campo label="Cantidad UF"><input value={cantUnidades} onChange={(e) => setCantUnidades(e.target.value)} className={inputClass} /></Campo>
-                    <Campo label="Nombre Administrador"><input value={administrador} onChange={(e) => setAdministrador(e.target.value)} className={inputClass} /></Campo>
-                    <Campo label="Teléfono Administrador">
-                      <input inputMode="numeric" maxLength={10} value={telefonoAdm} onChange={(e) => setTelefonoAdm(e.target.value.replace(/\D/g, '').slice(0, 10))} className={inputClass} placeholder="10 dígitos" />
+                    <Campo label="Nombre Edificio *"><input required value={nombreEdificio} onChange={(e) => setNombreEdificio(e.target.value)} className={inputClass} /></Campo>
+                    <Campo label="Torre *"><input required value={torrePedido} onChange={(e) => setTorrePedido(e.target.value)} className={inputClass} /></Campo>
+                    <Campo label="Cantidad UF *"><input required value={cantUnidades} onChange={(e) => setCantUnidades(e.target.value)} className={inputClass} /></Campo>
+                    <Campo label="Nombre Administrador *"><input required value={administrador} onChange={(e) => setAdministrador(e.target.value)} className={inputClass} /></Campo>
+                    <Campo label="Teléfono Administrador *">
+                      <input required inputMode="numeric" maxLength={10} value={telefonoAdm} onChange={(e) => setTelefonoAdm(e.target.value.replace(/\D/g, '').slice(0, 10))} className={inputClass} placeholder="10 dígitos" />
                     </Campo>
-                    <Campo label="Nombre Encargado"><input value={encargado} onChange={(e) => setEncargado(e.target.value)} className={inputClass} /></Campo>
-                    <Campo label="Teléfono Encargado">
-                      <input inputMode="numeric" maxLength={10} value={telefonoEnc} onChange={(e) => setTelefonoEnc(e.target.value.replace(/\D/g, '').slice(0, 10))} className={inputClass} placeholder="10 dígitos" />
+                    <Campo label="Nombre Encargado *"><input required value={encargado} onChange={(e) => setEncargado(e.target.value)} className={inputClass} /></Campo>
+                    <Campo label="Teléfono Encargado *">
+                      <input required inputMode="numeric" maxLength={10} value={telefonoEnc} onChange={(e) => setTelefonoEnc(e.target.value.replace(/\D/g, '').slice(0, 10))} className={inputClass} placeholder="10 dígitos" />
                     </Campo>
                     <Campo label="Notas Anexas"><textarea rows={3} value={notasAnexas} onChange={(e) => setNotasAnexas(e.target.value)} className={inputClass} /></Campo>
                   </>
                 )}
 
-                <Campo label="ID Venta Cargada">
+                <Campo label="ID Venta Cargada *">
                   <div>
-                    <input value={idVentaCargada} onChange={(e) => setIdVentaCargada(e.target.value)} className={inputClass} />
+                    <input required value={idVentaCargada} onChange={(e) => setIdVentaCargada(e.target.value)} className={inputClass} />
                     <p className="mt-1 text-xs text-gray-500">pegar ID venta cargada que motiva este pedido</p>
                   </div>
                 </Campo>
