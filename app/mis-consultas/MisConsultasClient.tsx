@@ -64,27 +64,23 @@ type Pedido = {
   marca_temporal: string
   vendedor_id: string
   tipo_pedido_id: number
-  dni: string | null
-  telefono: string
   domicilio: string | null
-  tipo_domicilio: string | null
+  entre_calles: string | null
+  barrio: string | null
+  telefono: string | null
+  coordenadas: string | null
+  acronimo_olt_proxima: string | null
   nombre_edificio: string | null
+  torre: string | null
   cant_unidades_f: string | null
-  cant_pisos: string | null
-  cant_torres: string | null
   administrador: string | null
   telefono_adm: string | null
-  correo_adm: string | null
   encargado: string | null
   telefono_enc: string | null
-  correo_enc: string | null
+  notas_anexas: string | null
+  id_venta_cargada: string | null
   observaciones_vendedor: string | null
-  permisos_acceso: string | null
-  planos: string | null
-  cant_preventas: string | null
-  wo: string | null
   observaciones_gestion: string | null
-  fecha_ok: string | null
   fecha_gestion: string | null
   responsable_id: string | null
   estado_pedido_id: number | null
@@ -94,6 +90,7 @@ type Pedido = {
 
 type Props = {
   userId: string
+  nombreUsuario: string
   rol: string
   puedeGestionarVentas: boolean
 }
@@ -120,14 +117,17 @@ const ETIQUETAS_PEDIDO: Record<string, string> = {
   ACOMETIDA: 'Acometida',
   PROYECTO: 'Proyecto',
   AMPLIACION: 'Ampliación',
-  RELLAMADO_VENTA_GESTION: 'Rellamado Venta en Gestión',
+  AMPLIACION_CUADRA_SATURADA: 'Ampliación Cuadra Saturada',
 }
 
-export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }: Props) {
+export default function MisConsultasClient({ userId, nombreUsuario, rol, puedeGestionarVentas }: Props) {
   const supabase = useMemo(() => createClient(), [])
   const esAdmin = rol === 'ADMIN'
   const esSupervisor = rol === 'SUPERVISOR'
+  const esBboo = rol === 'BBOO'
   const esVendedorGestor = rol === 'VENDEDOR' && puedeGestionarVentas
+  const puedeGestionarConsultas = esAdmin || esSupervisor || esVendedorGestor
+  const puedeGestionarPedidos = esAdmin || esSupervisor || esBboo
 
   const [tipoRegistro, setTipoRegistro] = useState<TipoRegistro>('CONSULTA')
   const [vistaListado, setVistaListado] = useState<VistaListado>('CONSULTAS')
@@ -169,24 +169,23 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
   const [busquedaVentaRellamado, setBusquedaVentaRellamado] = useState('')
 
   const [tipoPedidoId, setTipoPedidoId] = useState('')
-  const [dniPedido, setDniPedido] = useState('')
-  const [telefonoPedido, setTelefonoPedido] = useState('')
   const [domicilioPedido, setDomicilioPedido] = useState('')
-  const [tipoDomicilioPedido, setTipoDomicilioPedido] = useState('')
+  const [entreCallesPedido, setEntreCallesPedido] = useState('')
+  const [barrioPedido, setBarrioPedido] = useState('')
+  const [telefonoPedido, setTelefonoPedido] = useState('')
+  const [coordenadasPedido, setCoordenadasPedido] = useState('')
+  const [acronimoOltProxima, setAcronimoOltProxima] = useState('')
   const [nombreEdificio, setNombreEdificio] = useState('')
+  const [torrePedido, setTorrePedido] = useState('')
   const [cantUnidades, setCantUnidades] = useState('')
-  const [cantPisos, setCantPisos] = useState('')
-  const [cantTorres, setCantTorres] = useState('')
   const [administrador, setAdministrador] = useState('')
   const [telefonoAdm, setTelefonoAdm] = useState('')
-  const [correoAdm, setCorreoAdm] = useState('')
   const [encargado, setEncargado] = useState('')
   const [telefonoEnc, setTelefonoEnc] = useState('')
-  const [correoEnc, setCorreoEnc] = useState('')
+  const [notasAnexas, setNotasAnexas] = useState('')
+  const [idVentaCargada, setIdVentaCargada] = useState('')
   const [observacionesPedido, setObservacionesPedido] = useState('')
-  const [permisosAcceso, setPermisosAcceso] = useState('')
-  const [planos, setPlanos] = useState('')
-  const [cantPreventas, setCantPreventas] = useState('')
+  const [estadoPedidoId, setEstadoPedidoId] = useState('')
 
   const validarTelefono = (valor: string) => /^[1-46-9][0-9]{9}$/.test(valor)
   const validarTelefonoOpcional = (valor: string) => !valor || validarTelefono(valor)
@@ -202,7 +201,6 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
       ACOMETIDA: 'ACOM_',
       PROYECTO: 'PROY_',
       AMPLIACION: 'AMPL_',
-      RELLAMADO_VENTA_GESTION: 'REL_',
     }
 
     const codigoTipo = pedido.tipos_pedido?.codigo || ''
@@ -268,27 +266,22 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
           marca_temporal,
           vendedor_id,
           tipo_pedido_id,
-          dni,
-          telefono,
           domicilio,
-          tipo_domicilio,
+          entre_calles,
+          barrio,
+          coordenadas,
+          acronimo_olt_proxima,
           nombre_edificio,
+          torre,
           cant_unidades_f,
-          cant_pisos,
-          cant_torres,
           administrador,
           telefono_adm,
-          correo_adm,
           encargado,
           telefono_enc,
-          correo_enc,
+          notas_anexas,
+          id_venta_cargada,
           observaciones_vendedor,
-          permisos_acceso,
-          planos,
-          cant_preventas,
-          wo,
           observaciones_gestion,
-          fecha_ok,
           fecha_gestion,
           responsable_id,
           estado_pedido_id,
@@ -349,7 +342,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     setConsultas((cPropias.data || []) as unknown as Consulta[])
     setPedidos((pPropios.data || []) as unknown as Pedido[])
 
-    if (puedeGestionarVentas || esAdmin || esSupervisor) {
+    if (puedeGestionarConsultas || puedeGestionarPedidos) {
       const [cTodas, pTodos] = await Promise.all([
         supabase
           .from('consultas')
@@ -382,29 +375,24 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
             marca_temporal,
             vendedor_id,
             tipo_pedido_id,
-            dni,
-            telefono,
-            domicilio,
-            tipo_domicilio,
-            nombre_edificio,
-            cant_unidades_f,
-            cant_pisos,
-            cant_torres,
-            administrador,
-            telefono_adm,
-            correo_adm,
-            encargado,
-            telefono_enc,
-            correo_enc,
-            observaciones_vendedor,
-            permisos_acceso,
-            planos,
-            cant_preventas,
-            wo,
-            observaciones_gestion,
-            fecha_ok,
-            fecha_gestion,
-            responsable_id,
+          domicilio,
+          entre_calles,
+          barrio,
+          coordenadas,
+          acronimo_olt_proxima,
+          nombre_edificio,
+          torre,
+          cant_unidades_f,
+          administrador,
+          telefono_adm,
+          encargado,
+          telefono_enc,
+          notas_anexas,
+          id_venta_cargada,
+          observaciones_vendedor,
+          observaciones_gestion,
+          fecha_gestion,
+          responsable_id,
             estado_pedido_id,
             tipos_pedido(nombre,codigo),
             estados_pedido(id,nombre,tipo_estado)
@@ -419,18 +407,10 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
         return
       }
 
-      const consultasPermitidas = (cTodas.data || []) as unknown as Consulta[]
+      const consultasTodas = (cTodas.data || []) as unknown as Consulta[]
       const pedidosTodos = (pTodos.data || []) as unknown as Pedido[]
-
-      // Regla operativa:
-      // - ADMIN / SUPERVISOR: todos los Pedidos.
-      // - VENDEDOR con Gestiona Ventas: solamente RELLAMADO_VENTA_GESTION.
-      const pedidosPermitidos = esVendedorGestor
-        ? pedidosTodos.filter(
-            (pedido) =>
-              pedido.tipos_pedido?.codigo === 'RELLAMADO_VENTA_GESTION'
-          )
-        : pedidosTodos
+      const consultasPermitidas = puedeGestionarConsultas ? consultasTodas : []
+      const pedidosPermitidos = puedeGestionarPedidos ? pedidosTodos : []
 
       setConsultasGestion(consultasPermitidas)
       setPedidosGestion(pedidosPermitidos)
@@ -464,14 +444,17 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     }
 
     setCargando(false)
-  }, [supabase, userId, puedeGestionarVentas, esAdmin, esSupervisor, esVendedorGestor, gestionAbierta])
+  }, [supabase, userId, puedeGestionarConsultas, puedeGestionarPedidos, esAdmin, gestionAbierta])
 
   useEffect(() => {
+    if (!puedeGestionarConsultas && puedeGestionarPedidos) {
+      setVistaGestion('PEDIDOS')
+    }
     void cargarDatos()
     // La carga inicial debe ejecutarse al montar/cambiar de usuario.
     // gestionAbierta se refresca manualmente después de guardar o tomar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, puedeGestionarVentas, esAdmin, esSupervisor])
+  }, [userId, puedeGestionarConsultas, puedeGestionarPedidos, esAdmin])
 
   function limpiarConsulta() {
     setTipoConsultaId('')
@@ -489,24 +472,23 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
 
   function limpiarPedido() {
     setTipoPedidoId('')
-    setDniPedido('')
-    setTelefonoPedido('')
     setDomicilioPedido('')
-    setTipoDomicilioPedido('')
+    setEntreCallesPedido('')
+    setBarrioPedido('')
+    setTelefonoPedido('')
+    setCoordenadasPedido('')
+    setAcronimoOltProxima('')
     setNombreEdificio('')
+    setTorrePedido('')
     setCantUnidades('')
-    setCantPisos('')
-    setCantTorres('')
     setAdministrador('')
     setTelefonoAdm('')
-    setCorreoAdm('')
     setEncargado('')
     setTelefonoEnc('')
-    setCorreoEnc('')
+    setNotasAnexas('')
+    setIdVentaCargada('')
     setObservacionesPedido('')
-    setPermisosAcceso('')
-    setPlanos('')
-    setCantPreventas('')
+    setEstadoPedidoId('')
   }
 
   const consultaSeleccionada = tiposConsulta.find(
@@ -590,8 +572,17 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     (x) => String(x.id) === tipoPedidoId
   )
 
-  const esRellamado =
-    pedidoSeleccionado?.codigo === 'RELLAMADO_VENTA_GESTION'
+  const esAmpliacionCuadraSaturada =
+    pedidoSeleccionado?.codigo === 'AMPLIACION_CUADRA_SATURADA'
+
+  const estadosPedidoSeleccionado = tipoPedidoId
+    ? estadosPedido.filter(
+        (estado) =>
+          estado.tipo_pedido_id != null &&
+          Number(estado.tipo_pedido_id) === Number(tipoPedidoId) &&
+          estado.activo
+      )
+    : []
 
   async function guardarPedido(e: React.FormEvent) {
     e.preventDefault()
@@ -599,12 +590,20 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     setMensaje('')
 
     if (!tipoPedidoId) return setError('Seleccioná el tipo de Pedido.')
-    if (!validarTelefono(telefonoPedido)) {
-      return setError('El teléfono debe tener exactamente 10 dígitos y no puede comenzar con 0 ni 5.')
-    }
+
     if (
-      !esRellamado &&
-      (!validarTelefonoOpcional(telefonoAdm) || !validarTelefonoOpcional(telefonoEnc))
+      esAmpliacionCuadraSaturada &&
+      !validarTelefono(telefonoPedido)
+    ) {
+      return setError(
+        'El teléfono del Cliente debe tener 10 dígitos y no comenzar con 0 ni 5.'
+      )
+    }
+
+    if (
+      !esAmpliacionCuadraSaturada &&
+      (!validarTelefonoOpcional(telefonoAdm) ||
+        !validarTelefonoOpcional(telefonoEnc))
     ) {
       return setError(
         'Los teléfonos de Administrador y Encargado, si se informan, deben tener 10 dígitos y no comenzar con 0 ni 5.'
@@ -616,32 +615,29 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     const datosPedido = {
       vendedor_id: userId,
       tipo_pedido_id: Number(tipoPedidoId),
-      dni: esRellamado ? normalizar(dniPedido) : null,
-      telefono: telefonoPedido,
-      domicilio: esRellamado ? null : normalizar(domicilioPedido),
-      tipo_domicilio: esRellamado ? null : normalizar(tipoDomicilioPedido),
-      nombre_edificio: esRellamado ? null : normalizar(nombreEdificio),
-      cant_unidades_f: esRellamado ? null : normalizar(cantUnidades),
-      cant_pisos: esRellamado ? null : normalizar(cantPisos),
-      cant_torres: esRellamado ? null : normalizar(cantTorres),
-      administrador: esRellamado ? null : normalizar(administrador),
-      telefono_adm: esRellamado ? null : normalizar(telefonoAdm),
-      correo_adm: esRellamado ? null : normalizar(correoAdm),
-      encargado: esRellamado ? null : normalizar(encargado),
-      telefono_enc: esRellamado ? null : normalizar(telefonoEnc),
-      correo_enc: esRellamado ? null : normalizar(correoEnc),
+      domicilio: normalizar(domicilioPedido),
+      entre_calles: normalizar(entreCallesPedido),
+      barrio: normalizar(barrioPedido),
+      telefono: esAmpliacionCuadraSaturada ? normalizar(telefonoPedido) : null,
+      coordenadas: esAmpliacionCuadraSaturada ? normalizar(coordenadasPedido) : null,
+      acronimo_olt_proxima: esAmpliacionCuadraSaturada ? normalizar(acronimoOltProxima) : null,
+      nombre_edificio: esAmpliacionCuadraSaturada ? null : normalizar(nombreEdificio),
+      torre: esAmpliacionCuadraSaturada ? null : normalizar(torrePedido),
+      cant_unidades_f: esAmpliacionCuadraSaturada ? null : normalizar(cantUnidades),
+      administrador: esAmpliacionCuadraSaturada ? null : normalizar(administrador),
+      telefono_adm: esAmpliacionCuadraSaturada ? null : normalizar(telefonoAdm),
+      encargado: esAmpliacionCuadraSaturada ? null : normalizar(encargado),
+      telefono_enc: esAmpliacionCuadraSaturada ? null : normalizar(telefonoEnc),
+      notas_anexas: esAmpliacionCuadraSaturada ? null : normalizar(notasAnexas),
+      id_venta_cargada: normalizar(idVentaCargada),
       observaciones_vendedor: normalizar(observacionesPedido),
-      permisos_acceso: esRellamado ? null : normalizar(permisosAcceso),
-      planos: esRellamado ? null : normalizar(planos),
-      cant_preventas: esRellamado ? null : normalizar(cantPreventas),
+      estado_pedido_id:
+        puedeGestionarPedidos && estadoPedidoId ? Number(estadoPedidoId) : null,
     }
 
-    const { error: insertError } = await supabase
-      .from('pedidos')
-      .insert(datosPedido)
+    const { error: insertError } = await supabase.from('pedidos').insert(datosPedido)
 
     setGuardando(false)
-
     if (insertError) return setError(insertError.message)
 
     limpiarPedido()
@@ -802,19 +798,28 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
 
   async function guardarGestionPedido(e: React.FormEvent) {
     e.preventDefault()
-    if (!pedidoEdit) return
+    if (!pedidoEdit || !puedeGestionarPedidos) return
 
     setError('')
     setMensaje('')
 
-    if (!validarTelefono(pedidoEdit.telefono)) {
-      setError('El teléfono debe tener exactamente 10 dígitos y no puede comenzar con 0 ni 5.')
+    const esCuadraSaturada =
+      pedidoEdit.tipos_pedido?.codigo === 'AMPLIACION_CUADRA_SATURADA'
+
+    if (
+      esCuadraSaturada &&
+      !validarTelefono(pedidoEdit.telefono || '')
+    ) {
+      setError(
+        'El teléfono del Cliente debe tener 10 dígitos y no comenzar con 0 ni 5.'
+      )
       return
     }
 
     if (
-      !validarTelefonoOpcional(pedidoEdit.telefono_adm || '') ||
-      !validarTelefonoOpcional(pedidoEdit.telefono_enc || '')
+      !esCuadraSaturada &&
+      (!validarTelefonoOpcional(pedidoEdit.telefono_adm || '') ||
+        !validarTelefonoOpcional(pedidoEdit.telefono_enc || ''))
     ) {
       setError(
         'Los teléfonos de Administrador y Encargado, si se informan, deben tener 10 dígitos y no comenzar con 0 ni 5.'
@@ -823,49 +828,40 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
     }
 
     setGuardandoGestion(true)
-
     try {
       const response = await fetch('/api/gestion/pedido', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pedido_id: pedidoEdit.id,
-          dni: normalizar(pedidoEdit.dni || ''),
-          telefono: pedidoEdit.telefono,
           domicilio: normalizar(pedidoEdit.domicilio || ''),
-          tipo_domicilio: normalizar(pedidoEdit.tipo_domicilio || ''),
-          nombre_edificio: normalizar(pedidoEdit.nombre_edificio || ''),
-          cant_unidades_f: normalizar(pedidoEdit.cant_unidades_f || ''),
-          cant_pisos: normalizar(pedidoEdit.cant_pisos || ''),
-          cant_torres: normalizar(pedidoEdit.cant_torres || ''),
-          administrador: normalizar(pedidoEdit.administrador || ''),
-          telefono_adm: normalizar(pedidoEdit.telefono_adm || ''),
-          correo_adm: normalizar(pedidoEdit.correo_adm || ''),
-          encargado: normalizar(pedidoEdit.encargado || ''),
-          telefono_enc: normalizar(pedidoEdit.telefono_enc || ''),
-          correo_enc: normalizar(pedidoEdit.correo_enc || ''),
+          entre_calles: normalizar(pedidoEdit.entre_calles || ''),
+          barrio: normalizar(pedidoEdit.barrio || ''),
+          telefono: esCuadraSaturada ? normalizar(pedidoEdit.telefono || '') : null,
+          coordenadas: esCuadraSaturada ? normalizar(pedidoEdit.coordenadas || '') : null,
+          acronimo_olt_proxima: esCuadraSaturada ? normalizar(pedidoEdit.acronimo_olt_proxima || '') : null,
+          nombre_edificio: esCuadraSaturada ? null : normalizar(pedidoEdit.nombre_edificio || ''),
+          torre: esCuadraSaturada ? null : normalizar(pedidoEdit.torre || ''),
+          cant_unidades_f: esCuadraSaturada ? null : normalizar(pedidoEdit.cant_unidades_f || ''),
+          administrador: esCuadraSaturada ? null : normalizar(pedidoEdit.administrador || ''),
+          telefono_adm: esCuadraSaturada ? null : normalizar(pedidoEdit.telefono_adm || ''),
+          encargado: esCuadraSaturada ? null : normalizar(pedidoEdit.encargado || ''),
+          telefono_enc: esCuadraSaturada ? null : normalizar(pedidoEdit.telefono_enc || ''),
+          notas_anexas: esCuadraSaturada ? null : normalizar(pedidoEdit.notas_anexas || ''),
+          id_venta_cargada: normalizar(pedidoEdit.id_venta_cargada || ''),
           observaciones_vendedor: normalizar(pedidoEdit.observaciones_vendedor || ''),
-          permisos_acceso: normalizar(pedidoEdit.permisos_acceso || ''),
-          planos: normalizar(pedidoEdit.planos || ''),
-          cant_preventas: normalizar(pedidoEdit.cant_preventas || ''),
-          wo: normalizar(pedidoEdit.wo || ''),
           observaciones_gestion: normalizar(pedidoEdit.observaciones_gestion || ''),
-          fecha_ok: pedidoEdit.fecha_ok || null,
           estado_pedido_id: pedidoEdit.estado_pedido_id,
         }),
       })
 
       const resultado = await response.json().catch(() => null)
-
       if (!response.ok) {
         setError(resultado?.error || 'No se pudo guardar la gestión del Pedido.')
         return
       }
 
       const aviso = resultado?.aviso ? ` ${resultado.aviso}` : ''
-
       setMensaje(
         `Gestión del Pedido ${pedidoEdit.codigo || `#${pedidoEdit.id}`} guardada correctamente.${aviso}`
       )
@@ -873,9 +869,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
       await cargarDatos()
     } catch (error) {
       setError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo guardar la gestión del Pedido.'
+        error instanceof Error ? error.message : 'No se pudo guardar la gestión del Pedido.'
       )
     } finally {
       setGuardandoGestion(false)
@@ -1108,214 +1102,91 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
           ) : (
             <form onSubmit={guardarPedido} className="space-y-6">
               <h2 className="text-lg font-semibold text-gray-900">Nuevo Pedido</h2>
-
               <div className="grid gap-4 md:grid-cols-2">
                 <Campo label="Tipo de Pedido *">
-                  <select
-                    required
-                    value={tipoPedidoId}
-                    onChange={(e) => setTipoPedidoId(e.target.value)}
-                    className={inputClass}
-                  >
+                  <select required value={tipoPedidoId} onChange={(e) => { setTipoPedidoId(e.target.value); setEstadoPedidoId('') }} className={inputClass}>
                     <option value="">Seleccionar...</option>
-                    {tiposPedido.map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {ETIQUETAS_PEDIDO[x.codigo] || x.nombre}
-                      </option>
-                    ))}
+                    {tiposPedido.map((x) => <option key={x.id} value={x.id}>{ETIQUETAS_PEDIDO[x.codigo] || x.nombre}</option>)}
                   </select>
                 </Campo>
 
-                {esRellamado && (
-                  <Campo label="DNI">
-                    <input
-                      value={dniPedido}
-                      onChange={(e) =>
-                        setDniPedido(e.target.value.replace(/\D/g, ''))
-                      }
-                      inputMode="numeric"
-                      className={inputClass}
-                      placeholder="DNI establecido en la venta"
-                    />
-                  </Campo>
-                )}
-
-                <Campo label="Teléfono *">
-                  <input
-                    required
-                    inputMode="numeric"
-                    maxLength={10}
-                    value={telefonoPedido}
-                    onChange={(e) =>
-                      setTelefonoPedido(
-                        e.target.value.replace(/\D/g, '').slice(0, 10)
-                      )
-                    }
-                    className={inputClass}
-                    placeholder={
-                      esRellamado
-                        ? 'Teléfono de la venta o alternativo'
-                        : '10 dígitos'
-                    }
-                  />
+                <Campo label="Fecha Ingreso">
+                  <input value="Se registra automáticamente al guardar" readOnly className={`${inputClass} bg-gray-100 text-gray-600`} />
                 </Campo>
 
-                {!esRellamado && (
+                <Campo label="Solicitante">
+                  <input value={nombreUsuario} readOnly className={`${inputClass} bg-gray-100 text-gray-600`} />
+                </Campo>
+
+                <Campo label={esAmpliacionCuadraSaturada ? 'Domicilio a ampliar' : 'Domicilio'}>
+                  <input value={domicilioPedido} onChange={(e) => setDomicilioPedido(e.target.value)} className={inputClass} />
+                </Campo>
+
+                <Campo label="Entre Calles">
+                  <input value={entreCallesPedido} onChange={(e) => setEntreCallesPedido(e.target.value)} className={inputClass} />
+                </Campo>
+
+                <Campo label="Barrio">
+                  <input value={barrioPedido} onChange={(e) => setBarrioPedido(e.target.value)} className={inputClass} />
+                </Campo>
+
+                {esAmpliacionCuadraSaturada ? (
                   <>
-                    <Campo label="Tipo de domicilio">
-                      <select
-                        value={tipoDomicilioPedido}
-                        onChange={(e) => setTipoDomicilioPedido(e.target.value)}
-                        className={inputClass}
-                      >
-                        <option value="">Seleccionar...</option>
-                        {TIPOS_DOMICILIO.map(([v, n]) => (
-                          <option key={v} value={v}>
-                            {n}
-                          </option>
-                        ))}
-                      </select>
-                    </Campo>
-
-                    <Campo label="Domicilio">
+                    <Campo label="Teléfono Cliente *">
                       <input
-                        value={domicilioPedido}
-                        onChange={(e) => setDomicilioPedido(e.target.value)}
-                        className={inputClass}
-                      />
-                    </Campo>
-
-                    <Campo label="Nombre edificio">
-                      <input
-                        value={nombreEdificio}
-                        onChange={(e) => setNombreEdificio(e.target.value)}
-                        className={inputClass}
-                      />
-                    </Campo>
-
-                    <Campo label="Cant. unidades F">
-                      <input
-                        value={cantUnidades}
-                        onChange={(e) => setCantUnidades(e.target.value)}
-                        className={inputClass}
-                      />
-                    </Campo>
-
-                    <Campo label="Cant. pisos">
-                      <input
-                        value={cantPisos}
-                        onChange={(e) => setCantPisos(e.target.value)}
-                        className={inputClass}
-                      />
-                    </Campo>
-
-                    <Campo label="Cant. torres">
-                      <input
-                        value={cantTorres}
-                        onChange={(e) => setCantTorres(e.target.value)}
-                        className={inputClass}
-                      />
-                    </Campo>
-
-                    <Campo label="Administrador">
-                      <input
-                        value={administrador}
-                        onChange={(e) => setAdministrador(e.target.value)}
-                        className={inputClass}
-                      />
-                    </Campo>
-
-                    <Campo label="Teléfono administrador">
-                      <input
+                        required
                         inputMode="numeric"
                         maxLength={10}
-                        value={telefonoAdm}
+                        value={telefonoPedido}
                         onChange={(e) =>
-                          setTelefonoAdm(
+                          setTelefonoPedido(
                             e.target.value.replace(/\D/g, '').slice(0, 10)
                           )
                         }
                         className={inputClass}
+                        placeholder="10 dígitos"
                       />
                     </Campo>
-
-                    <Campo label="Correo administrador">
-                      <input
-                        type="email"
-                        value={correoAdm}
-                        onChange={(e) => setCorreoAdm(e.target.value)}
-                        className={inputClass}
-                      />
+                    <Campo label="Coordenadas">
+                      <input value={coordenadasPedido} onChange={(e) => setCoordenadasPedido(e.target.value)} className={inputClass} />
                     </Campo>
-
-                    <Campo label="Encargado">
-                      <input
-                        value={encargado}
-                        onChange={(e) => setEncargado(e.target.value)}
-                        className={inputClass}
-                      />
-                    </Campo>
-
-                    <Campo label="Teléfono encargado">
-                      <input
-                        inputMode="numeric"
-                        maxLength={10}
-                        value={telefonoEnc}
-                        onChange={(e) =>
-                          setTelefonoEnc(
-                            e.target.value.replace(/\D/g, '').slice(0, 10)
-                          )
-                        }
-                        className={inputClass}
-                      />
-                    </Campo>
-
-                    <Campo label="Correo encargado">
-                      <input
-                        type="email"
-                        value={correoEnc}
-                        onChange={(e) => setCorreoEnc(e.target.value)}
-                        className={inputClass}
-                      />
-                    </Campo>
-
-                    <Campo label="Permisos de acceso">
-                      <select
-                        value={permisosAcceso}
-                        onChange={(e) => setPermisosAcceso(e.target.value)}
-                        className={inputClass}
-                      >
-                        <option value="">Seleccionar...</option>
-                        <option value="ADM">Administrador</option>
-                        <option value="ENC">Encargado</option>
-                        <option value="NOREQ">No requiere</option>
-                      </select>
-                    </Campo>
-
-                    <Campo label="Planos">
-                      <select
-                        value={planos}
-                        onChange={(e) => setPlanos(e.target.value)}
-                        className={inputClass}
-                      >
-                        <option value="">Seleccionar...</option>
-                        <option value="SI">Sí</option>
-                        <option value="NO">No</option>
-                      </select>
-                    </Campo>
-
-                    <Campo label="Cant. preventas">
-                      <input
-                        value={cantPreventas}
-                        onChange={(e) => setCantPreventas(e.target.value)}
-                        className={inputClass}
-                      />
+                    <Campo label="Acrónimo OLT Próxima">
+                      <input value={acronimoOltProxima} onChange={(e) => setAcronimoOltProxima(e.target.value)} className={inputClass} />
                     </Campo>
                   </>
+                ) : (
+                  <>
+                    <Campo label="Nombre Edificio"><input value={nombreEdificio} onChange={(e) => setNombreEdificio(e.target.value)} className={inputClass} /></Campo>
+                    <Campo label="Torre"><input value={torrePedido} onChange={(e) => setTorrePedido(e.target.value)} className={inputClass} /></Campo>
+                    <Campo label="Cantidad UF"><input value={cantUnidades} onChange={(e) => setCantUnidades(e.target.value)} className={inputClass} /></Campo>
+                    <Campo label="Nombre Administrador"><input value={administrador} onChange={(e) => setAdministrador(e.target.value)} className={inputClass} /></Campo>
+                    <Campo label="Teléfono Administrador">
+                      <input inputMode="numeric" maxLength={10} value={telefonoAdm} onChange={(e) => setTelefonoAdm(e.target.value.replace(/\D/g, '').slice(0, 10))} className={inputClass} placeholder="10 dígitos" />
+                    </Campo>
+                    <Campo label="Nombre Encargado"><input value={encargado} onChange={(e) => setEncargado(e.target.value)} className={inputClass} /></Campo>
+                    <Campo label="Teléfono Encargado">
+                      <input inputMode="numeric" maxLength={10} value={telefonoEnc} onChange={(e) => setTelefonoEnc(e.target.value.replace(/\D/g, '').slice(0, 10))} className={inputClass} placeholder="10 dígitos" />
+                    </Campo>
+                    <Campo label="Notas Anexas"><textarea rows={3} value={notasAnexas} onChange={(e) => setNotasAnexas(e.target.value)} className={inputClass} /></Campo>
+                  </>
                 )}
+
+                <Campo label="ID Venta Cargada">
+                  <div>
+                    <input value={idVentaCargada} onChange={(e) => setIdVentaCargada(e.target.value)} className={inputClass} />
+                    <p className="mt-1 text-xs text-gray-500">pegar ID venta cargada que motiva este pedido</p>
+                  </div>
+                </Campo>
+
+                <Campo label="Estado Gestión">
+                  <select value={estadoPedidoId} onChange={(e) => setEstadoPedidoId(e.target.value)} disabled={!puedeGestionarPedidos || !tipoPedidoId} className={`${inputClass} disabled:bg-gray-100 disabled:text-gray-500 disabled:opacity-100`}>
+                    <option value="">Sin calificar</option>
+                    {estadosPedidoSeleccionado.map((estado) => <option key={estado.id} value={estado.id}>{estado.nombre}</option>)}
+                  </select>
+                </Campo>
               </div>
 
-              <Campo label={esRellamado ? 'Observaciones' : 'Observaciones vendedor'}>
+              <Campo label="Observaciones">
                 <textarea rows={4} value={observacionesPedido} onChange={(e) => setObservacionesPedido(e.target.value)} className={inputClass} />
               </Campo>
 
@@ -1327,7 +1198,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
         </section>
       )}
 
-      {puedeGestionarVentas && (
+      {(puedeGestionarConsultas || puedeGestionarPedidos) && (
         <section className="mt-8 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-7">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -1348,6 +1219,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
           </div>
 
           <div className="mt-6 flex flex-wrap gap-2">
+            {puedeGestionarConsultas && (
             <button
               type="button"
               onClick={() => {
@@ -1359,6 +1231,8 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
             >
               Consultas
             </button>
+            )}
+            {puedeGestionarPedidos && (
             <button
               type="button"
               onClick={() => {
@@ -1370,6 +1244,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
             >
               Pedidos
             </button>
+            )}
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
@@ -1645,51 +1520,30 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                 </form>
               )}
 
-              {gestionAbierta.tipo === 'PEDIDOS' && pedidoEdit && (
+              {gestionAbierta.tipo === 'PEDIDOS' && pedidoEdit && puedeGestionarPedidos && (
                 <form onSubmit={guardarGestionPedido} className="space-y-6">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900">
-                        Gestionar {pedidoEdit.codigo || `Pedido #${pedidoEdit.id}`}
-                      </h3>
-                      <div className="mt-1 text-sm text-gray-500">
-                        {pedidoEdit.tipos_pedido?.nombre || 'Pedido'} ·{' '}
-                        {new Date(pedidoEdit.marca_temporal).toLocaleString('es-AR')}
-                      </div>
+                      <h3 className="text-lg font-bold text-gray-900">Gestionar {pedidoEdit.codigo || `Pedido #${pedidoEdit.id}`}</h3>
+                      <div className="mt-1 text-sm text-gray-500">{pedidoEdit.tipos_pedido?.nombre || 'Pedido'} · {new Date(pedidoEdit.marca_temporal).toLocaleString('es-AR')}</div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={cerrarGestion}
-                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                    >
-                      Cerrar
-                    </button>
+                    <button type="button" onClick={cerrarGestion} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cerrar</button>
                   </div>
 
-                  {pedidoEdit.tipos_pedido?.codigo === 'RELLAMADO_VENTA_GESTION' ? (
-                    <>
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <Campo label="DNI">
-                          <input
-                            value={pedidoEdit.dni || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                dni: e.target.value.replace(/\D/g, ''),
-                              })
-                            }
-                            inputMode="numeric"
-                            className={inputClass}
-                          />
-                        </Campo>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Campo label="Fecha Ingreso"><input value={new Date(pedidoEdit.marca_temporal).toLocaleString('es-AR')} readOnly className={`${inputClass} bg-gray-100 text-gray-600`} /></Campo>
+                    <Campo label="Domicilio"><input value={pedidoEdit.domicilio || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, domicilio: e.target.value })} className={inputClass} /></Campo>
+                    <Campo label="Entre Calles"><input value={pedidoEdit.entre_calles || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, entre_calles: e.target.value })} className={inputClass} /></Campo>
+                    <Campo label="Barrio"><input value={pedidoEdit.barrio || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, barrio: e.target.value })} className={inputClass} /></Campo>
 
-                        <Campo label="Teléfono *">
+                    {pedidoEdit.tipos_pedido?.codigo === 'AMPLIACION_CUADRA_SATURADA' ? (
+                      <>
+                        <Campo label="Teléfono Cliente *">
                           <input
                             required
                             inputMode="numeric"
                             maxLength={10}
-                            value={pedidoEdit.telefono}
+                            value={pedidoEdit.telefono || ''}
                             onChange={(e) =>
                               setPedidoEdit({
                                 ...pedidoEdit,
@@ -1697,401 +1551,50 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                               })
                             }
                             className={inputClass}
+                            placeholder="10 dígitos"
                           />
                         </Campo>
+                        <Campo label="Coordenadas"><input value={pedidoEdit.coordenadas || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, coordenadas: e.target.value })} className={inputClass} /></Campo>
+                        <Campo label="Acrónimo OLT Próxima"><input value={pedidoEdit.acronimo_olt_proxima || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, acronimo_olt_proxima: e.target.value })} className={inputClass} /></Campo>
+                      </>
+                    ) : (
+                      <>
+                        <Campo label="Nombre Edificio"><input value={pedidoEdit.nombre_edificio || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, nombre_edificio: e.target.value })} className={inputClass} /></Campo>
+                        <Campo label="Torre"><input value={pedidoEdit.torre || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, torre: e.target.value })} className={inputClass} /></Campo>
+                        <Campo label="Cantidad UF"><input value={pedidoEdit.cant_unidades_f || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, cant_unidades_f: e.target.value })} className={inputClass} /></Campo>
+                        <Campo label="Nombre Administrador"><input value={pedidoEdit.administrador || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, administrador: e.target.value })} className={inputClass} /></Campo>
+                        <Campo label="Teléfono Administrador"><input inputMode="numeric" maxLength={10} value={pedidoEdit.telefono_adm || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, telefono_adm: e.target.value.replace(/\D/g, '').slice(0, 10) })} className={inputClass} /></Campo>
+                        <Campo label="Nombre Encargado"><input value={pedidoEdit.encargado || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, encargado: e.target.value })} className={inputClass} /></Campo>
+                        <Campo label="Teléfono Encargado"><input inputMode="numeric" maxLength={10} value={pedidoEdit.telefono_enc || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, telefono_enc: e.target.value.replace(/\D/g, '').slice(0, 10) })} className={inputClass} /></Campo>
+                        <Campo label="Notas Anexas"><textarea rows={3} value={pedidoEdit.notas_anexas || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, notas_anexas: e.target.value })} className={inputClass} /></Campo>
+                      </>
+                    )}
+
+                    <Campo label="ID Venta Cargada">
+                      <div>
+                        <input value={pedidoEdit.id_venta_cargada || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, id_venta_cargada: e.target.value })} className={inputClass} />
+                        <p className="mt-1 text-xs text-gray-500">pegar ID venta cargada que motiva este pedido</p>
                       </div>
-
-                      <Campo label="Observaciones">
-                        <textarea
-                          rows={4}
-                          value={pedidoEdit.observaciones_vendedor || ''}
-                          onChange={(e) =>
-                            setPedidoEdit({
-                              ...pedidoEdit,
-                              observaciones_vendedor: e.target.value,
-                            })
-                          }
-                          className={inputClass}
-                        />
-                      </Campo>
-                    </>
-                  ) : (
-                    <>
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <Campo label="DNI">
-                          <input
-                            value={pedidoEdit.dni || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                dni: e.target.value.replace(/\D/g, ''),
-                              })
-                            }
-                            inputMode="numeric"
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Teléfono *">
-                          <input
-                            required
-                            inputMode="numeric"
-                            maxLength={10}
-                            value={pedidoEdit.telefono}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                telefono: e.target.value.replace(/\D/g, '').slice(0, 10),
-                              })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Tipo de domicilio">
-                          <select
-                            value={pedidoEdit.tipo_domicilio || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                tipo_domicilio: e.target.value || null,
-                              })
-                            }
-                            className={inputClass}
-                          >
-                            <option value="">Seleccionar...</option>
-                            {TIPOS_DOMICILIO.map(([v, n]) => (
-                              <option key={v} value={v}>
-                                {n}
-                              </option>
-                            ))}
-                          </select>
-                        </Campo>
-
-                        <Campo label="Domicilio">
-                          <input
-                            value={pedidoEdit.domicilio || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({ ...pedidoEdit, domicilio: e.target.value })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Nombre edificio">
-                          <input
-                            value={pedidoEdit.nombre_edificio || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                nombre_edificio: e.target.value,
-                              })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Cant. unidades F">
-                          <input
-                            value={pedidoEdit.cant_unidades_f || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                cant_unidades_f: e.target.value,
-                              })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Cant. pisos">
-                          <input
-                            value={pedidoEdit.cant_pisos || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({ ...pedidoEdit, cant_pisos: e.target.value })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Cant. torres">
-                          <input
-                            value={pedidoEdit.cant_torres || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({ ...pedidoEdit, cant_torres: e.target.value })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Administrador">
-                          <input
-                            value={pedidoEdit.administrador || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                administrador: e.target.value,
-                              })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Teléfono administrador">
-                          <input
-                            inputMode="numeric"
-                            maxLength={10}
-                            value={pedidoEdit.telefono_adm || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                telefono_adm: e.target.value
-                                  .replace(/\D/g, '')
-                                  .slice(0, 10),
-                              })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Correo administrador">
-                          <input
-                            type="email"
-                            value={pedidoEdit.correo_adm || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                correo_adm: e.target.value,
-                              })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Encargado">
-                          <input
-                            value={pedidoEdit.encargado || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({ ...pedidoEdit, encargado: e.target.value })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Teléfono encargado">
-                          <input
-                            inputMode="numeric"
-                            maxLength={10}
-                            value={pedidoEdit.telefono_enc || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                telefono_enc: e.target.value
-                                  .replace(/\D/g, '')
-                                  .slice(0, 10),
-                              })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Correo encargado">
-                          <input
-                            type="email"
-                            value={pedidoEdit.correo_enc || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                correo_enc: e.target.value,
-                              })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-
-                        <Campo label="Permisos de acceso">
-                          <select
-                            value={pedidoEdit.permisos_acceso || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                permisos_acceso: e.target.value || null,
-                              })
-                            }
-                            className={inputClass}
-                          >
-                            <option value="">Seleccionar...</option>
-                            <option value="ADM">Administrador</option>
-                            <option value="ENC">Encargado</option>
-                            <option value="NOREQ">No requiere</option>
-                          </select>
-                        </Campo>
-
-                        <Campo label="Planos">
-                          <select
-                            value={pedidoEdit.planos || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                planos: e.target.value || null,
-                              })
-                            }
-                            className={inputClass}
-                          >
-                            <option value="">Seleccionar...</option>
-                            <option value="SI">Sí</option>
-                            <option value="NO">No</option>
-                          </select>
-                        </Campo>
-
-                        <Campo label="Cant. preventas">
-                          <input
-                            value={pedidoEdit.cant_preventas || ''}
-                            onChange={(e) =>
-                              setPedidoEdit({
-                                ...pedidoEdit,
-                                cant_preventas: e.target.value,
-                              })
-                            }
-                            className={inputClass}
-                          />
-                        </Campo>
-                      </div>
-
-                      <Campo label="Observaciones vendedor">
-                        <textarea
-                          rows={4}
-                          value={pedidoEdit.observaciones_vendedor || ''}
-                          onChange={(e) =>
-                            setPedidoEdit({
-                              ...pedidoEdit,
-                              observaciones_vendedor: e.target.value,
-                            })
-                          }
-                          className={inputClass}
-                        />
-                      </Campo>
-                    </>
-                  )}
-
-                  <div className="rounded-xl border border-gray-200 bg-white p-4">
-                    <h4 className="mb-4 font-semibold text-gray-900">Datos de gestión</h4>
-
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {pedidoEdit.tipos_pedido?.codigo === 'RELLAMADO_VENTA_GESTION' ? (
-                        <Campo label="Fecha Gestión">
-                          <input
-                            type="text"
-                            value={
-                              pedidoEdit.fecha_gestion
-                                ? new Intl.DateTimeFormat('es-AR', {
-                                    timeZone: 'America/Argentina/Buenos_Aires',
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    second: '2-digit',
-                                    hour12: false,
-                                  }).format(new Date(pedidoEdit.fecha_gestion))
-                                : 'Sin gestión'
-                            }
-                            readOnly
-                            className={`${inputClass} bg-gray-50`}
-                          />
-                        </Campo>
-                      ) : (
-                        <>
-                          <Campo label="WO">
-                            <input
-                              value={pedidoEdit.wo || ''}
-                              onChange={(e) =>
-                                setPedidoEdit({
-                                  ...pedidoEdit,
-                                  wo: e.target.value,
-                                })
-                              }
-                              className={inputClass}
-                            />
-                          </Campo>
-
-                          <Campo label="Fecha OK">
-                            <input
-                              type="date"
-                              value={pedidoEdit.fecha_ok || ''}
-                              onChange={(e) =>
-                                setPedidoEdit({
-                                  ...pedidoEdit,
-                                  fecha_ok: e.target.value || null,
-                                })
-                              }
-                              className={inputClass}
-                            />
-                          </Campo>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="mt-4">
-                      <Campo label="Observaciones Gestión">
-                        <textarea
-                          rows={4}
-                          value={pedidoEdit.observaciones_gestion || ''}
-                          onChange={(e) =>
-                            setPedidoEdit({
-                              ...pedidoEdit,
-                              observaciones_gestion: e.target.value,
-                            })
-                          }
-                          className={inputClass}
-                        />
-                      </Campo>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-red-100 pt-5">
-                    <Campo label="Estado">
-                      <select
-                        value={pedidoEdit.estado_pedido_id ?? ''}
-                        onChange={(e) =>
-                          setPedidoEdit({
-                            ...pedidoEdit,
-                            estado_pedido_id: e.target.value
-                              ? Number(e.target.value)
-                              : null,
-                          })
-                        }
-                        className={inputClass}
-                      >
-                        <option value="">Sin calificar</option>
-                        {estadosPedido
-                          .filter(
-                            (estado) =>
-                              estadoCorrespondeAPedido(estado, pedidoEdit) &&
-                              (estado.activo || estado.id === pedidoEdit.estado_pedido_id)
-                          )
-                          .map((estado) => (
-                            <option key={estado.id} value={estado.id}>
-                              {estado.nombre}
-                              {!estado.activo ? ' (inactivo)' : ''}
-                            </option>
-                          ))}
-                      </select>
                     </Campo>
 
-                    {estadosPedido.filter((estado) =>
-                      estadoCorrespondeAPedido(estado, pedidoEdit)
-                    ).length === 0 && (
-                      <p className="mt-2 text-xs text-amber-700">
-                        No hay Estados configurados para este Tipo de Pedido.
-                      </p>
-                    )}
+                    <Campo label="Estado Gestión">
+                      <select value={pedidoEdit.estado_pedido_id ?? ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, estado_pedido_id: e.target.value ? Number(e.target.value) : null })} className={inputClass}>
+                        <option value="">Sin calificar</option>
+                        {estadosPedido.filter((estado) => estadoCorrespondeAPedido(estado, pedidoEdit) && (estado.activo || estado.id === pedidoEdit.estado_pedido_id)).map((estado) => (
+                          <option key={estado.id} value={estado.id}>{estado.nombre}{!estado.activo ? ' (inactivo)' : ''}</option>
+                        ))}
+                      </select>
+                    </Campo>
                   </div>
 
-                  <button
-                    disabled={guardandoGestion}
-                    className="rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-                  >
+                  <Campo label="Observaciones"><textarea rows={4} value={pedidoEdit.observaciones_vendedor || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, observaciones_vendedor: e.target.value })} className={inputClass} /></Campo>
+                  <Campo label="Observaciones Gestión"><textarea rows={4} value={pedidoEdit.observaciones_gestion || ''} onChange={(e) => setPedidoEdit({ ...pedidoEdit, observaciones_gestion: e.target.value })} className={inputClass} /></Campo>
+
+                  {estadosPedido.filter((estado) => estadoCorrespondeAPedido(estado, pedidoEdit)).length === 0 && (
+                    <p className="text-xs text-amber-700">No hay Estados configurados para este Tipo de Pedido.</p>
+                  )}
+
+                  <button disabled={guardandoGestion} className="rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-50">
                     {guardandoGestion ? 'Guardando gestión...' : 'Guardar gestión'}
                   </button>
                 </form>
@@ -2104,7 +1607,7 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
               <div className="rounded-xl border bg-gray-50 p-6 text-gray-500">
                 Cargando gestión...
               </div>
-            ) : vistaGestion === 'CONSULTAS' ? (
+            ) : vistaGestion === 'CONSULTAS' && puedeGestionarConsultas ? (
               <div className="space-y-3">
                 {consultasGestionFiltradas.length === 0 && (
                   <Vacio texto="No hay Consultas para este filtro." />
@@ -2219,20 +1722,10 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                     </div>
 
                     <div className="mt-4 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
-                      {x.dni && (
-                        <div>
-                          <b>DNI:</b> {x.dni}
-                        </div>
-                      )}
-                      <div>
-                        <b>Teléfono:</b> {x.telefono}
-                      </div>
-                      <div>
-                        <b>Domicilio:</b> {x.domicilio || '-'}
-                      </div>
-                      <div className="md:col-span-2">
-                        <b>Observaciones:</b> {x.observaciones_vendedor || '-'}
-                      </div>
+                      <div><b>Domicilio:</b> {x.domicilio || '-'}</div>
+                      <div><b>Barrio:</b> {x.barrio || '-'}</div>
+                      <div><b>ID Venta Cargada:</b> {x.id_venta_cargada || '-'}</div>
+                      <div className="md:col-span-2"><b>Observaciones:</b> {x.observaciones_vendedor || '-'}</div>
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -2332,9 +1825,9 @@ export default function MisConsultasClient({ userId, rol, puedeGestionarVentas }
                 </div>
 
                 <div className="mt-4 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
-                  {x.dni && <div><b>DNI:</b> {x.dni}</div>}
-                  <div><b>Teléfono:</b> {x.telefono}</div>
                   <div><b>Domicilio:</b> {x.domicilio || '-'}</div>
+                  <div><b>Barrio:</b> {x.barrio || '-'}</div>
+                  <div><b>ID Venta Cargada:</b> {x.id_venta_cargada || '-'}</div>
                   <div className="md:col-span-2"><b>Observaciones:</b> {x.observaciones_vendedor || '-'}</div>
                 </div>
               </article>

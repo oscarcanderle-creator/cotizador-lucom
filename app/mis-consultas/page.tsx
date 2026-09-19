@@ -29,12 +29,12 @@ export default async function MisConsultasPage() {
         actual="MIS_CONSULTAS"
         puedeGestionarVentas={profile.puede_gestionar_ventas === true}
       />
-
-      <MisConsultasClient
-        userId={user.id}
-        rol={profile.rol}
-        puedeGestionarVentas={profile.puede_gestionar_ventas === true}
-      />
+<MisConsultasClient
+  userId={user.id}
+  nombreUsuario={profile.nombre?.trim() || user.email || 'Usuario'}
+  rol={profile.rol}
+  puedeGestionarVentas={profile.puede_gestionar_ventas === true}
+/>
     </main>
   )
 }

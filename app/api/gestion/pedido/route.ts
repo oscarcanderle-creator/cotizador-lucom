@@ -11,27 +11,23 @@ type PedidoGestion = {
   codigo: string | null
   vendedor_id: string
   tipo_pedido_id: number
-  dni: string | null
-  telefono: string
   domicilio: string | null
-  tipo_domicilio: string | null
+  entre_calles: string | null
+  barrio: string | null
+  telefono: string | null
+  coordenadas: string | null
+  acronimo_olt_proxima: string | null
   nombre_edificio: string | null
+  torre: string | null
   cant_unidades_f: string | null
-  cant_pisos: string | null
-  cant_torres: string | null
   administrador: string | null
   telefono_adm: string | null
-  correo_adm: string | null
   encargado: string | null
   telefono_enc: string | null
-  correo_enc: string | null
+  notas_anexas: string | null
+  id_venta_cargada: string | null
   observaciones_vendedor: string | null
-  permisos_acceso: string | null
-  planos: string | null
-  cant_preventas: string | null
-  wo: string | null
   observaciones_gestion: string | null
-  fecha_ok: string | null
   estado_pedido_id: number | null
 }
 
@@ -43,27 +39,23 @@ type Cambio = {
 
 type BodyGestionPedido = {
   pedido_id: number
-  dni: string | null
-  telefono: string
   domicilio: string | null
-  tipo_domicilio: string | null
+  entre_calles: string | null
+  barrio: string | null
+  telefono: string | null
+  coordenadas: string | null
+  acronimo_olt_proxima: string | null
   nombre_edificio: string | null
+  torre: string | null
   cant_unidades_f: string | null
-  cant_pisos: string | null
-  cant_torres: string | null
   administrador: string | null
   telefono_adm: string | null
-  correo_adm: string | null
   encargado: string | null
   telefono_enc: string | null
-  correo_enc: string | null
+  notas_anexas: string | null
+  id_venta_cargada: string | null
   observaciones_vendedor: string | null
-  permisos_acceso: string | null
-  planos: string | null
-  cant_preventas: string | null
-  wo: string | null
   observaciones_gestion: string | null
-  fecha_ok: string | null
   estado_pedido_id: number | null
 }
 
@@ -72,52 +64,36 @@ const CAMPOS_PEDIDO = `
   codigo,
   vendedor_id,
   tipo_pedido_id,
-  dni,
-  telefono,
   domicilio,
-  tipo_domicilio,
+  entre_calles,
+  barrio,
+  telefono,
+  coordenadas,
+  acronimo_olt_proxima,
   nombre_edificio,
+  torre,
   cant_unidades_f,
-  cant_pisos,
-  cant_torres,
   administrador,
   telefono_adm,
-  correo_adm,
   encargado,
   telefono_enc,
-  correo_enc,
+  notas_anexas,
+  id_venta_cargada,
   observaciones_vendedor,
-  permisos_acceso,
-  planos,
-  cant_preventas,
-  wo,
   observaciones_gestion,
-  fecha_ok,
   estado_pedido_id
 `
 
-const ETIQUETAS_TIPO_DOMICILIO: Record<string, string> = {
-  CASA: 'Casa',
-  EDIFICIO: 'Edificio',
-  BARRIO_CERRADO: 'Barrio Cerrado',
-  BARRIO_ABIERTO: 'Barrio Abierto',
-}
-
 const ETIQUETAS_TIPO_PEDIDO: Record<string, string> = {
-  RELLAMADO_VENTA_GESTION: 'Pedido de Rellamado en Gestión',
   ACOMETIDA: 'Pedido de Acometida',
   PROYECTO: 'Pedido de Proyecto',
   AMPLIACION: 'Pedido de Ampliación',
+  AMPLIACION_CUADRA_SATURADA: 'Pedido de Ampliación Cuadra Saturada',
 }
 
 function texto(valor: unknown) {
   if (valor === null || valor === undefined || valor === '') return '—'
   return String(valor)
-}
-
-function textoDomicilio(valor: string | null) {
-  if (!valor) return '—'
-  return ETIQUETAS_TIPO_DOMICILIO[valor] || valor
 }
 
 function fechaArgentina(fecha: Date) {
@@ -143,17 +119,17 @@ function mensajeError(error: unknown) {
   return String(error).slice(0, 4000)
 }
 
-function referenciaPedido(codigoTipo: string, pedido: PedidoGestion) {
-  if (codigoTipo === 'RELLAMADO_VENTA_GESTION') {
-    return {
-      tabla: `Teléfono: ${texto(pedido.telefono)}`,
-      cuerpo: [`Teléfono: ${texto(pedido.telefono)}`],
-    }
+function referenciaPedido(pedido: PedidoGestion) {
+  const cuerpo = [`Domicilio: ${texto(pedido.domicilio)}`]
+
+  if (pedido.barrio) cuerpo.push(`Barrio: ${texto(pedido.barrio)}`)
+  if (pedido.id_venta_cargada) {
+    cuerpo.push(`ID Venta Cargada: ${texto(pedido.id_venta_cargada)}`)
   }
 
   return {
     tabla: `Domicilio: ${texto(pedido.domicilio)}`,
-    cuerpo: [`Domicilio: ${texto(pedido.domicilio)}`],
+    cuerpo,
   }
 }
 
@@ -207,27 +183,11 @@ export async function POST(request: Request) {
 
   const anterior = anteriorData as unknown as PedidoGestion
 
-  /*
-   * Restricción adicional del lado servidor.
-   *
-   * Un VENDEDOR con puede_gestionar_ventas=true puede gestionar Pedidos
-   * globales únicamente cuando el tipo es RELLAMADO_VENTA_GESTION.
-   * ADMIN y SUPERVISOR conservan el alcance total.
-   *
-   * La RPC mantiene además sus propias validaciones.
-   */
-  const [{ data: perfilActor }, { data: tipoPedido }] = await Promise.all([
-    adminClient
-      .from('profiles')
-      .select('rol,activo,puede_gestionar_ventas')
-      .eq('id', user.id)
-      .maybeSingle(),
-    adminClient
-      .from('tipos_pedido')
-      .select('codigo')
-      .eq('id', anterior.tipo_pedido_id)
-      .maybeSingle(),
-  ])
+  const { data: perfilActor } = await adminClient
+    .from('profiles')
+    .select('rol,activo')
+    .eq('id', user.id)
+    .maybeSingle()
 
   if (!perfilActor?.activo) {
     return NextResponse.json(
@@ -236,16 +196,9 @@ export async function POST(request: Request) {
     )
   }
 
-  if (
-    perfilActor.rol === 'VENDEDOR' &&
-    perfilActor.puede_gestionar_ventas === true &&
-    tipoPedido?.codigo !== 'RELLAMADO_VENTA_GESTION'
-  ) {
+  if (!['ADMIN', 'SUPERVISOR', 'BBOO'].includes(String(perfilActor.rol))) {
     return NextResponse.json(
-      {
-        error:
-          'Los vendedores habilitados para gestión solo pueden gestionar Pedidos de Rellamado Venta en Gestión.',
-      },
+      { error: 'No tenés permisos para gestionar Pedidos.' },
       { status: 403 }
     )
   }
@@ -254,27 +207,23 @@ export async function POST(request: Request) {
     'gestionar_pedido_completo',
     {
       p_pedido_id: pedidoId,
-      p_dni: body.dni,
-      p_telefono: body.telefono,
       p_domicilio: body.domicilio,
-      p_tipo_domicilio: body.tipo_domicilio,
+      p_entre_calles: body.entre_calles,
+      p_barrio: body.barrio,
+      p_telefono: body.telefono,
+      p_coordenadas: body.coordenadas,
+      p_acronimo_olt_proxima: body.acronimo_olt_proxima,
       p_nombre_edificio: body.nombre_edificio,
+      p_torre: body.torre,
       p_cant_unidades_f: body.cant_unidades_f,
-      p_cant_pisos: body.cant_pisos,
-      p_cant_torres: body.cant_torres,
       p_administrador: body.administrador,
       p_telefono_adm: body.telefono_adm,
-      p_correo_adm: body.correo_adm,
       p_encargado: body.encargado,
       p_telefono_enc: body.telefono_enc,
-      p_correo_enc: body.correo_enc,
+      p_notas_anexas: body.notas_anexas,
+      p_id_venta_cargada: body.id_venta_cargada,
       p_observaciones_vendedor: body.observaciones_vendedor,
-      p_permisos_acceso: body.permisos_acceso,
-      p_planos: body.planos,
-      p_cant_preventas: body.cant_preventas,
-      p_wo: body.wo,
       p_observaciones_gestion: body.observaciones_gestion,
-      p_fecha_ok: body.fecha_ok,
       p_estado_pedido_id: body.estado_pedido_id,
     }
   )
@@ -353,42 +302,49 @@ export async function POST(request: Request) {
     }
   }
 
-  agregarCambio('DNI', anterior.dni, posterior.dni)
-  agregarCambio('Teléfono', anterior.telefono, posterior.telefono)
   agregarCambio('Domicilio', anterior.domicilio, posterior.domicilio)
+  agregarCambio('Entre Calles', anterior.entre_calles, posterior.entre_calles)
+  agregarCambio('Barrio', anterior.barrio, posterior.barrio)
+  agregarCambio('Teléfono Cliente', anterior.telefono, posterior.telefono)
+  agregarCambio('Coordenadas', anterior.coordenadas, posterior.coordenadas)
   agregarCambio(
-    'Tipo de domicilio',
-    anterior.tipo_domicilio,
-    posterior.tipo_domicilio,
-    textoDomicilio
+    'Acrónimo OLT Próxima',
+    anterior.acronimo_olt_proxima,
+    posterior.acronimo_olt_proxima
   )
-  agregarCambio('Nombre edificio', anterior.nombre_edificio, posterior.nombre_edificio)
-  agregarCambio('Cant. unidades F', anterior.cant_unidades_f, posterior.cant_unidades_f)
-  agregarCambio('Cant. pisos', anterior.cant_pisos, posterior.cant_pisos)
-  agregarCambio('Cant. torres', anterior.cant_torres, posterior.cant_torres)
-  agregarCambio('Administrador', anterior.administrador, posterior.administrador)
-  agregarCambio('Teléfono administrador', anterior.telefono_adm, posterior.telefono_adm)
-  agregarCambio('Correo administrador', anterior.correo_adm, posterior.correo_adm)
-  agregarCambio('Encargado', anterior.encargado, posterior.encargado)
-  agregarCambio('Teléfono encargado', anterior.telefono_enc, posterior.telefono_enc)
-  agregarCambio('Correo encargado', anterior.correo_enc, posterior.correo_enc)
+  agregarCambio('Nombre Edificio', anterior.nombre_edificio, posterior.nombre_edificio)
+  agregarCambio('Torre', anterior.torre, posterior.torre)
+  agregarCambio('Cantidad UF', anterior.cant_unidades_f, posterior.cant_unidades_f)
+  agregarCambio('Nombre Administrador', anterior.administrador, posterior.administrador)
   agregarCambio(
-    'Observaciones vendedor',
+    'Teléfono Administrador',
+    anterior.telefono_adm,
+    posterior.telefono_adm
+  )
+  agregarCambio('Nombre Encargado', anterior.encargado, posterior.encargado)
+  agregarCambio(
+    'Teléfono Encargado',
+    anterior.telefono_enc,
+    posterior.telefono_enc
+  )
+  agregarCambio('Notas Anexas', anterior.notas_anexas, posterior.notas_anexas)
+  agregarCambio(
+    'ID Venta Cargada',
+    anterior.id_venta_cargada,
+    posterior.id_venta_cargada
+  )
+  agregarCambio(
+    'Observaciones',
     anterior.observaciones_vendedor,
     posterior.observaciones_vendedor
   )
-  agregarCambio('Permisos de acceso', anterior.permisos_acceso, posterior.permisos_acceso)
-  agregarCambio('Planos', anterior.planos, posterior.planos)
-  agregarCambio('Cant. preventas', anterior.cant_preventas, posterior.cant_preventas)
-  agregarCambio('WO', anterior.wo, posterior.wo)
   agregarCambio(
-    'Observaciones gestión',
+    'Observaciones Gestión',
     anterior.observaciones_gestion,
     posterior.observaciones_gestion
   )
-  agregarCambio('Fecha OK', anterior.fecha_ok, posterior.fecha_ok)
   agregarCambio(
-    'Estado',
+    'Estado Gestión',
     anterior.estado_pedido_id,
     posterior.estado_pedido_id,
     nombreEstado
@@ -414,7 +370,7 @@ const { data: tipoPedidoDb } = await adminClient
     tipoPedidoDb?.nombre ||
     'Pedido'
 
-  const referencia = referenciaPedido(codigoTipo, posterior)
+  const referencia = referenciaPedido(posterior)
   const fechaGestion = new Date()
 
   const { data: actorProfile } = await adminClient
