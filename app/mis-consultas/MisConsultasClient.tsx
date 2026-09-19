@@ -1179,6 +1179,14 @@ export default function MisConsultasClient({ userId, nombreUsuario, rol, puedeGe
                 </Campo>
                   </>
                 )}
+
+                <Campo label="Estado Gestión">
+                  <input
+                    value="Sin calificar"
+                    readOnly
+                    className={`${inputClass} bg-gray-100 text-gray-600`}
+                  />
+                </Campo>
               </div>
 
               <Campo label="Observaciones">
@@ -1247,16 +1255,26 @@ export default function MisConsultasClient({ userId, nombreUsuario, rol, puedeGe
                 ) : (
                   <>
                     <Campo label="Nombre Edificio *"><input required value={nombreEdificio} onChange={(e) => setNombreEdificio(e.target.value)} className={inputClass} /></Campo>
-                    <Campo label="Torre *"><input required value={torrePedido} onChange={(e) => setTorrePedido(e.target.value)} className={inputClass} /></Campo>
-                    <Campo label="Cantidad UF *"><input required value={cantUnidades} onChange={(e) => setCantUnidades(e.target.value)} className={inputClass} /></Campo>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Campo label="Torre *">
+                        <input required value={torrePedido} onChange={(e) => setTorrePedido(e.target.value)} className={inputClass} />
+                      </Campo>
+                      <Campo label="Cantidad UF *">
+                        <input required value={cantUnidades} onChange={(e) => setCantUnidades(e.target.value)} className={inputClass} />
+                      </Campo>
+                    </div>
+
                     <Campo label="Nombre Administrador *"><input required value={administrador} onChange={(e) => setAdministrador(e.target.value)} className={inputClass} /></Campo>
                     <Campo label="Teléfono Administrador *">
                       <input required inputMode="numeric" maxLength={10} value={telefonoAdm} onChange={(e) => setTelefonoAdm(e.target.value.replace(/\D/g, '').slice(0, 10))} className={inputClass} placeholder="10 dígitos" />
                     </Campo>
+
                     <Campo label="Nombre Encargado *"><input required value={encargado} onChange={(e) => setEncargado(e.target.value)} className={inputClass} /></Campo>
                     <Campo label="Teléfono Encargado *">
                       <input required inputMode="numeric" maxLength={10} value={telefonoEnc} onChange={(e) => setTelefonoEnc(e.target.value.replace(/\D/g, '').slice(0, 10))} className={inputClass} placeholder="10 dígitos" />
                     </Campo>
+
                     <Campo label="Notas Anexas"><textarea rows={3} value={notasAnexas} onChange={(e) => setNotasAnexas(e.target.value)} className={inputClass} /></Campo>
                   </>
                 )}
