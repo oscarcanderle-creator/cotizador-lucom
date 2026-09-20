@@ -8,6 +8,7 @@ import GestionBloqueoControls from '../../../components/GestionBloqueoControls'
 import GestionInputValidado from '../../../components/GestionInputValidado'
 import GestionLogisticaChip from '../../../components/GestionLogisticaChip'
 import EditorDatosVenta from '../../../components/EditorDatosVenta'
+import ResolverCaminantePSR from '../../../components/ResolverCaminantePSR'
 import CorreccionesVentaPanel from "../../../components/CorreccionesVentaPanel"
 
 type Params = Promise<{
@@ -527,6 +528,7 @@ export default async function DetalleVentaPage({
         vendedor,
         origen_dato,
         obs,
+        caminante,
         estado_sync,
         sheet_destino,
         fila_sheet,
@@ -908,7 +910,18 @@ export default async function DetalleVentaPage({
                 <Campo label="Vendedor" value={op.vendedor} />
                 <Campo label="Origen del dato" value={op.origen_dato} />
                 {String(op.origen_dato || '').toUpperCase() === 'PSR' && (
-                  <Campo label="ID Mis Referidos" value={op.obs} />
+                  <>
+                    <Campo label="ID Mis Referidos" value={op.obs} />
+                    <Campo label="Caminante" value={op.caminante} />
+
+                    <div className="sm:col-span-2">
+                      <ResolverCaminantePSR
+                        operacionId={String(op.id_operacion)}
+                        obsActual={op.obs ?? null}
+                        caminanteActual={op.caminante ?? null}
+                      />
+                    </div>
+                  </>
                 )}
                 <Campo label="Cantidad de productos" value={productos.length} />
               </div>
@@ -1497,7 +1510,18 @@ export default async function DetalleVentaPage({
               <Campo label="Vendedor" value={op.vendedor} />
               <Campo label="Origen del dato" value={op.origen_dato} />
               {String(op.origen_dato || '').toUpperCase() === 'PSR' && (
-                <Campo label="ID Mis Referidos" value={op.obs} />
+                <>
+                  <Campo label="ID Mis Referidos" value={op.obs} />
+                  <Campo label="Caminante" value={op.caminante} />
+
+                  <div className="sm:col-span-2">
+                    <ResolverCaminantePSR
+                      operacionId={String(op.id_operacion)}
+                      obsActual={op.obs ?? null}
+                      caminanteActual={op.caminante ?? null}
+                    />
+                  </div>
+                </>
               )}
               <Campo label="Grupo operación" value={op.grupo_operacion} />
             </div>

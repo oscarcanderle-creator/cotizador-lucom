@@ -210,6 +210,29 @@ function encabezadosCoinciden(
   )
 }
 
+function buscarDuplicados(
+  filas: string[][],
+  indice: number,
+): string[] {
+  const vistos = new Set<string>()
+  const duplicados = new Set<string>()
+
+  for (const fila of filas) {
+    const valor = limpiar(fila[indice])
+
+    // Teléfono y Nro. POS pueden estar vacíos.
+    if (!valor) continue
+
+    if (vistos.has(valor)) {
+      duplicados.add(valor)
+    } else {
+      vistos.add(valor)
+    }
+  }
+
+  return Array.from(duplicados)
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
@@ -370,7 +393,7 @@ export async function POST(request: Request) {
               ? 8
               : 4
 
-    const registrosValidos = registros.filter((fila) => {
+    const registrosBaseValidos = registros.filter((fila) => {
       if (limpiar(fila[indiceClave]) === '') {
         return false
       }
@@ -385,6 +408,93 @@ export async function POST(request: Request) {
       return true
     })
 
+    let registrosValidos = registrosBaseValidos
+    let duplicadosItec: Array<{
+      motivo: string
+      campo: string
+      valor: string
+      cantidad: number
+      codigo_psr: string
+      telefono: string
+      nro_pos: string
+      caminante: string
+      rubro: string
+    }> = []
+
+    if (tipo === 'ITEC') {
+      const telefonosDuplicados = new Set(
+        buscarDuplicados(registrosBaseValidos, 6),
+      )
+      const posDuplicados = new Set(
+        buscarDuplicados(registrosBaseValidos, 16),
+      )
+
+      const cantidadTelefono = new Map<string, number>()
+      const cantidadPos = new Map<string, number>()
+
+      for (const fila of registrosBaseValidos) {
+        const telefono = limpiar(fila[6])
+        const nroPos = limpiar(fila[16])
+
+        if (telefono && telefonosDuplicados.has(telefono)) {
+          cantidadTelefono.set(
+            telefono,
+            (cantidadTelefono.get(telefono) ?? 0) + 1,
+          )
+        }
+
+        if (nroPos && posDuplicados.has(nroPos)) {
+          cantidadPos.set(
+            nroPos,
+            (cantidadPos.get(nroPos) ?? 0) + 1,
+          )
+        }
+      }
+
+      registrosValidos = registrosBaseValidos.filter((fila) => {
+        const telefono = limpiar(fila[6])
+        const nroPos = limpiar(fila[16])
+
+        return !(
+          (telefono && telefonosDuplicados.has(telefono)) ||
+          (nroPos && posDuplicados.has(nroPos))
+        )
+      })
+
+      for (const fila of registrosBaseValidos) {
+        const telefono = limpiar(fila[6])
+        const nroPos = limpiar(fila[16])
+
+        if (telefono && telefonosDuplicados.has(telefono)) {
+          duplicadosItec.push({
+            motivo: 'Valor duplicado',
+            campo: 'Numero de telefono',
+            valor: telefono,
+            cantidad: cantidadTelefono.get(telefono) ?? 0,
+            codigo_psr: limpiar(fila[1]),
+            telefono,
+            nro_pos: nroPos,
+            caminante: limpiar(fila[11]),
+            rubro: limpiar(fila[15]),
+          })
+        }
+
+        if (nroPos && posDuplicados.has(nroPos)) {
+          duplicadosItec.push({
+            motivo: 'Valor duplicado',
+            campo: 'Nro. POS',
+            valor: nroPos,
+            cantidad: cantidadPos.get(nroPos) ?? 0,
+            codigo_psr: limpiar(fila[1]),
+            telefono,
+            nro_pos: nroPos,
+            caminante: limpiar(fila[11]),
+            rubro: limpiar(fila[15]),
+          })
+        }
+      }
+    }
+
     const registrosDescartados =
       registros.length - registrosValidos.length
 
@@ -398,6 +508,8 @@ export async function POST(request: Request) {
       registros_encontrados: registros.length,
       registros_validos: registrosValidos.length,
       registros_descartados: registrosDescartados,
+      duplicados_itec: duplicadosItec,
+      cantidad_duplicados_itec: duplicadosItec.length,
       mensaje:
         'Archivo validado correctamente. Listo para importar.',
     })

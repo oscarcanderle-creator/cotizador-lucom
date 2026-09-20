@@ -652,14 +652,13 @@ export async function POST(request: Request) {
               ? 8
               : 4
 
-    const filasValidas = registros.filter((fila) => {
+    const filasBaseValidas = registros.filter((fila) => {
       if (limpiar(fila[indiceClave]) === '') {
         return false
       }
 
       if (tipo === 'ACTIVACIONES') {
         const promocion = limpiar(fila[16])
-
         if (promocion === '1175' || promocion === '1185') {
           return false
         }
@@ -668,14 +667,12 @@ export async function POST(request: Request) {
       return true
     })
 
-    const registrosDescartados =
-      registros.length - filasValidas.length
-
     /*
-     * Validación de la clave natural de cada reporte.
+     * La clave natural de cada reporte debe ser única.
+     * En ITEC la clave natural continúa siendo Codigo PSR.
      */
     const clavesDuplicadas =
-      buscarDuplicados(filasValidas, indiceClave)
+      buscarDuplicados(filasBaseValidas, indiceClave)
 
     if (clavesDuplicadas.length > 0) {
       const nombreClave =
@@ -701,34 +698,41 @@ export async function POST(request: Request) {
     }
 
     /*
-     * ITEC tiene además dos identificadores que utilizaremos
-     * posteriormente para localizar el PSR desde OBS:
+     * ITEC:
      *
+     * G - Numero de telefono
      * Q - Nro. POS
      *
-     * Numero de telefono puede repetirse entre distintos PSR,
-     * por lo que no se utiliza como restricción de unicidad.
+     * Los valores vacíos son admitidos.
+     * Si un valor informado aparece más de una vez, se descartan
+     * TODAS las filas involucradas en ese duplicado.
      *
-     * Nro. POS vacío es admitido, pero un POS informado
-     * no debe corresponder a más de un Codigo PSR.
+     * La existencia de estos duplicados no cancela la importación.
      */
-    if (tipo === 'ITEC') {
-      const posDuplicados =
-        buscarDuplicados(filasValidas, 16)
+    let filasValidas = filasBaseValidas
 
-      if (posDuplicados.length > 0) {
-        return NextResponse.json(
-          {
-            error:
-              'El archivo ITEC contiene Nro. POS duplicados. La importación fue cancelada.',
-            cantidad_duplicados: posDuplicados.length,
-            claves_duplicadas:
-              posDuplicados.slice(0, 20),
-          },
-          { status: 400 },
+    if (tipo === 'ITEC') {
+      const telefonosDuplicados = new Set(
+        buscarDuplicados(filasBaseValidas, 6),
+      )
+
+      const posDuplicados = new Set(
+        buscarDuplicados(filasBaseValidas, 16),
+      )
+
+      filasValidas = filasBaseValidas.filter((fila) => {
+        const telefono = limpiar(fila[6])
+        const nroPos = limpiar(fila[16])
+
+        return !(
+          (telefono && telefonosDuplicados.has(telefono)) ||
+          (nroPos && posDuplicados.has(nroPos))
         )
-      }
+      })
     }
+
+    const registrosDescartados =
+      registros.length - filasValidas.length
 
     const registrosTransformados =
       tipo === 'ITEC'

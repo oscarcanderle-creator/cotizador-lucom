@@ -20,6 +20,18 @@ type ResultadoValidacion = {
   registros_encontrados: number
   registros_validos: number
   registros_descartados: number
+  cantidad_duplicados_itec?: number
+  duplicados_itec?: Array<{
+    motivo: string
+    campo: string
+    valor: string
+    cantidad: number
+    codigo_psr: string
+    telefono: string
+    nro_pos: string
+    caminante: string
+    rubro: string
+  }>
   mensaje: string
 }
 
@@ -194,6 +206,65 @@ export default function ImportarReportesClient() {
     } finally {
       setProcesando(false)
     }
+  }
+
+  function descargarDuplicadosItec() {
+    const duplicados = resultado?.duplicados_itec ?? []
+
+    if (duplicados.length === 0) return
+
+    const escaparCsv = (valor: unknown) => {
+      const texto = String(valor ?? '').replace(/"/g, '""')
+      return `"${texto}"`
+    }
+
+    const encabezados = [
+      'Motivo',
+      'Campo duplicado',
+      'Valor duplicado',
+      'Cantidad',
+      'Codigo PSR',
+      'Numero de telefono',
+      'Nro. POS',
+      'Caminante',
+      'Rubro',
+    ]
+
+    const filas = duplicados.map((registro) => [
+      registro.motivo,
+      registro.campo,
+      registro.valor,
+      registro.cantidad,
+      registro.codigo_psr,
+      registro.telefono,
+      registro.nro_pos,
+      registro.caminante,
+      registro.rubro,
+    ])
+
+    const csv = [
+      encabezados.map(escaparCsv).join(';'),
+      ...filas.map((fila) => fila.map(escaparCsv).join(';')),
+    ].join('\r\n')
+
+    const blob = new Blob(
+      ['\uFEFF' + csv],
+      { type: 'text/csv;charset=utf-8;' },
+    )
+
+    const url = URL.createObjectURL(blob)
+    const enlace = document.createElement('a')
+
+    enlace.href = url
+    enlace.download = `ITEC_duplicados_${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`
+
+    document.body.appendChild(enlace)
+    enlace.click()
+    enlace.remove()
+
+    URL.revokeObjectURL(url)
   }
 
   const puedeProcesar = Boolean(tipoReporte && archivo && !procesando)
@@ -385,6 +456,29 @@ export default function ImportarReportesClient() {
                 </div>
               </div>
             </div>
+
+            {resultado.tipo === 'ITEC' &&
+            (resultado.duplicados_itec?.length ?? 0) > 0 && (
+              <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
+                <div className="text-sm font-bold text-amber-900">
+                  Se detectaron registros ITEC con valores duplicados
+                </div>
+
+                <div className="mt-1 text-sm text-amber-800">
+                  Las filas involucradas en teléfonos o Nro. POS duplicados
+                  serán ignoradas durante la importación. Podés descargar el
+                  detalle para su revisión y corrección.
+                </div>
+
+                <button
+                  type="button"
+                  onClick={descargarDuplicadosItec}
+                  className="mt-3 rounded-lg border border-amber-400 bg-white px-4 py-2 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
+                >
+                  Descargar duplicados ITEC
+                </button>
+              </div>
+            )}
 
             <div className="mt-4 text-sm font-semibold text-green-900">
               {resultado.mensaje}

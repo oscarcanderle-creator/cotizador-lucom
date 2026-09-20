@@ -68,6 +68,39 @@ export default async function VentasPage(){
   if(portas.length===1) portas[0].lineaTitular=true
   if(portas.length>1 && portas.filter(x=>x.lineaTitular).length!==1)return{ok:false,mensaje:'En una Portabilidad de líneas múltiples debés marcar una y solo una Línea Titular.'}
   const admin=createAdminClient(),m=marcaArgentina(),idOperacion=`${m.id}-${dni}`;let operacionCreada=false;const serviciosCreados:number[]=[]
+
+  let caminante:string|null=null
+
+  if(origenDato.toUpperCase()==='PSR'){
+   caminante='ALERTA! SUPERVISOR'
+
+   const coincidenciaObs=obs.match(/PSR1?_\s*([^_\s]+)/i)
+   const idMisReferidos=coincidenciaObs?.[1]?.trim()??''
+
+   if(idMisReferidos){
+    const {data:coincidenciasItec,error:errorItec}=await admin
+     .from('reporte_itec')
+     .select('caminante,tipo_psr,telefono,nro_pos')
+     .or(`telefono.eq.${idMisReferidos},nro_pos.eq.${idMisReferidos}`)
+
+    if(errorItec){
+     return{
+      ok:false,
+      mensaje:`No se pudo consultar el padrón ITEC: ${errorItec.message}`
+     }
+    }
+
+    const coincidenciaValida=(coincidenciasItec??[]).find((registro:any)=>
+     String(registro.tipo_psr??'').trim().toUpperCase()!=='4X4' &&
+     String(registro.caminante??'').trim()!==''
+    )
+
+    if(coincidenciaValida){
+     caminante=String(coincidenciaValida.caminante).trim()
+    }
+   }
+  }
+
   let estadoBafCargadoId:number|null=null
   if(cargaItecSolicitada){
    const {data:estadosBaf,error:estadosBafError}=await admin.from('estados_baf').select('id,codigo,nombre').eq('activo',true)
@@ -86,7 +119,7 @@ export default async function VentasPage(){
    if(ce){clienteId=ce.id;const {error}=await admin.from('clientes').update(datosCliente).eq('id',clienteId);if(error)throw error}else{const {data:nc,error}=await admin.from('clientes').insert({tipo_documento:tipoDoc,dni,...datosCliente}).select('id').single();if(error)throw error;clienteId=nc.id}
    const {data:dom,error:ed}=await admin.from('domicilios').insert({cliente_id:clienteId,calle_nro:domicilio,piso:texto(fd,'piso')||null,dpto:texto(fd,'dpto')||null,entre_calles:texto(fd,'entre_calles')||null,barrio:texto(fd,'barrio')||null,localidad:texto(fd,'localidad')||null,coordenadas:texto(fd,'coordenadas')||null,datos_extras:texto(fd,'datos_extras')||null}).select('id').single();if(ed)throw ed
    const moviles=nuevos.filter(x=>x.tipo==='PORTA'||x.tipo==='LINEA_NUEVA'),tipoLegacy=tieneBafNuevo?'BAF':'PORTA'
-   const {error:eo}=await admin.from('operaciones').insert({id_operacion:idOperacion,tipo:tipoLegacy,cliente_id:clienteId,domicilio_id:dom.id,usuario_id:user.id,vendedor:perfil.vendedor?.trim()||perfil.nombre?.trim()||user.email||'Vendedor',fecha_hora:m.iso,origen_dato:origenDato,obs:obs||null,estado_sync:'PENDIENTE',sheet_destino:null,grupo_operacion:idOperacion});if(eo)throw eo;operacionCreada=true
+   const {error:eo}=await admin.from('operaciones').insert({id_operacion:idOperacion,tipo:tipoLegacy,cliente_id:clienteId,domicilio_id:dom.id,usuario_id:user.id,vendedor:perfil.vendedor?.trim()||perfil.nombre?.trim()||user.email||'Vendedor',fecha_hora:m.iso,origen_dato:origenDato,obs:obs||null,caminante,estado_sync:'PENDIENTE',sheet_destino:null,grupo_operacion:idOperacion});if(eo)throw eo;operacionCreada=true
    let servicioBafExistenteId:number|null=null
    for(const s of existentes){const {data:cs,error}=await admin.from('cliente_servicios').insert({cliente_id:clienteId,domicilio_id:dom.id,tipo_servicio:s.tipo,modalidad:s.modalidad||null,numero_servicio:s.numero||null,origen:'DECLARADO_CLIENTE',estado_verificacion:'DECLARADO',operacion_origen_id:idOperacion,created_by:user.id,updated_by:user.id}).select('id').single();if(error)throw error;serviciosCreados.push(cs.id);if(s.tipo==='BAF'&&!servicioBafExistenteId)servicioBafExistenteId=cs.id}
    const idsProductos=nuevos.map(x=>x.productoId);const {data:catalogo,error:ec}=await admin.from('productos').select('id,producto,origen,plan,precio_lista,descuento_normal,precio_cliente,beneficios').in('id',idsProductos);if(ec)throw ec;const mapa=new Map((catalogo??[]).map(p=>[Number(p.id),p]))
