@@ -5,7 +5,7 @@ import { createClient } from '../../../utils/supabase/server'
 import { createAdminClient } from '../../../utils/supabase/admin'
 import AppHeader from '../../../components/AppHeader'
 
-type RolUsuario = 'ADMIN' | 'SUPERVISOR' | 'VENDEDOR' | 'TERRENO' | 'BBOO'
+type RolUsuario = 'ADMIN' | 'SUPERVISOR' | 'VENDEDOR' | 'TERRENO' | 'BBOO' | 'CADETERIA'
 
 async function validarAdmin() {
   const supabase = await createClient()
@@ -46,7 +46,8 @@ function validarRol(valor: string): RolUsuario {
     valor !== 'SUPERVISOR' &&
     valor !== 'VENDEDOR' &&
     valor !== 'TERRENO' &&
-    valor !== 'BBOO'
+    valor !== 'BBOO' &&
+    valor !== 'CADETERIA'
   ) {
     throw new Error('Rol de usuario inválido.')
   }
@@ -165,17 +166,22 @@ export default async function AdminUsuariosPage() {
         String(formData.get('rol') ?? '')
       )
 
+    const esCadeteria = rol === 'CADETERIA'
+    const vendedorEfectivo = esCadeteria ? null : vendedor
     const puedeGestionarVentas =
+      !esCadeteria &&
       formData.get('puede_gestionar_ventas') === 'on'
 
     if (
       !nombre ||
-      !vendedor ||
+      (!esCadeteria && !vendedor) ||
       !email ||
       !password
     ) {
       throw new Error(
-        'Nombre, Vendedor, email y contraseña son obligatorios.'
+        esCadeteria
+          ? 'Nombre, email y contraseña son obligatorios.'
+          : 'Nombre, Vendedor, email y contraseña son obligatorios.'
       )
     }
 
@@ -195,7 +201,7 @@ export default async function AdminUsuariosPage() {
         email_confirm: true,
         user_metadata: {
           nombre,
-          vendedor,
+          vendedor: vendedorEfectivo,
           rol,
           puede_gestionar_ventas: puedeGestionarVentas,
         },
@@ -217,7 +223,7 @@ export default async function AdminUsuariosPage() {
         .insert({
           id: nuevoUsuario.user.id,
           nombre,
-          vendedor,
+          vendedor: vendedorEfectivo,
           rol,
           activo: true,
           puede_gestionar_ventas: puedeGestionarVentas,
@@ -279,16 +285,21 @@ export default async function AdminUsuariosPage() {
     const activo =
       formData.get('activo') === 'on'
 
+    const esCadeteria = rol === 'CADETERIA'
+    const vendedorEfectivo = esCadeteria ? null : vendedor
     const puedeGestionarVentas =
+      !esCadeteria &&
       formData.get('puede_gestionar_ventas') === 'on'
 
     if (
       !id ||
       !email ||
-      !vendedor
+      (!esCadeteria && !vendedor)
     ) {
       throw new Error(
-        'Email y Vendedor son obligatorios.'
+        esCadeteria
+          ? 'Email es obligatorio.'
+          : 'Email y Vendedor son obligatorios.'
       )
     }
 
@@ -347,7 +358,7 @@ export default async function AdminUsuariosPage() {
           email_confirm: true,
           user_metadata: {
             nombre,
-            vendedor,
+            vendedor: vendedorEfectivo,
             rol,
             puede_gestionar_ventas: puedeGestionarVentas,
           },
@@ -370,7 +381,7 @@ export default async function AdminUsuariosPage() {
         .from('profiles')
         .update({
           nombre,
-          vendedor,
+          vendedor: vendedorEfectivo,
           rol,
           activo,
           puede_gestionar_ventas: puedeGestionarVentas,
@@ -650,13 +661,12 @@ export default async function AdminUsuariosPage() {
 
             <div>
               <label className="block text-xs text-gray-500 mb-1">
-                Vendedor
+                Vendedor (no aplica a Cadetería)
               </label>
 
               <input
                 type="text"
                 name="vendedor"
-                required
                 placeholder="Nomenclatura exacta para Sheets"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
               />
@@ -717,6 +727,9 @@ export default async function AdminUsuariosPage() {
 
                 <option value="BBOO">
                   BBOO
+                </option>
+                <option value="CADETERIA">
+                  Cadetería
                 </option>
               </select>
             </div>
@@ -836,7 +849,7 @@ export default async function AdminUsuariosPage() {
 
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">
-                        Vendedor
+                        Vendedor (no aplica a Cadetería)
                       </label>
 
                       <input
@@ -845,7 +858,6 @@ export default async function AdminUsuariosPage() {
                         defaultValue={
                           usuario.vendedor ?? ''
                         }
-                        required
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                       />
                     </div>
@@ -880,6 +892,9 @@ export default async function AdminUsuariosPage() {
 
                         <option value="BBOO">
                           BBOO
+                        </option>
+                        <option value="CADETERIA">
+                          Cadetería
                         </option>
                       </select>
                     </div>

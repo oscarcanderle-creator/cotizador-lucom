@@ -38,7 +38,7 @@ export default function LoginPage() {
       error: profileError,
     } = await supabase
       .from('profiles')
-      .select('activo, debe_cambiar_password')
+      .select('activo, debe_cambiar_password, rol')
       .eq('id', data.user.id)
       .single()
 
@@ -62,7 +62,11 @@ export default function LoginPage() {
       return
     }
 
-      router.push('/ventas')
+      router.push(
+        profile.rol === 'CADETERIA'
+          ? '/cadeteria'
+          : '/ventas'
+      )
       router.refresh()
     } catch {
       setError('No se pudo iniciar sesión. Intentá nuevamente.')

@@ -105,7 +105,11 @@ export default function CambiarPasswordPage() {
     setMensaje('Contraseña actualizada correctamente.')
 
     setTimeout(() => {
-      router.push('/cotizador')
+      router.push(
+        resultadoPerfil.rol === 'CADETERIA'
+          ? '/cadeteria'
+          : '/cotizador'
+      )
       router.refresh()
     }, 800)
   }
