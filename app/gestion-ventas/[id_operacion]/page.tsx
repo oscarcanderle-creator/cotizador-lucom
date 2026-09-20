@@ -6,6 +6,7 @@ import { createClient } from '../../../utils/supabase/server'
 import AppHeader from '../../../components/AppHeader'
 import GestionBloqueoControls from '../../../components/GestionBloqueoControls'
 import GestionInputValidado from '../../../components/GestionInputValidado'
+import GestionProductoForm from '../../../components/GestionProductoForm'
 import GestionLogisticaChip from '../../../components/GestionLogisticaChip'
 import EditorDatosVenta from '../../../components/EditorDatosVenta'
 import ResolverCaminantePSR from '../../../components/ResolverCaminantePSR'
@@ -324,7 +325,15 @@ async function guardarGestionPorta(formData: FormData) {
   redirect('/gestion-ventas')
 }
 
-async function guardarGestionProducto(formData: FormData) {
+type GestionProductoFormState = {
+  error: string | null
+  campo?: string | null
+}
+
+async function guardarGestionProducto(
+  _estadoAnterior: GestionProductoFormState,
+  formData: FormData
+): Promise<GestionProductoFormState> {
   'use server'
 
   const idOperacion = String(formData.get('id_operacion') ?? '').trim()
@@ -412,7 +421,18 @@ async function guardarGestionProducto(formData: FormData) {
 
   const resultado = await response.json().catch(() => null)
   if (!response.ok) {
-    throw new Error(resultado?.error || `No se pudo guardar la gestión. Código HTTP ${response.status}.`)
+    const mensaje =
+      resultado?.error ||
+      `No se pudo guardar la gestión. Código HTTP ${response.status}.`
+
+    const esErrorSim =
+      !esBaf &&
+      /\bSIM\b/i.test(mensaje)
+
+    return {
+      error: mensaje,
+      campo: esErrorSim ? 'sim' : null,
+    }
   }
 
   revalidatePath(`/gestion-ventas/${encodeURIComponent(idOperacion)}`)
@@ -871,6 +891,7 @@ export default async function DetalleVentaPage({
             </div>
           </div>
 
+
           <GestionBloqueoControls
             tipoRecurso="VENTA"
             recursoClave={String(op.id_operacion)}
@@ -1067,8 +1088,8 @@ export default async function DetalleVentaPage({
                         </div>
                       </div>
 
-                      <form
-                        key={`${productoId}-${gestion?.updated_at ?? 'sin-gestion'}`}
+                      <GestionProductoForm
+                        formKey={`${productoId}-${gestion?.updated_at ?? 'sin-gestion'}`}
                         action={guardarGestionProducto}
                         className="p-5"
                       >
@@ -1127,14 +1148,14 @@ export default async function DetalleVentaPage({
                                 <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
                                   {fechaArgentina(gestion?.fecha_carga_stl ?? null)}
                                 </div>
-                                <p className="mt-1 text-xs text-gray-500">Automática al establecer Estado Vendedor = CARGADO STL.</p>
+                                <p className="mt-1 text-xs text-gray-500">Automática al establecer Estado BBOO = CARGADO STL.</p>
                               </div>
                               <div>
                                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha PORTA</label>
                                 <div className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
                                   {fechaArgentina(gestion?.fecha_porta ?? null)}
                                 </div>
-                                <p className="mt-1 text-xs text-gray-500">Automática al establecer Estado Vendedor = ACTIVA NRO PORTADO.</p>
+                                <p className="mt-1 text-xs text-gray-500">Automática al establecer Estado BBOO = ACTIVA NRO PORTADO.</p>
                               </div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SIM</label><GestionInputValidado name="sim" tipo="SIM" esEsim={String(detalle?.tipo_sim ?? '').trim().toUpperCase() === 'ESIM'} defaultValue={gestion?.sim ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</label><select name="plan_cargado" defaultValue={gestion?.plan_cargado || producto.plan_snapshot || ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar plan</option>{(() => { const actual = String(gestion?.plan_cargado || producto.plan_snapshot || '').trim(); const activos = Array.from(new Set((planesPorta ?? []).map((p: any) => String(p.nombre ?? '').trim()).filter(Boolean))); const opciones = actual && !activos.includes(actual) ? [actual, ...activos] : activos; return opciones.map((nombre: string) => <option key={nombre} value={nombre}>{nombre}</option>) })()}</select></div>
@@ -1158,7 +1179,7 @@ export default async function DetalleVentaPage({
                             <button type="submit" className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-300">Guardar {esBaf ? 'BAF' : esLineaNueva ? 'Línea Nueva' : 'PORTA'}</button>
                           </div>
                         </fieldset>
-                      </form>
+                      </GestionProductoForm>
 
                       <div className="border-t border-gray-200 bg-white p-5">
                         <details>

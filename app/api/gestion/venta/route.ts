@@ -457,8 +457,8 @@ export async function POST(request: Request) {
         nombreMedio = String(medioDb?.nombre ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()
       }
 
-      const medioPermiteSeguimiento = ['ANDREANI','CADETERIA','TERRENO'].includes(nombreMedio)
-      const medioGeneraId = ['CADETERIA','TERRENO'].includes(nombreMedio)
+      const medioPermiteSeguimiento = ['ANDREANI','CADETERIA','LUCOM TERRENO'].includes(nombreMedio)
+      const medioGeneraId = ['CADETERIA','LUCOM TERRENO'].includes(nombreMedio)
 
       if (rolActor === 'BBOO') {
         seguimientoEfectivo = medioPermiteSeguimiento ? (body.numero_seguimiento ?? null) : null
@@ -473,7 +473,7 @@ export async function POST(request: Request) {
 
       // El ID propio de envío NO nace durante la validación del vendedor.
       // Solo BBOO lo genera cuando la PORTA ya está CARGADO STL, existe SDS y
-      // el medio es CADETERIA o TERRENO. Andreani usa su propio Seguimiento.
+      // el medio es CADETERIA o LUCOM TERRENO. Andreani usa su propio Seguimiento.
       let estadoBbooNombre = ''
       if (estadoBbooEfectivo != null) {
         const { data: estadoBbooDb, error: estadoBbooError } = await adminClient
@@ -598,14 +598,6 @@ export async function POST(request: Request) {
         )
       }
 
-      if (estadoPortaEfectivo != null) {
-        const codigoEstadoVendedor = String(estadoPortaResult.data?.codigo ?? '').trim().toUpperCase()
-
-        if (codigoEstadoVendedor === 'CARGADO_STL' && !fechaCargaStlEfectiva) {
-          fechaCargaStlEfectiva = ahora
-        }
-      }
-
       if (estadoBbooEfectivo != null) {
         const normalizarEstado = (valor: unknown) =>
           String(valor ?? '')
@@ -616,6 +608,13 @@ export async function POST(request: Request) {
 
         const codigoBboo = normalizarEstado(estadoBbooResult.data?.codigo)
         const nombreBboo = normalizarEstado(estadoBbooResult.data?.nombre)
+
+        if (
+          (codigoBboo === 'CARGADO STL' || nombreBboo === 'CARGADO STL') &&
+          !fechaCargaStlEfectiva
+        ) {
+          fechaCargaStlEfectiva = ahora
+        }
 
         if (
           (codigoBboo === 'ACTIVA NRO PORTADO' || nombreBboo === 'ACTIVA NRO PORTADO') &&

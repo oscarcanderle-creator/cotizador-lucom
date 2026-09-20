@@ -28,8 +28,8 @@ export default function GestionLogisticaChip({
  const [medio,setMedio]=useState(String(medioInicial??''))
  const [legajo,setLegajo]=useState(Boolean(legajoEnviado))
  const nombre=useMemo(()=>normalizar(medios.find(m=>String(m.id)===medio)?.nombre??''),[medio,medios])
- const permiteSeguimiento=esBboo && ['ANDREANI','CADETERIA','TERRENO'].includes(nombre)
- const generaId=esBboo && ['CADETERIA','TERRENO'].includes(nombre)
+ const permiteSeguimiento=esBboo && ['ANDREANI','CADETERIA','LUCOM TERRENO'].includes(nombre)
+ const generaId=esBboo && ['CADETERIA','LUCOM TERRENO'].includes(nombre)
 
  return <div className="contents">
   <div>
