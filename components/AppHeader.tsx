@@ -10,6 +10,8 @@ type Actual =
   | 'GESTION_VENTAS'
   | 'VENTAS_GRUPO'
   | 'SUPER'
+
+  | 'REPORTES'
   | 'ADMIN'
 
 type Props = {
