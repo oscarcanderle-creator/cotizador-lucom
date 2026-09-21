@@ -340,6 +340,8 @@ export default function Cotizador({
 
     cotizadorAnonimo ||
 
+    !mostrarDatosCliente ||
+
     (
 
       datosCliente.nombre.trim() !== '' &&
@@ -1573,7 +1575,7 @@ export default function Cotizador({
 
   function nombreArchivo(extension: 'jpg' | 'pdf') {
 
-    if (cotizadorAnonimo) {
+    if (cotizadorAnonimo || !mostrarDatosCliente) {
 
       return `Propuesta-Claro-${fechaEmision.replace(/\//g, '-')}.${extension}`
 
@@ -1699,7 +1701,7 @@ async function compartirPropuesta() {
 
   }
 
-  if (cotizadorAnonimo) {
+  if (cotizadorAnonimo || !mostrarDatosCliente) {
 
     try {
 
@@ -3453,7 +3455,7 @@ async function compartirPropuesta() {
 
           {/* DATOS DEL CLIENTE */}
 
-          {cotizadorAnonimo ? (
+          {cotizadorAnonimo || !mostrarDatosCliente ? (
 
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3">
 
