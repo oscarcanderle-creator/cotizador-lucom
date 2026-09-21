@@ -23,6 +23,7 @@ type Actual =
   | 'SUPER'
 
   | 'REPORTES'
+  | 'LOGISTICA'
 
   | 'ADMIN'
 
@@ -85,6 +86,7 @@ const items = [
   { key: 'SUPER', label: 'SUPER', href: '/super', roles: ['SUPERVISOR', 'ADMIN'] },
 
   { key: 'REPORTES', label: 'Reportes', href: '/reportes', roles: ['SUPERVISOR', 'ADMIN', 'BBOO'] },
+  { key: 'LOGISTICA', label: 'Logística', href: '/logistica', roles: ['SUPERVISOR', 'ADMIN', 'BBOO'] },
 
   { key: 'ADMIN', label: 'ADMIN', href: '/admin', roles: ['ADMIN'] },
 
@@ -107,6 +109,8 @@ function Icono({ tipo }: { tipo: Actual }) {
   if (tipo === 'SUPER') return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="m4 7 5-4 5 5 6-6"/></svg>
 
   if (tipo === 'REPORTES') return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19V5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v6h6M8 17v-4M12 17V9M16 17v-6"/></svg>
+
+  if (tipo === 'LOGISTICA') return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h11v11H3z"/><path d="M14 9h4l3 3v5h-7z"/><circle cx="7" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M14 19H9M3 19h2"/></svg>
 
   return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.13.37.34.7.6 1 .3.28.68.42 1.1.4H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z"/></svg>
 

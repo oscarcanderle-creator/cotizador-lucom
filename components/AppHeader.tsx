@@ -12,6 +12,7 @@ type Actual =
   | 'SUPER'
 
   | 'REPORTES'
+  | 'LOGISTICA'
   | 'ADMIN'
 
 type Props = {
