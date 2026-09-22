@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '../../utils/supabase/server'
 import { createAdminClient } from '../../utils/supabase/admin'
 import AppHeader from '../../components/AppHeader'
+import CrearLoteDespacho from '../../components/CrearLoteDespacho'
 
 const ROLES_LOGISTICA = ['ADMIN', 'SUPERVISOR', 'BBOO']
 
@@ -113,6 +114,216 @@ async function confirmarGestionEntregaLista(formData: FormData) {
   redirect('/logistica?bandeja=LISTAS')
 }
 
+async function crearLoteDespacho(formData: FormData) {
+  'use server'
+
+  const gestionEntregaIds = formData
+    .getAll('gestion_entrega_ids')
+    .map((valor) => Number(valor))
+
+  if (
+    gestionEntregaIds.length === 0 ||
+    gestionEntregaIds.some((id) => !Number.isInteger(id) || id <= 0) ||
+    new Set(gestionEntregaIds).size !== gestionEntregaIds.length
+  ) {
+    throw new Error('Las Gestiones de Entrega seleccionadas no son válidas.')
+  }
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('rol, activo')
+    .eq('id', user.id)
+    .single()
+
+  if (
+    !profile ||
+    !profile.activo ||
+    !ROLES_LOGISTICA.includes(profile.rol)
+  ) {
+    redirect('/ventas')
+  }
+
+  const { error } = await supabase.rpc('crear_lote_despacho', {
+    p_gestiones_entrega_ids: gestionEntregaIds,
+  })
+
+  if (error) {
+    throw new Error(`No se pudo crear el Lote de Despacho: ${error.message}`)
+  }
+
+  revalidatePath('/logistica')
+  redirect('/logistica?bandeja=LISTAS')
+}
+
+async function entregarLoteTransporte(formData: FormData) {
+  'use server'
+
+  const loteDespachoId = Number(formData.get('lote_despacho_id') ?? 0)
+  const recibidoPor = String(formData.get('recibido_por') ?? '').trim()
+
+  if (!Number.isInteger(loteDespachoId) || loteDespachoId <= 0 || !recibidoPor) {
+    throw new Error('Lote de Despacho o transportista inválido.')
+  }
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('rol, activo')
+    .eq('id', user.id)
+    .single()
+
+  if (
+    !profile ||
+    !profile.activo ||
+    !ROLES_LOGISTICA.includes(profile.rol)
+  ) {
+    redirect('/ventas')
+  }
+
+  const { error } = await supabase.rpc('entregar_lote_transporte', {
+    p_lote_despacho_id: loteDespachoId,
+    p_recibido_por: recibidoPor,
+  })
+
+  if (error) {
+    throw new Error(
+      `No se pudo entregar el Lote de Despacho al transportista: ${error.message}`
+    )
+  }
+
+  revalidatePath('/logistica')
+  redirect('/logistica?bandeja=DISTRIBUCION')
+}
+
+async function confirmarReingresoGestionEntrega(formData: FormData) {
+  'use server'
+
+  const gestionEntregaId = Number(
+    formData.get('gestion_entrega_id') ?? 0
+  )
+
+  if (
+    !Number.isInteger(gestionEntregaId) ||
+    gestionEntregaId <= 0
+  ) {
+    throw new Error('Gestión de Entrega inválida.')
+  }
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('rol, activo')
+    .eq('id', user.id)
+    .single()
+
+  if (
+    !profile ||
+    !profile.activo ||
+    !ROLES_LOGISTICA.includes(profile.rol)
+  ) {
+    redirect('/ventas')
+  }
+
+  const { error } = await supabase.rpc(
+    'confirmar_reingreso_gestion_entrega',
+    {
+      p_gestion_entrega_id: gestionEntregaId,
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      `No se pudo confirmar el reingreso físico: ${error.message}`
+    )
+  }
+
+  revalidatePath('/logistica')
+  redirect('/logistica?bandeja=REINGRESOS')
+}
+
+async function prepararReintentoGestionEntrega(formData: FormData) {
+  'use server'
+
+  const gestionEntregaId = Number(
+    formData.get('gestion_entrega_id') ?? 0
+  )
+
+  if (
+    !Number.isInteger(gestionEntregaId) ||
+    gestionEntregaId <= 0
+  ) {
+    throw new Error('Gestión de Entrega inválida.')
+  }
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('rol, activo')
+    .eq('id', user.id)
+    .single()
+
+  if (
+    !profile ||
+    !profile.activo ||
+    !ROLES_LOGISTICA.includes(profile.rol)
+  ) {
+    redirect('/ventas')
+  }
+
+  const { error } = await supabase.rpc(
+    'preparar_reintento_gestion_entrega',
+    {
+      p_gestion_entrega_id: gestionEntregaId,
+    }
+  )
+
+  if (error) {
+    throw new Error(
+      `No se pudo preparar el nuevo despacho: ${error.message}`
+    )
+  }
+
+  revalidatePath('/logistica')
+  redirect('/logistica?bandeja=LISTAS')
+}
+
 type SearchParams = Promise<{
   bandeja?: string
 }>
@@ -216,6 +427,9 @@ export default async function LogisticaPage({
     mediosResultado,
     gestionesEntregaResultado,
     estadosEntregaResultado,
+    lotesDespachoResultado,
+    loteGestionesResultado,
+    cadetesResultado,
   ] = await Promise.all([
     admin
       .from('operaciones')
@@ -288,6 +502,37 @@ export default async function LogisticaPage({
     admin
       .from('estados_entrega')
       .select('id, codigo, nombre'),
+
+    admin
+      .from('lotes_despacho')
+      .select(`
+        id,
+        codigo_lote,
+        medio_despacho_chip_id,
+        estado,
+        fecha_entrega_transporte,
+        created_at,
+        updated_at
+      `)
+      .order('created_at', { ascending: false }),
+
+    admin
+      .from('lote_despacho_gestiones')
+      .select(`
+        id,
+        lote_despacho_id,
+        gestion_entrega_id,
+        resultado,
+        fecha_resultado,
+        fecha_incorporacion
+      `),
+
+    admin
+      .from('profiles')
+      .select('id, nombre, rol')
+      .in('rol', ['CADETERIA', 'TERRENO'])
+      .eq('activo', true)
+      .order('nombre', { ascending: true }),
   ])
 
   for (const [nombre, resultado] of [
@@ -298,6 +543,9 @@ export default async function LogisticaPage({
     ['medios de despacho', mediosResultado],
     ['gestiones de entrega', gestionesEntregaResultado],
     ['estados de entrega', estadosEntregaResultado],
+    ['lotes de despacho', lotesDespachoResultado],
+    ['relaciones de lotes', loteGestionesResultado],
+    ['usuarios de Cadetería', cadetesResultado],
   ] as const) {
     if (resultado.error) {
       throw new Error(
@@ -313,6 +561,17 @@ export default async function LogisticaPage({
   const medios = mediosResultado.data ?? []
   const gestionesEntrega = gestionesEntregaResultado.data ?? []
   const estadosEntrega = estadosEntregaResultado.data ?? []
+  const lotesDespacho = lotesDespachoResultado.data ?? []
+  const loteGestiones = loteGestionesResultado.data ?? []
+  const perfilesLogisticos = cadetesResultado.data ?? []
+
+  const cadetes = perfilesLogisticos.filter(
+    (perfil: any) => String(perfil.rol ?? '').toUpperCase() === 'CADETERIA'
+  )
+
+  const terreno = perfilesLogisticos.filter(
+    (perfil: any) => String(perfil.rol ?? '').toUpperCase() === 'TERRENO'
+  )
 
   const operacionPorId = new Map(
     operaciones.map((operacion: any) => [
@@ -462,11 +721,75 @@ export default async function LogisticaPage({
       'EN_PREPARACION'
   )
 
-  const listas = gestionesCompletas.filter(
+  const listasTodas = gestionesCompletas.filter(
     (gestion: any) =>
       String(gestion.estado?.codigo ?? '').toUpperCase() ===
       'LISTA_PARA_ENTREGA'
   )
+
+  const lotePorId = new Map(
+    lotesDespacho.map((lote: any) => [Number(lote.id), lote])
+  )
+
+  const gestionesComprometidasEnLote = new Set(
+    loteGestiones
+      .filter((relacion: any) => {
+        const lote = lotePorId.get(Number(relacion.lote_despacho_id))
+        const estadoLote = String(lote?.estado ?? '').toUpperCase()
+
+        return (
+          estadoLote === 'ABIERTO' ||
+          (estadoLote === 'ENTREGADO_TRANSPORTE' && !relacion.resultado)
+        )
+      })
+      .map((relacion: any) => Number(relacion.gestion_entrega_id))
+  )
+
+  const listas = listasTodas.filter(
+    (gestion: any) => !gestionesComprometidasEnLote.has(Number(gestion.id))
+  )
+
+  const lotesAbiertos = lotesDespacho
+    .filter((lote: any) => String(lote.estado ?? '').toUpperCase() === 'ABIERTO')
+    .map((lote: any) => {
+      const relaciones = loteGestiones.filter(
+        (relacion: any) => Number(relacion.lote_despacho_id) === Number(lote.id)
+      )
+
+      const gestiones = relaciones
+        .map((relacion: any) =>
+          gestionesCompletas.find(
+            (gestion: any) =>
+              Number(gestion.id) === Number(relacion.gestion_entrega_id)
+          )
+        )
+        .filter(Boolean)
+
+      return {
+        ...lote,
+        medio: medioPorId.get(Number(lote.medio_despacho_chip_id)),
+        gestiones,
+      }
+    })
+
+  const gestionesSeleccionablesLote = listas.map((gestion: any) => {
+    const operacion = gestion.operacion
+    const cliente = Array.isArray(operacion?.cliente)
+      ? operacion.cliente[0]
+      : operacion?.cliente
+    const domicilio = Array.isArray(operacion?.domicilio)
+      ? operacion.domicilio[0]
+      : operacion?.domicilio
+
+    return {
+      id: Number(gestion.id),
+      codigo_gestion: String(gestion.codigo_gestion ?? ''),
+      medio_despacho_chip_id: Number(gestion.medio_despacho_chip_id),
+      medio_nombre: texto(gestion.medio?.nombre),
+      cliente: nombreCliente(cliente),
+      domicilio: domicilioVisible(domicilio),
+    }
+  })
 
   const distribucion = gestionesCompletas.filter(
     (gestion: any) =>
@@ -500,7 +823,7 @@ export default async function LogisticaPage({
     {
       key: 'LISTAS',
       label: 'Listas para entrega',
-      cantidad: listas.length,
+      cantidad: listasTodas.length,
     },
     {
       key: 'DISTRIBUCION',
@@ -706,6 +1029,175 @@ export default async function LogisticaPage({
               })
             )}
           </div>
+        ) : bandejaActiva === 'LISTAS' ? (
+          <div className="space-y-6">
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Entregas sin lote
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Seleccioná una o más Gestiones de Entrega del mismo medio para crear un Lote de Despacho.
+                </p>
+              </div>
+
+              <CrearLoteDespacho
+                gestiones={gestionesSeleccionablesLote}
+                action={crearLoteDespacho}
+              />
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Lotes abiertos
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Lotes ya armados que todavía no fueron entregados al transportista.
+                </p>
+              </div>
+
+              {lotesAbiertos.length === 0 ? (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-5 text-sm text-gray-500">
+                  No hay Lotes de Despacho abiertos.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {lotesAbiertos.map((lote: any) => (
+                    <div
+                      key={lote.id}
+                      className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-gray-900 px-2.5 py-1 text-xs font-semibold text-white">
+                              {texto(lote.codigo_lote)}
+                            </span>
+                            <span className="rounded-full bg-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                              {texto(lote.medio?.nombre)}
+                            </span>
+                            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+                              ABIERTO
+                            </span>
+                          </div>
+
+                          <div className="mt-3 text-sm text-gray-700">
+                            {lote.gestiones.length}{' '}
+                            {lote.gestiones.length === 1
+                              ? 'entrega incorporada'
+                              : 'entregas incorporadas'}
+                          </div>
+
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {lote.gestiones.map((gestion: any) => (
+                              <span
+                                key={gestion.id}
+                                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700"
+                              >
+                                {texto(gestion.codigo_gestion)} ·{' '}
+                                {nombreCliente(
+                                  Array.isArray(gestion.operacion?.cliente)
+                                    ? gestion.operacion.cliente[0]
+                                    : gestion.operacion?.cliente
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="min-w-[260px] text-sm text-gray-500">
+                          <div>
+                            Creado: {fechaArgentina(lote.created_at)}
+                          </div>
+
+                          {(() => {
+                            const medioNombre = String(
+                              lote.medio?.nombre ?? ''
+                            )
+                              .trim()
+                              .toUpperCase()
+
+                            const receptores =
+                              medioNombre === 'CADETERIA'
+                                ? cadetes
+                                : medioNombre === 'LUCOM TERRENO'
+                                  ? terreno
+                                  : []
+
+                            const etiquetaGrupo =
+                              medioNombre === 'CADETERIA'
+                                ? 'Cadetería'
+                                : medioNombre === 'LUCOM TERRENO'
+                                  ? 'Lucom Terreno'
+                                  : 'transporte'
+
+                            if (receptores.length === 0) {
+                              return (
+                                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-900">
+                                  No hay usuarios activos de {etiquetaGrupo} disponibles.
+                                </div>
+                              )
+                            }
+
+                            return (
+                              <form
+                                action={entregarLoteTransporte}
+                                className="mt-4 space-y-3"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="lote_despacho_id"
+                                  value={lote.id}
+                                />
+
+                                <div>
+                                  <label
+                                    htmlFor={`recibido_por_${lote.id}`}
+                                    className="block text-xs font-semibold uppercase tracking-wide text-gray-500"
+                                  >
+                                    Receptor del lote
+                                  </label>
+
+                                  <select
+                                    id={`recibido_por_${lote.id}`}
+                                    name="recibido_por"
+                                    required
+                                    defaultValue=""
+                                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                                  >
+                                    <option value="" disabled>
+                                      Seleccionar receptor
+                                    </option>
+
+                                    {receptores.map((receptor: any) => (
+                                      <option
+                                        key={receptor.id}
+                                        value={receptor.id}
+                                      >
+                                        {texto(receptor.nombre)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <button
+                                  type="submit"
+                                  className="w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+                                >
+                                  Entregar al transportista
+                                </button>
+                              </form>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
         ) : (
           <div className="space-y-4">
             {registrosGE.length === 0 ? (
@@ -797,6 +1289,50 @@ export default async function LogisticaPage({
                             </button>
                           </form>
                         )}
+
+                        {bandejaActiva === 'REINGRESOS' &&
+                          String(gestion.estado?.codigo ?? '')
+                            .trim()
+                            .toUpperCase() === 'REINGRESO_PENDIENTE' && (
+                            <form
+                              action={confirmarReingresoGestionEntrega}
+                              className="mt-4"
+                            >
+                              <input
+                                type="hidden"
+                                name="gestion_entrega_id"
+                                value={gestion.id}
+                              />
+                              <button
+                                type="submit"
+                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+                              >
+                                Confirmar reingreso físico
+                              </button>
+                            </form>
+                          )}
+
+                        {bandejaActiva === 'REINGRESOS' &&
+                          String(gestion.estado?.codigo ?? '')
+                            .trim()
+                            .toUpperCase() === 'REINGRESADO' && (
+                            <form
+                              action={prepararReintentoGestionEntrega}
+                              className="mt-4"
+                            >
+                              <input
+                                type="hidden"
+                                name="gestion_entrega_id"
+                                value={gestion.id}
+                              />
+                              <button
+                                type="submit"
+                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+                              >
+                                Preparar nuevo despacho
+                              </button>
+                            </form>
+                          )}
                       </div>
                     </div>
                   </section>

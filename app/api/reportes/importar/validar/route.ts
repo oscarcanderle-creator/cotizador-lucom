@@ -422,26 +422,14 @@ export async function POST(request: Request) {
     }> = []
 
     if (tipo === 'ITEC') {
-      const telefonosDuplicados = new Set(
-        buscarDuplicados(registrosBaseValidos, 6),
-      )
       const posDuplicados = new Set(
         buscarDuplicados(registrosBaseValidos, 16),
       )
 
-      const cantidadTelefono = new Map<string, number>()
       const cantidadPos = new Map<string, number>()
 
       for (const fila of registrosBaseValidos) {
-        const telefono = limpiar(fila[6])
         const nroPos = limpiar(fila[16])
-
-        if (telefono && telefonosDuplicados.has(telefono)) {
-          cantidadTelefono.set(
-            telefono,
-            (cantidadTelefono.get(telefono) ?? 0) + 1,
-          )
-        }
 
         if (nroPos && posDuplicados.has(nroPos)) {
           cantidadPos.set(
@@ -452,32 +440,14 @@ export async function POST(request: Request) {
       }
 
       registrosValidos = registrosBaseValidos.filter((fila) => {
-        const telefono = limpiar(fila[6])
         const nroPos = limpiar(fila[16])
 
-        return !(
-          (telefono && telefonosDuplicados.has(telefono)) ||
-          (nroPos && posDuplicados.has(nroPos))
-        )
+        return !(nroPos && posDuplicados.has(nroPos))
       })
 
       for (const fila of registrosBaseValidos) {
         const telefono = limpiar(fila[6])
         const nroPos = limpiar(fila[16])
-
-        if (telefono && telefonosDuplicados.has(telefono)) {
-          duplicadosItec.push({
-            motivo: 'Valor duplicado',
-            campo: 'Numero de telefono',
-            valor: telefono,
-            cantidad: cantidadTelefono.get(telefono) ?? 0,
-            codigo_psr: limpiar(fila[1]),
-            telefono,
-            nro_pos: nroPos,
-            caminante: limpiar(fila[11]),
-            rubro: limpiar(fila[15]),
-          })
-        }
 
         if (nroPos && posDuplicados.has(nroPos)) {
           duplicadosItec.push({

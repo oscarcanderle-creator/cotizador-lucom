@@ -465,9 +465,9 @@ export default function ImportarReportesClient() {
                 </div>
 
                 <div className="mt-1 text-sm text-amber-800">
-                  Las filas involucradas en teléfonos o Nro. POS duplicados
-                  serán ignoradas durante la importación. Podés descargar el
-                  detalle para su revisión y corrección.
+                  Las filas involucradas en Nro. POS duplicados serán
+                  ignoradas durante la importación. Podés descargar el detalle
+                  para su revisión y corrección.
                 </div>
 
                 <button

@@ -712,22 +712,14 @@ export async function POST(request: Request) {
     let filasValidas = filasBaseValidas
 
     if (tipo === 'ITEC') {
-      const telefonosDuplicados = new Set(
-        buscarDuplicados(filasBaseValidas, 6),
-      )
-
       const posDuplicados = new Set(
         buscarDuplicados(filasBaseValidas, 16),
       )
 
       filasValidas = filasBaseValidas.filter((fila) => {
-        const telefono = limpiar(fila[6])
         const nroPos = limpiar(fila[16])
 
-        return !(
-          (telefono && telefonosDuplicados.has(telefono)) ||
-          (nroPos && posDuplicados.has(nroPos))
-        )
+        return !(nroPos && posDuplicados.has(nroPos))
       })
     }
 

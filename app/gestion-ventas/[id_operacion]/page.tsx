@@ -89,6 +89,36 @@ function fechaInstalacionDesdeFormulario(formData: FormData) {
   return `${fecha} - ${turno}`
 }
 
+function etiquetaEstadoLogistico(codigo: string | null | undefined) {
+  const valor = String(codigo ?? '').trim().toUpperCase()
+  if (!valor) return 'SIN ESTADO'
+
+  const etiquetas: Record<string, string> = {
+    EN_PREPARACION: 'EN PREPARACIÓN',
+    LISTA_PARA_ENTREGA: 'LISTA PARA ENTREGA',
+    EN_DISTRIBUCION: 'EN DISTRIBUCIÓN',
+    ENTREGADO: 'ENTREGADO',
+    NO_ENTREGADO: 'NO ENTREGADO',
+    REINGRESO_PENDIENTE: 'REINGRESO PENDIENTE',
+    REINGRESADO: 'REINGRESADO',
+  }
+
+  return etiquetas[valor] ?? valor.replaceAll('_', ' ')
+}
+
+function clasesEstadoLogistico(codigo: string | null | undefined) {
+  const valor = String(codigo ?? '').trim().toUpperCase()
+
+  if (valor === 'ENTREGADO') return 'border-green-200 bg-green-50 text-green-800'
+  if (valor === 'REINGRESO_PENDIENTE') return 'border-amber-300 bg-amber-50 text-amber-900'
+  if (valor === 'EN_DISTRIBUCION') return 'border-blue-200 bg-blue-50 text-blue-800'
+  if (valor === 'NO_ENTREGADO') return 'border-red-200 bg-red-50 text-red-800'
+  if (valor === 'REINGRESADO') return 'border-violet-200 bg-violet-50 text-violet-800'
+  if (valor === 'LISTA_PARA_ENTREGA') return 'border-slate-300 bg-slate-100 text-slate-800'
+
+  return 'border-gray-200 bg-gray-50 text-gray-700'
+}
+
 function Campo({
   label,
   value,
@@ -708,6 +738,49 @@ export default async function DetalleVentaPage({
     usuarioBloqueo = perfilBloqueo?.vendedor || perfilBloqueo?.nombre || null
   }
 
+  const { data: gestionEntregaActual, error: gestionEntregaError } = await admin
+    .from('gestiones_entrega')
+    .select('id,codigo_gestion,estado_entrega_id,medio_despacho_chip_id,fecha_lista_entrega,fecha_primera_distribucion,updated_at')
+    .eq('operacion_id', id)
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (gestionEntregaError) {
+    throw new Error(`No se pudo cargar el estado logístico de la venta: ${gestionEntregaError.message}`)
+  }
+
+  let estadoLogisticoActual: any = null
+  let medioLogisticoActual: any = null
+
+  if (gestionEntregaActual?.estado_entrega_id) {
+    const { data: estadoLogistico, error: estadoLogisticoError } = await admin
+      .from('estados_entrega')
+      .select('id,codigo,nombre')
+      .eq('id', gestionEntregaActual.estado_entrega_id)
+      .maybeSingle()
+
+    if (estadoLogisticoError) {
+      throw new Error(`No se pudo cargar el estado de la gestión logística: ${estadoLogisticoError.message}`)
+    }
+
+    estadoLogisticoActual = estadoLogistico
+  }
+
+  if (gestionEntregaActual?.medio_despacho_chip_id) {
+    const { data: medioLogistico, error: medioLogisticoError } = await admin
+      .from('medios_despacho_chip')
+      .select('id,nombre')
+      .eq('id', gestionEntregaActual.medio_despacho_chip_id)
+      .maybeSingle()
+
+    if (medioLogisticoError) {
+      throw new Error(`No se pudo cargar el medio de la gestión logística: ${medioLogisticoError.message}`)
+    }
+
+    medioLogisticoActual = medioLogistico
+  }
+
   // ================================================================
   // NUEVA ARQUITECTURA MULTIPRODUCTO
   // Si la operación posee operacion_productos, esta rama es la fuente de verdad.
@@ -948,6 +1021,30 @@ export default async function DetalleVentaPage({
               </div>
             </section>
 
+            {gestionEntregaActual && estadoLogisticoActual && (
+              <section className={`rounded-2xl border p-5 ${clasesEstadoLogistico(estadoLogisticoActual.codigo)}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wide opacity-70">
+                      Estado logístico
+                    </div>
+                    <div className="mt-1 text-xl font-bold">
+                      {etiquetaEstadoLogistico(estadoLogisticoActual.codigo)}
+                    </div>
+                  </div>
+
+                  <div className="text-right text-sm">
+                    <div className="font-semibold">
+                      {gestionEntregaActual.codigo_gestion}
+                    </div>
+                    <div className="mt-1 opacity-80">
+                      Medio: {medioLogisticoActual?.nombre ?? '-'}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
             <section className="rounded-2xl border border-gray-200 bg-white p-5">
               <h2 className="mb-4 text-lg font-semibold text-gray-900">Cliente</h2>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -1166,6 +1263,19 @@ export default async function DetalleVentaPage({
                                 medios={(mediosDespacho ?? []).map((m:any)=>({id:Number(m.id),nombre:String(m.nombre??'')}))}
                                 medioInicial={gestion?.medio_despacho_chip_id ?? null}
                                 seguimientoInicial={gestion?.numero_seguimiento ?? null}
+                                estadoLogistico={
+                                  gestionEntregaActual &&
+                                  estadoLogisticoActual &&
+                                  ['CADETERIA', 'LUCOM TERRENO'].includes(
+                                    String(medioLogisticoActual?.nombre ?? '')
+                                      .normalize('NFD')
+                                      .replace(/[\u0300-\u036f]/g, '')
+                                      .trim()
+                                      .toUpperCase()
+                                  )
+                                    ? String(estadoLogisticoActual.codigo ?? '')
+                                    : null
+                                }
                                 idEnvio={gestion?.id_envio ?? null}
                                 legajoEnviado={gestion?.legajo_enviado === true}
                                 esBboo={profile.rol === 'BBOO'}
@@ -1547,6 +1657,30 @@ export default async function DetalleVentaPage({
               <Campo label="Grupo operación" value={op.grupo_operacion} />
             </div>
           </section>
+
+          {gestionEntregaActual && estadoLogisticoActual && (
+            <section className={`rounded-2xl border p-5 ${clasesEstadoLogistico(estadoLogisticoActual.codigo)}`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wide opacity-70">
+                    Estado logístico
+                  </div>
+                  <div className="mt-1 text-xl font-bold">
+                    {etiquetaEstadoLogistico(estadoLogisticoActual.codigo)}
+                  </div>
+                </div>
+
+                <div className="text-right text-sm">
+                  <div className="font-semibold">
+                    {gestionEntregaActual.codigo_gestion}
+                  </div>
+                  <div className="mt-1 opacity-80">
+                    Medio: {medioLogisticoActual?.nombre ?? '-'}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5">
             <h2 className="mb-4 text-lg font-semibold text-gray-900">
