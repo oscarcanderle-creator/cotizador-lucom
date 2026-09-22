@@ -983,22 +983,6 @@ export default function Cotizador({
 
   }
 
-  const portabilidadesCompletas = lineas.every(
-
-    (linea) =>
-
-      linea.tipo === 'LINEA NUEVA' ||
-
-      (
-
-        linea.portabilidades.length === 1 &&
-
-        nimValido(linea.portabilidades[0].nim)
-
-      )
-
-  )
-
   function agregarLinea() {
 
     setLineas((actuales) => [
@@ -1543,36 +1527,6 @@ export default function Cotizador({
 
    */
 
-  function validarExportacion() {
-
-    if (!datosClienteCompletos) {
-
-      window.alert(
-
-        'Completá todos los datos obligatorios del cliente antes de generar la propuesta.'
-
-      )
-
-      return false
-
-    }
-
-    if (!portabilidadesCompletas) {
-
-      window.alert(
-
-        'El NIM a portar debe tener 10 dígitos y no puede comenzar con 0, + ni 5.'
-
-      )
-
-      return false
-
-    }
-
-    return true
-
-  }
-
   function nombreArchivo(extension: 'jpg' | 'pdf') {
 
     if (cotizadorAnonimo || !mostrarDatosCliente) {
@@ -1617,8 +1571,6 @@ export default function Cotizador({
 
   async function descargarJPG() {
 
-    if (!validarExportacion()) return
-
     try {
 
       setExportando(true)
@@ -1648,8 +1600,6 @@ export default function Cotizador({
   }
 
   async function descargarPDF() {
-
-    if (!validarExportacion()) return
 
     try {
 
@@ -1694,12 +1644,6 @@ export default function Cotizador({
   }
 
 async function compartirPropuesta() {
-
-  if (!validarExportacion()) {
-
-    return
-
-  }
 
   if (cotizadorAnonimo || !mostrarDatosCliente) {
 
@@ -2388,9 +2332,9 @@ async function compartirPropuesta() {
 
                 {datosClienteCompletos
 
-                  ? 'Datos completos. La propuesta quedará habilitada para exportación.'
+                  ? 'Datos completos.'
 
-                  : 'Completá todos los campos obligatorios para habilitar la exportación.'}
+                  : 'Podés completar los datos disponibles del cliente y domicilio.'}
 
               </div>
 
@@ -4409,7 +4353,7 @@ async function compartirPropuesta() {
 
                 onClick={descargarJPG}
 
-                disabled={!datosClienteCompletos || !portabilidadesCompletas || exportando}
+                disabled={exportando}
 
                 className="rounded-md bg-red-600 text-white font-medium text-xs sm:text-sm px-2 sm:px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
 
@@ -4425,7 +4369,7 @@ async function compartirPropuesta() {
 
                 onClick={descargarPDF}
 
-                disabled={!datosClienteCompletos || !portabilidadesCompletas || exportando}
+                disabled={exportando}
 
                 className="rounded-md bg-white border border-gray-300 text-gray-800 font-medium text-xs sm:text-sm px-2 sm:px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
 
@@ -4441,7 +4385,7 @@ async function compartirPropuesta() {
 
                 onClick={compartirPropuesta}
 
-                disabled={!datosClienteCompletos || !portabilidadesCompletas || exportando}
+                disabled={exportando}
 
                 className="rounded-md bg-green-600 text-white font-medium text-xs sm:text-sm px-2 sm:px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
 
@@ -4452,16 +4396,6 @@ async function compartirPropuesta() {
               </button>
 
             </div>
-
-            {!datosClienteCompletos && (
-
-              <div className="text-xs text-amber-700 mt-2">
-
-                Completá todos los datos obligatorios para habilitar la exportación.
-
-              </div>
-
-            )}
 
           </div>
 
