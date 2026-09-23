@@ -140,7 +140,7 @@ export default function MisConsultasClient({ userId, nombreUsuario, rol, puedeGe
   const [consultasGestion, setConsultasGestion] = useState<Consulta[]>([])
   const [pedidosGestion, setPedidosGestion] = useState<Pedido[]>([])
   const [vistaGestion, setVistaGestion] = useState<VistaListado>('CONSULTAS')
-  const [filtroGestion, setFiltroGestion] = useState<FiltroGestion>('PENDIENTES')
+  const [filtroGestion, setFiltroGestion] = useState<FiltroGestion>(() => (rol === 'SUPERVISOR' || rol === 'ADMIN') ? 'TODAS' : 'PENDIENTES')
   const [tomandoId, setTomandoId] = useState<number | null>(null)
 
   const [estadosConsulta, setEstadosConsulta] = useState<EstadoCatalogo[]>([])

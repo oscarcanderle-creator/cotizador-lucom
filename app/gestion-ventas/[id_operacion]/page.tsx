@@ -501,7 +501,9 @@ export default async function DetalleVentaPage({
     profile.activo === true &&
     (
       (profile.rol === 'VENDEDOR' && profile.puede_gestionar_ventas === true) ||
-      profile.rol === 'BBOO'
+      profile.rol === 'BBOO' ||
+      profile.rol === 'SUPERVISOR' ||
+      profile.rol === 'ADMIN'
     )
 
   if (!esUsuarioGestion) redirect('/ventas')

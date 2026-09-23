@@ -79,11 +79,10 @@ const items = [
 
   { key: 'PORTAL', label: 'Portal', href: '/portal', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN', 'BBOO', 'TERRENO'] },
 
-  { key: 'GESTION_VENTAS', label: 'Gestión de Ventas', href: '/gestion-ventas', roles: ['VENDEDOR', 'BBOO'] },
+  { key: 'GESTION_VENTAS', label: 'Gestión de Ventas', href: '/gestion-ventas', roles: ['VENDEDOR', 'SUPERVISOR', 'ADMIN', 'BBOO'] },
 
   { key: 'VENTAS_GRUPO', label: 'Ventas del Grupo', href: '/ventas-grupo', roles: ['VENDEDOR', 'TERRENO'] },
 
-  { key: 'SUPER', label: 'SUPER', href: '/super', roles: ['SUPERVISOR', 'ADMIN'] },
 
   { key: 'REPORTES', label: 'Reportes', href: '/reportes', roles: ['SUPERVISOR', 'ADMIN', 'BBOO'] },
   { key: 'LOGISTICA', label: 'Logística', href: '/logistica', roles: ['SUPERVISOR', 'ADMIN', 'BBOO'] },
@@ -280,7 +279,7 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
 
     if (item.key === 'GESTION_VENTAS') {
 
-      if (rol === 'BBOO') return true
+      if (rol === 'BBOO' || rol === 'SUPERVISOR' || rol === 'ADMIN') return true
 
       if (rol === 'VENDEDOR') {
 

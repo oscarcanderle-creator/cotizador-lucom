@@ -238,7 +238,10 @@ export default async function GestionVentasPage({
     profile.puede_gestionar_ventas === true
 
   const esBboo = profile.rol === 'BBOO'
-  const puedeGestionarVentas = esVendedorGestor || esBboo
+  const esSupervisor = profile.rol === 'SUPERVISOR'
+  const esAdmin = profile.rol === 'ADMIN'
+  const puedeGestionarVentas =
+    esVendedorGestor || esBboo || esSupervisor || esAdmin
 
   if (!puedeGestionarVentas) redirect('/ventas')
 
