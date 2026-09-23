@@ -337,7 +337,7 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
 
     if (modo === 'mobile-trigger') {
 
-      return <div aria-hidden="true" className="h-10 w-10 shrink-0 2xl:hidden" />
+      return <div aria-hidden="true" className="h-10 w-10 shrink-0 min-[1400px]:hidden" />
 
     }
 
@@ -351,7 +351,7 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
 
       <>
 
-        <button type="button" onClick={() => setAbierto(true)} aria-label="Abrir menú" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/15 2xl:hidden">
+        <button type="button" onClick={() => setAbierto(true)} aria-label="Abrir menú" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/15 min-[1400px]:hidden">
 
           <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
 
@@ -359,7 +359,7 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
 
         {abierto && (
 
-          <div className="fixed inset-0 z-[100] 2xl:hidden">
+          <div className="fixed inset-0 z-[100] min-[1400px]:hidden">
 
             <button type="button" aria-label="Cerrar menú" onClick={() => setAbierto(false)} className="absolute inset-0 bg-black/45 backdrop-blur-[1px]" />
 
@@ -483,9 +483,9 @@ export default function AppNav({ rol, actual, variante = 'rojo', puedeGestionarV
 
           ? activo
 
-            ? 'relative flex shrink-0 flex-col items-center gap-1 rounded-lg bg-white/10 px-1.5 py-2 text-[10px] font-bold text-white after:absolute after:inset-x-2.5 after:-bottom-[7px] after:h-[3px] after:rounded-full after:bg-white xl:px-1.5 xl:text-[11px] 2xl:px-1.5 2xl:text-[11px]'
+            ? 'relative flex shrink-0 flex-col items-center gap-1 rounded-lg bg-white/10 px-2 py-2 text-center text-[10px] font-bold leading-tight text-white after:absolute after:inset-x-2.5 after:-bottom-[7px] after:h-[3px] after:rounded-full after:bg-white xl:text-[11px] 2xl:text-[11px]'
 
-            : 'flex shrink-0 flex-col items-center gap-1 rounded-lg px-1.5 py-2 text-[10px] font-semibold text-red-50 transition-colors hover:bg-white/10 hover:text-white xl:px-1.5 xl:text-[11px] 2xl:px-1.5 2xl:text-[11px]'
+            : 'flex shrink-0 flex-col items-center gap-1 rounded-lg px-2 py-2 text-center text-[10px] font-semibold leading-tight text-red-50 transition-colors hover:bg-white/10 hover:text-white xl:text-[11px] 2xl:text-[11px]'
 
           : activo
 
