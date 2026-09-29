@@ -1643,6 +1643,66 @@ export default function Cotizador({
 
   }
 
+function limpiarCotizacion() {
+
+  const confirmar = window.confirm(
+    '¿Limpiar todos los datos del cliente, domicilio y productos para iniciar una nueva cotización?'
+  )
+
+  if (!confirmar) return
+
+  setDatosCliente({
+    nombre: '',
+    apellido: '',
+    dni: '',
+    telefono: '',
+    email: '',
+    companiaActual: '',
+    domicilio: '',
+    entreCalles: '',
+    localidad: '',
+    observacionesDomicilio: '',
+  })
+  setMostrarDatosCliente(false)
+
+  setClienteTieneLineasClaro(false)
+  setCantidadLineasActuales(1)
+  setClienteTieneBAF(false)
+
+  setLineas(
+    cotizadorAnonimo
+      ? []
+      : [
+          {
+            id: 1,
+            tipo: 'LINEA NUEVA',
+            plan: '7 Gigas',
+            cantidad: 1,
+            portabilidades: [],
+          },
+        ]
+  )
+  setNextLineaId(cotizadorAnonimo ? 1 : 2)
+
+  setServiciosInternet(
+    cotizadorAnonimo
+      ? [
+          {
+            id: 1,
+            plan: '200 MB',
+          },
+        ]
+      : []
+  )
+  setNextInternetId(cotizadorAnonimo ? 2 : 1)
+
+  setTvActivo(false)
+  setCantidadDecosAdicionales(0)
+  setPagaClaroPay(true)
+  setVentaSincronizada(null)
+  setAvisoSincronizacion(null)
+}
+
 async function compartirPropuesta() {
 
   if (cotizadorAnonimo || !mostrarDatosCliente) {
@@ -1825,7 +1885,7 @@ async function compartirPropuesta() {
 
           {/* MASIVO / PYME */}
 
-          <div className="grid grid-cols-2 gap-2 mb-2">
+          <div className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_auto] gap-2 mb-2">
 
             <button
               type="button"
@@ -1849,6 +1909,14 @@ async function compartirPropuesta() {
               }`}
             >
               PYME
+            </button>
+
+            <button
+              type="button"
+              onClick={limpiarCotizacion}
+              className="col-span-2 sm:col-span-1 rounded-lg border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-600 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+            >
+              Limpiar
             </button>
 
           </div>
