@@ -223,7 +223,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
    required
    onChange={(e)=>{
     const tipo=e.target.value as ServicioExistente['tipo']
-    setExistentes(a=>a.map(x=>x.id===s.id?{...x,tipo,modalidad:tipo==='BAF'?'2PLAY':''}:x))
+    setExistentes(a=>a.map(x=>x.id===s.id?{...x,tipo,modalidad:tipo==='BAF'?'2PLAY':'POS'}:x))
    }}
   >
    <option value="BAF">Internet Claro</option>
@@ -232,9 +232,9 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
  </label>
  <Selector
   key={`${s.id}-${s.tipo}`}
-  label={s.tipo==='BAF'?'Modalidad':'Plan Pos Pago'}
+  label={s.tipo==='BAF'?'Modalidad':'Tipo Línea'}
   name={`existente_modalidad_${i}`}
-  opciones={s.tipo==='BAF'?opts(['2PLAY','3PLAY']):opts(['2Gb','4Gb','7Gb','10Gb','30Gb','50Gb'])}
+  opciones={s.tipo==='BAF'?opts(['2PLAY','3PLAY']):opts(['POS','PRE'])}
   defaultValue={s.modalidad}
   required
  />
