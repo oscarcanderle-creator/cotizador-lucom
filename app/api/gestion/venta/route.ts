@@ -159,13 +159,6 @@ export async function POST(request: Request) {
     )
   }
 
-  if (sim && !/^\d{19}$/.test(sim)) {
-    return NextResponse.json(
-      { error: 'La SIM debe contener exactamente 19 dígitos.' },
-      { status: 400 }
-    )
-  }
-
   body.sds = sds
   body.orden_trabajo = ordenTrabajo
   body.sim = sim

@@ -190,9 +190,20 @@ export async function POST(request: Request) {
         await actualizar('operacion_producto_baf', 'producto_operacion_id', pid,
           ['modalidad_plan','tv','cantidad_decos','horario_contacto'], x.detalle, pid)
 
-      if (tipo === 'PORTA' || tipo === 'LINEA_NUEVA')
+      if (tipo === 'PORTA' || tipo === 'LINEA_NUEVA') {
+        const tipoSim = norm(x.detalle?.tipo_sim)
+
+        if (tipoSim && !['SIMCARD', 'ESIM'].includes(tipoSim)) {
+          throw new Error('Tipo de SIM inválido. Debe ser SIMCARD o ESIM.')
+        }
+
+        if (x.detalle) {
+          x.detalle.tipo_sim = tipoSim || null
+        }
+
         await actualizar('operacion_producto_movil', 'producto_operacion_id', pid,
           ['numero_linea','nim','compania_actual','modalidad_actual','tipo_sim','linea_titular','forma_pago_modem','cuotas_modem'], x.detalle, pid)
+      }
     }
 
     return NextResponse.json({ ok: true, cambios: cantidad })

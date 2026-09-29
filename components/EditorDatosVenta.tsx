@@ -194,7 +194,17 @@ export default function EditorDatosVenta({operacionId,sesionToken}:{operacionId:
             ).map(([label,campo])=>
               <label key={campo}>
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</span>
-                {(campo==="tv" || campo==="linea_titular") ? (
+                {campo==="tipo_sim" ? (
+                  <select
+                    className={input}
+                    value={N(detalle?.[campo])}
+                    onChange={e=>setDetalle(tipo,id,campo,e.target.value)}
+                  >
+                    <option value="">Seleccionar...</option>
+                    <option value="SIMCARD">SIMCARD</option>
+                    <option value="ESIM">eSIM</option>
+                  </select>
+                ) : (campo==="tv" || campo==="linea_titular") ? (
                   <select
                     className={input}
                     value={
