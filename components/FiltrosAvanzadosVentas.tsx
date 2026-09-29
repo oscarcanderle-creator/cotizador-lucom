@@ -38,6 +38,7 @@ const CAMPOS = [
   ['pin', 'PIN'],
   ['sim_operativo', 'SIM operativo'],
   ['numero_seguimiento', 'Número de seguimiento'],
+  ['documentacion_dni', 'Documentación DNI'],
 ] as const
 
 const vacio: Filtro = {
@@ -49,6 +50,13 @@ const vacio: Filtro = {
 }
 
 function condiciones(campo: string) {
+  if (campo === 'documentacion_dni') {
+    return [
+      ['es', 'es'],
+      ['no_es', 'no es'],
+    ]
+  }
+
   if (['fecha_carga_stl', 'fecha_porta'].includes(campo)) {
     return [
       ['es', 'es'],
@@ -132,6 +140,7 @@ export default function FiltrosAvanzadosVentas({
     if (campo === 'medio_despacho') return mediosDespacho
     if (campo === 'tipo_sim') return ['eSIM', 'SIMCARD']
     if (campo === 'compania_actual') return companias
+    if (campo === 'documentacion_dni') return ['DNI OK', 'DNI INCOMPLETO']
     return []
   }
 

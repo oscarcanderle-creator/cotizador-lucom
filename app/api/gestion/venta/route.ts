@@ -435,6 +435,8 @@ export async function POST(request: Request) {
 
       let seguimientoEfectivo = anteriorProducto?.numero_seguimiento ?? null
       let legajoEnviadoEfectivo = anteriorProducto?.legajo_enviado ?? false
+      let fechaLegajoEnviadoEfectiva =
+        anteriorProducto?.fecha_legajo_enviado ?? null
       let idEnvioEfectivo: string | null = anteriorProducto?.id_envio ?? null
 
       let nombreMedio = ''
@@ -455,7 +457,20 @@ export async function POST(request: Request) {
 
       if (rolActor === 'BBOO') {
         seguimientoEfectivo = medioPermiteSeguimiento ? (body.numero_seguimiento ?? null) : null
-        legajoEnviadoEfectivo = body.legajo_enviado === true
+
+        // LEGAJO ENVIADO es un hito irreversible.
+        // Una vez guardado en true nunca puede volver a false.
+        const legajoSeMarcaAhora =
+          anteriorProducto?.legajo_enviado !== true &&
+          body.legajo_enviado === true
+
+        legajoEnviadoEfectivo =
+          anteriorProducto?.legajo_enviado === true ||
+          body.legajo_enviado === true
+
+        if (legajoSeMarcaAhora && !fechaLegajoEnviadoEfectiva) {
+          fechaLegajoEnviadoEfectiva = ahora
+        }
       }
 
       if (!medioPermiteSeguimiento && rolActor !== 'BBOO') {
@@ -632,6 +647,7 @@ export async function POST(request: Request) {
         numero_seguimiento: seguimientoEfectivo,
         id_envio: idEnvioEfectivo,
         legajo_enviado: legajoEnviadoEfectivo,
+        fecha_legajo_enviado: fechaLegajoEnviadoEfectiva,
         observaciones_gestion: body.observaciones_gestion ?? null,
         estado_porta_id: estadoPortaEfectivo,
         estado_bboo_id: estadoBbooEfectivo,

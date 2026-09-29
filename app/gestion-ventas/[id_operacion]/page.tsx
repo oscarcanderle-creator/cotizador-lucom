@@ -8,6 +8,7 @@ import GestionBloqueoControls from '../../../components/GestionBloqueoControls'
 import GestionInputValidado from '../../../components/GestionInputValidado'
 import GestionProductoForm from '../../../components/GestionProductoForm'
 import GestionLogisticaChip from '../../../components/GestionLogisticaChip'
+import DocumentacionDni from '../../../components/DocumentacionDni'
 import EditorDatosVenta from '../../../components/EditorDatosVenta'
 import ResolverCaminantePSR from '../../../components/ResolverCaminantePSR'
 import CorreccionesVentaPanel from "../../../components/CorreccionesVentaPanel"
@@ -1260,7 +1261,6 @@ export default async function DetalleVentaPage({
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</label><select name="plan_cargado" defaultValue={gestion?.plan_cargado || producto.plan_snapshot || ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar plan</option>{(() => { const actual = String(gestion?.plan_cargado || producto.plan_snapshot || '').trim(); const activos = Array.from(new Set((planesPorta ?? []).map((p: any) => String(p.nombre ?? '').trim()).filter(Boolean))); const opciones = actual && !activos.includes(actual) ? [actual, ...activos] : activos; return opciones.map((nombre: string) => <option key={nombre} value={nombre}>{nombre}</option>) })()}</select></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><GestionInputValidado name="sds" tipo="SDS" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">PIN / LNVA NRO</label><input name="pin_lnva_nro" defaultValue={gestion?.pin_lnva_nro ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
-                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Documentación DNI</label><select name="documentacion_dni" defaultValue={gestion?.documentacion_dni === true ? 'SI' : gestion?.documentacion_dni === false ? 'NO' : ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin informar</option><option value="SI">SI</option><option value="NO">NO</option></select></div>
                               <GestionLogisticaChip
                                 medios={(mediosDespacho ?? []).map((m:any)=>({id:Number(m.id),nombre:String(m.nombre??'')}))}
                                 medioInicial={gestion?.medio_despacho_chip_id ?? null}
@@ -1280,6 +1280,7 @@ export default async function DetalleVentaPage({
                                 }
                                 idEnvio={gestion?.id_envio ?? null}
                                 legajoEnviado={gestion?.legajo_enviado === true}
+                                fechaLegajoEnviado={gestion?.fecha_legajo_enviado ?? null}
                                 esBboo={profile.rol === 'BBOO'}
                                 puedeEditar={puedeEditarProducto}
                               />
@@ -1292,6 +1293,13 @@ export default async function DetalleVentaPage({
                           </div>
                         </fieldset>
                       </GestionProductoForm>
+
+                      {!esBaf && (
+                        <DocumentacionDni
+                          productoOperacionId={productoId}
+                          puedeSubir={true}
+                        />
+                      )}
 
                       <div className="border-t border-gray-200 bg-white p-5">
                         <details>

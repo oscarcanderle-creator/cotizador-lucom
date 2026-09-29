@@ -405,7 +405,35 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
       </div>
      </div>
     )}
-    </>}</div>})}</div></Seccion>
+    </>}</div>})}</div>
+  {nuevos.some(x=>x.tipo==='PORTA' || x.tipo==='LINEA_NUEVA') && (
+   <section className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
+    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+     <div className="min-w-0 lg:max-w-xs">
+      <h3 className="text-sm font-bold text-blue-900">Documentación DNI del titular</h3>
+      <p className="mt-0.5 text-[11px] leading-4 text-blue-700">Opcional. Podés adjuntar Frente y Dorso por separado o un único PDF que contenga ambas caras.</p>
+     </div>
+     <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
+      <label className="block rounded-lg border border-blue-200 bg-white px-2.5 py-2">
+       <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-600">Frente</span>
+       <input type="file" name="dni_frente" accept="image/jpeg,image/png" className="mt-1 block w-full text-xs text-gray-600 file:mr-2 file:rounded-md file:border-0 file:bg-red-50 file:px-2.5 file:py-1.5 file:text-xs file:font-semibold file:text-red-700 hover:file:bg-red-100"/>
+       <span className="mt-1 block text-[10px] text-gray-500">JPG o PNG · Máx. 10 MB</span>
+      </label>
+      <label className="block rounded-lg border border-blue-200 bg-white px-2.5 py-2">
+       <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-600">Dorso</span>
+       <input type="file" name="dni_dorso" accept="image/jpeg,image/png" className="mt-1 block w-full text-xs text-gray-600 file:mr-2 file:rounded-md file:border-0 file:bg-red-50 file:px-2.5 file:py-1.5 file:text-xs file:font-semibold file:text-red-700 hover:file:bg-red-100"/>
+       <span className="mt-1 block text-[10px] text-gray-500">JPG o PNG · Máx. 10 MB</span>
+      </label>
+      <label className="block rounded-lg border border-blue-200 bg-white px-2.5 py-2">
+       <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-600">DNI completo</span>
+       <input type="file" name="dni_completo" accept="application/pdf" className="mt-1 block w-full text-xs text-gray-600 file:mr-2 file:rounded-md file:border-0 file:bg-red-50 file:px-2.5 file:py-1.5 file:text-xs file:font-semibold file:text-red-700 hover:file:bg-red-100"/>
+       <span className="mt-1 block text-[10px] text-gray-500">PDF con Frente + Dorso · Máx. 10 MB</span>
+      </label>
+     </div>
+    </div>
+   </section>
+  )}
+  </Seccion>
   {resultado&&<div className={`mb-3 rounded-xl border px-3 py-3 text-sm font-medium ${resultado.ok?'border-green-200 bg-green-50 text-green-700':'border-red-200 bg-red-50 text-red-700'}`}>{resultado.mensaje}{resultado.idOperacion&&<div className="font-mono text-xs mt-1">ID: {resultado.idOperacion}</div>}</div>}
   <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-2.5 sm:sticky sm:bg-gray-100/95"><button type="submit" disabled={guardando} className="mx-auto block w-full max-w-6xl sm:w-auto sm:min-w-56 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl px-6 py-3 disabled:opacity-50">{guardando?'Guardando...':'Guardar venta'}</button></div>
 

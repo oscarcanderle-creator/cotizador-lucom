@@ -128,6 +128,7 @@ export default async function VentasPage(){
    const precioModemActual=Number(modemFwa?.precio??0)
    const maxCuotasFactura=Number(modemFwa?.max_cuotas_factura??24)
    let productoBafId:number|null=null
+   let productoMovilDocumentalId:number|null=null
    for(const [i,s] of nuevos.entries()){const p=mapa.get(s.productoId);if(!p)throw new Error(`El producto seleccionado en el servicio ${i+1} no existe o ya no está disponible.`);const {data:op,error:eop}=await admin.from('operacion_productos').insert({operacion_id:idOperacion,producto_id:p.id,tipo_producto:s.tipo,responsable_id:null,orden:i+1,activo:true,producto_snapshot:p.producto,origen_snapshot:p.origen,plan_snapshot:p.plan,precio_lista_snapshot:p.precio_lista,descuento_snapshot:p.descuento_normal,precio_cliente_snapshot:p.precio_cliente,beneficios_snapshot:p.beneficios,created_by:user.id,updated_by:user.id}).select('id').single();if(eop)throw eop
     if(s.tipo==='BAF'){productoBafId=op.id;let tipoDomId:null|number=null,zonaId:null|number=null;if(s.tipoDomicilio){const {data:x}=await admin.from('catalogo_tipos_domicilio').select('id').eq('nombre',s.tipoDomicilio).maybeSingle();tipoDomId=x?.id??null}if(s.zona){const {data:x}=await admin.from('catalogo_zonas').select('id').eq('nombre',s.zona).maybeSingle();zonaId=x?.id??null}const {error}=await admin.from('operacion_producto_baf').insert({producto_operacion_id:op.id,tipo_domicilio_id:tipoDomId,zona_id:zonaId,modalidad_plan:s.modalidad||null,tv:s.tv,cantidad_decos:s.decos,horario_contacto:s.observaciones||null});if(error)throw error;const ahoraGestion=new Date().toISOString();if(cargaItecSolicitada){const {error:eg}=await admin.from('gestion_producto_baf').insert({producto_operacion_id:op.id,responsable_id:user.id,estado_baf_id:estadoBafCargadoId,cia_celular:itec.ciaCelular,sds:itec.sds,orden_trabajo:itec.ot,fecha_instalacion:`${itec.fechaInstalacion} - ${itec.turno}`,fecha_gestion:ahoraGestion,updated_at:ahoraGestion,updated_by:user.id});if(eg)throw eg}else{const {error:eg}=await admin.from('gestion_producto_baf').insert({producto_operacion_id:op.id,responsable_id:null});if(eg)throw eg}}
     else{
@@ -141,11 +142,103 @@ export default async function VentasPage(){
       if(s.pagoModem==='EFECTIVO'&&Number(s.cuotasModem)!==1)throw new Error('El pago en efectivo del Módem FWA 5G debe registrarse en un solo pago.')
       if(s.pagoModem==='TARJETA'&&Number(s.cuotasModem)>60)throw new Error('La cantidad de cuotas con tarjeta no es válida.')
      }
-     const {error}=await admin.from('operacion_producto_movil').insert({producto_operacion_id:op.id,numero_linea:s.tipo==='PORTA'?s.nim:null,nim:s.tipo==='PORTA'?s.nim:null,compania_actual:s.tipo==='PORTA'?s.compania:null,modalidad_actual:s.tipo==='PORTA'?s.modalidadActual:null,tipo_sim:s.sim||null,linea_titular:s.tipo==='PORTA'?s.lineaTitular:false,es_fwa:esFwa,forma_pago_modem:esFwa?s.pagoModem:null,cuotas_modem:esFwa?s.cuotasModem:null,precio_modem_snapshot:esFwa?precioModemActual:null});if(error)throw error;const {error:eg}=await admin.from('gestion_producto_movil').insert({producto_operacion_id:op.id,responsable_id:null});if(eg)throw eg}
+     const {error}=await admin.from('operacion_producto_movil').insert({producto_operacion_id:op.id,numero_linea:s.tipo==='PORTA'?s.nim:null,nim:s.tipo==='PORTA'?s.nim:null,compania_actual:s.tipo==='PORTA'?s.compania:null,modalidad_actual:s.tipo==='PORTA'?s.modalidadActual:null,tipo_sim:s.sim||null,linea_titular:s.tipo==='PORTA'?s.lineaTitular:false,es_fwa:esFwa,forma_pago_modem:esFwa?s.pagoModem:null,cuotas_modem:esFwa?s.cuotasModem:null,precio_modem_snapshot:esFwa?precioModemActual:null});if(error)throw error;const {error:eg}=await admin.from('gestion_producto_movil').insert({producto_operacion_id:op.id,responsable_id:null});if(eg)throw eg
+
+     // Una única documentación DNI por titular/operación.
+     // PORTA titular tiene prioridad; si sólo hay LN se usa el primer móvil.
+     if(
+       productoMovilDocumentalId===null ||
+       (s.tipo==='PORTA' && s.lineaTitular)
+     ){
+       productoMovilDocumentalId=Number(op.id)
+     }
+    }
    }
    const esFull=moviles.length>0&&(!!productoBafId||!!servicioBafExistenteId);if(esFull){const modalidad=productoBafId?'BAF_NUEVO':'BAF_EXISTENTE';const cantidad=1+moviles.length;const {error}=await admin.from('operacion_contexto_comercial').insert({operacion_id:idOperacion,es_conexion_full:true,modalidad_conexion_full:modalidad,servicio_existente_id:productoBafId?null:servicioBafExistenteId,producto_baf_id:productoBafId,tipo_referencia_habilitante:productoBafId?'OT':'COMBO',referencia_habilitante:productoBafId?null:'COMBO',cantidad_servicios:cantidad,descuento_convergencia:cantidad>=3?5000:4000,created_by:user.id,updated_by:user.id});if(error)throw error}
    const esVentaMultiproducto=!!productoBafId&&moviles.length>0
    const esLineasMultiples=!productoBafId&&moviles.length>=2
+
+   // La Venta ya quedó creada correctamente.
+   // A partir de aquí la documentación DNI es complementaria:
+   // un error documental NO debe provocar rollback de la Venta.
+   const avisosDocumentacion:string[]=[]
+   const documentosCargados:string[]=[]
+
+   if(productoMovilDocumentalId!==null){
+    const documentosIniciales=[
+     {archivo:fd.get('dni_frente'),tipo:'DNI_FRENTE',sufijo:'F',carpeta:'frente',etiqueta:'Frente',mimePermitidos:['image/jpeg','image/png']},
+     {archivo:fd.get('dni_dorso'),tipo:'DNI_DORSO',sufijo:'D',carpeta:'dorso',etiqueta:'Dorso',mimePermitidos:['image/jpeg','image/png']},
+     {archivo:fd.get('dni_completo'),tipo:'DNI_COMPLETO',sufijo:'',carpeta:'completo',etiqueta:'DNI completo',mimePermitidos:['application/pdf']},
+    ]
+
+    for(const doc of documentosIniciales){
+     if(!(doc.archivo instanceof File) || doc.archivo.size===0)continue
+
+     try{
+      const archivo=doc.archivo
+
+      if(archivo.size>10*1024*1024){
+       avisosDocumentacion.push(`${doc.etiqueta} supera los 10 MB`)
+       continue
+      }
+
+      const extensiones:Record<string,string>={
+       'image/jpeg':'jpg',
+       'image/png':'png',
+       'application/pdf':'pdf',
+      }
+
+      const extension=extensiones[archivo.type]
+
+      if(!extension || !doc.mimePermitidos.includes(archivo.type)){
+       avisosDocumentacion.push(`${doc.etiqueta} tiene un formato no permitido`)
+       continue
+      }
+
+      const nombreVisible=`${dni}${doc.sufijo}.${extension}`
+      const nombreInterno=`${crypto.randomUUID()}.${extension}`
+      const storagePath=`${productoMovilDocumentalId}/dni/${doc.carpeta}/${nombreInterno}`
+      const bytes=Buffer.from(await archivo.arrayBuffer())
+
+      const {error:uploadError}=await admin.storage
+       .from('documentacion-dni')
+       .upload(storagePath,bytes,{
+        contentType:archivo.type,
+        upsert:false,
+        cacheControl:'3600',
+       })
+
+      if(uploadError){
+       avisosDocumentacion.push(`No se pudo subir ${doc.etiqueta}: ${uploadError.message}`)
+       continue
+      }
+
+      const {error:insertDocumentoError}=await admin
+       .from('documentos_producto_movil')
+       .insert({
+        producto_operacion_id:productoMovilDocumentalId,
+        tipo_documento:doc.tipo,
+        storage_path:storagePath,
+        nombre_original:nombreVisible,
+        mime_type:archivo.type,
+        tamano_bytes:archivo.size,
+        created_by:user.id,
+       })
+
+      if(insertDocumentoError){
+       await admin.storage.from('documentacion-dni').remove([storagePath])
+       avisosDocumentacion.push(`No se pudo registrar ${doc.etiqueta}: ${insertDocumentoError.message}`)
+      }else{
+       documentosCargados.push(doc.etiqueta)
+      }
+     }catch(errorDocumento){
+      console.error('Error cargando documentación DNI inicial:',errorDocumento)
+      avisosDocumentacion.push(
+       `No se pudo cargar ${doc.etiqueta}`
+      )
+     }
+    }
+   }
 
    const mensajeSimple=esVentaMultiproducto
     ? 'Venta multiproducto guardada correctamente.'
@@ -156,7 +249,25 @@ export default async function VentasPage(){
    const mensajeGuardado=cargaItecSolicitada
     ? (esFull?'Venta guardada por ITEC. BAF registrado con estado CARGADO y OT disponible para el circuito de Conexión Full.':'Venta guardada por ITEC. BAF registrado directamente con estado CARGADO.')
     : (esFull?(productoBafId?'Venta guardada. Conexión Full detectada: la gestión móvil quedará pendiente hasta contar con OT.':'Venta guardada. Conexión Full con BAF existente: referencia COMBO.'):mensajeSimple)
-   return{ok:true,mensaje:mensajeGuardado,idOperacion}
+   const detallesDocumentacion:string[]=[]
+
+   if(documentosCargados.length){
+    detallesDocumentacion.push(
+     `Documentación DNI: ${documentosCargados.join(' y ')} ${documentosCargados.length===1?'cargado':'cargados'}.`
+    )
+   }
+
+   if(avisosDocumentacion.length){
+    detallesDocumentacion.push(
+     `ADVERTENCIA: ${avisosDocumentacion.join(' · ')}. Puede completar la documentación desde Gestión de Ventas.`
+    )
+   }
+
+   const mensajeFinal=detallesDocumentacion.length
+    ? `${mensajeGuardado} ${detallesDocumentacion.join(' ')}`
+    : mensajeGuardado
+
+   return{ok:true,mensaje:mensajeFinal,idOperacion}
   }catch(error){console.error(error);if(operacionCreada)await admin.from('operaciones').delete().eq('id_operacion',idOperacion);else if(serviciosCreados.length)await admin.from('cliente_servicios').delete().in('id',serviciosCreados);return{ok:false,mensaje:error instanceof Error?error.message:'No se pudo guardar la venta.'}}
  }
  return <FormularioVentas nombreUsuario={nombreUsuario} vendedor={vendedor} rol={profile.rol} puedeGestionarVentas={profile.puede_gestionar_ventas===true} origenes={(origenes??[]).map(x=>x.nombre)} zonas={(zonas??[]).map(x=>x.nombre)} tiposDomicilio={(tiposDomicilio??[]).map(x=>x.nombre)} productos={(productos??[]).map(p=>({...p,precio_lista:Number(p.precio_lista??0),descuento_normal:p.descuento_normal==null?null:Number(p.descuento_normal),precio_cliente:p.precio_cliente==null?null:Number(p.precio_cliente)}))} guardarVenta={guardarVenta}/>

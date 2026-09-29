@@ -68,6 +68,7 @@ export default function GestionLogisticaChip({
   estadoLogistico,
   idEnvio,
   legajoEnviado,
+  fechaLegajoEnviado,
   esBboo,
   puedeEditar,
 }: {
@@ -77,6 +78,7 @@ export default function GestionLogisticaChip({
   estadoLogistico?: string | null
   idEnvio: string | null
   legajoEnviado: boolean
+  fechaLegajoEnviado?: string | null
   esBboo: boolean
   puedeEditar: boolean
 }) {
@@ -192,12 +194,19 @@ export default function GestionLogisticaChip({
             value="SI"
             checked={legajo}
             onChange={(e) => setLegajo(e.target.checked)}
-            disabled={!esBboo || !puedeEditar}
+            disabled={!esBboo || !puedeEditar || legajoEnviado}
             className="h-5 w-5 accent-red-600"
           />
 
           <span className="text-sm font-semibold text-gray-700">SI</span>
         </label>
+
+        {legajoEnviado && fechaLegajoEnviado && (
+          <p className="mt-1 text-xs font-medium text-green-700">
+            Enviado el{' '}
+            {new Date(fechaLegajoEnviado).toLocaleString('es-AR')}
+          </p>
+        )}
 
         {!esBboo && (
           <p className="mt-1 text-xs text-gray-500">

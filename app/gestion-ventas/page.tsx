@@ -541,6 +541,38 @@ export default async function GestionVentasPage({
   const productosNuevos = productosNuevosResultado.data ?? []
   const idsProductosNuevos = productosNuevos.map((p: any) => p.id)
 
+  // Documentación DNI vigente asociada a productos móviles.
+  // DNI OK = PDF completo, o Frente + Dorso.
+  const { data: documentosDniResultado, error: errorDocumentosDni } =
+    idsProductosNuevos.length > 0
+      ? await admin
+          .from('documentos_producto_movil')
+          .select('producto_operacion_id,tipo_documento')
+          .in('producto_operacion_id', idsProductosNuevos)
+          .is('eliminado_at', null)
+      : { data: [], error: null }
+
+  if (errorDocumentosDni) {
+    throw new Error(
+      `No se pudo cargar el estado de documentación DNI: ${errorDocumentosDni.message}`
+    )
+  }
+
+  const tiposDniPorProducto = new Map<number, Set<string>>()
+  for (const documento of documentosDniResultado ?? []) {
+    const productoId = Number(documento.producto_operacion_id)
+    const tipos = tiposDniPorProducto.get(productoId) ?? new Set<string>()
+    tipos.add(String(documento.tipo_documento ?? '').toUpperCase())
+    tiposDniPorProducto.set(productoId, tipos)
+  }
+
+  const estadoDniProducto = (productoId: number) => {
+    const tipos = tiposDniPorProducto.get(Number(productoId)) ?? new Set<string>()
+    const completo = tipos.has('DNI_COMPLETO')
+    const frenteYDorso = tipos.has('DNI_FRENTE') && tipos.has('DNI_DORSO')
+    return completo || frenteYDorso ? 'DNI OK' : 'DNI INCOMPLETO'
+  }
+
   const [detalleBafNuevoResultado, detalleMovilNuevoResultado, gestionBafNuevaResultado, gestionMovilNuevaResultado] = await Promise.all([
     idsProductosNuevos.length > 0
       ? admin.from('operacion_producto_baf').select('*').in('producto_operacion_id', idsProductosNuevos)
@@ -739,7 +771,15 @@ export default async function GestionVentasPage({
     const habilitacion =
       habilitacionesMoviles.get(producto.id) ?? null
 
-    const completo = { ...producto, detalle, gestion, habilitacion }
+    const completo = {
+      ...producto,
+      detalle,
+      gestion,
+      habilitacion,
+      estado_dni: ['PORTA', 'LINEA_NUEVA'].includes(String(producto.tipo_producto))
+        ? estadoDniProducto(Number(producto.id))
+        : '',
+    }
     const lista = productosPorOperacion.get(producto.operacion_id) ?? []
     lista.push(completo)
     productosPorOperacion.set(producto.operacion_id, lista)
@@ -1106,6 +1146,8 @@ export default async function GestionVentasPage({
           return operacion.observaciones === '-'
             ? ''
             : String(operacion.observaciones ?? '')
+        case 'documentacion_dni':
+          return ''
         default:
           return ''
       }
@@ -1147,6 +1189,17 @@ export default async function GestionVentasPage({
         return String(gestionPorta?.sim ?? '').trim()
       case 'numero_seguimiento':
         return String(gestionPorta?.numero_seguimiento ?? '').trim()
+      case 'documentacion_dni': {
+        const moviles = Array.isArray(operacion.productos_nuevos)
+          ? operacion.productos_nuevos.filter((p: any) =>
+              ['PORTA', 'LINEA_NUEVA'].includes(String(p.tipo_producto))
+            )
+          : []
+        if (moviles.length === 0) return ''
+        return moviles.some((p: any) => p.estado_dni === 'DNI OK')
+          ? 'DNI OK'
+          : 'DNI INCOMPLETO'
+      }
       default:
         return ''
     }

@@ -5,6 +5,7 @@ import { createClient } from '../../../utils/supabase/server'
 import { createAdminClient } from '../../../utils/supabase/admin'
 import AppHeader from '../../../components/AppHeader'
 import GestionBloqueoControls from '../../../components/GestionBloqueoControls'
+import DocumentacionDni from '../../../components/DocumentacionDni'
 import CorreccionesVentaPanel from "../../../components/CorreccionesVentaPanel"
 
 type Params = Promise<{
@@ -694,6 +695,15 @@ export default async function DetalleVentaPage({
                           </>
                         )}
                       </div>
+
+                      {!esBafNuevo && (
+                        <div className="mt-4">
+                          <DocumentacionDni
+                            productoOperacionId={producto.id}
+                            puedeSubir={false}
+                          />
+                        </div>
+                      )}
 
                       {bloqueadoMovil && (
                         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
