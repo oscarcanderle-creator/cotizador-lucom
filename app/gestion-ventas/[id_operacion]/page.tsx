@@ -417,7 +417,6 @@ async function guardarGestionProducto(
   if (esBaf) {
     Object.assign(body, {
       estado_baf_id: numero('estado_baf_id'),
-      prospector: texto('prospector'),
       cia_celular: texto('cia_celular'),
       sds: texto('sds'),
       orden_trabajo: texto('orden_trabajo'),
@@ -1228,7 +1227,6 @@ export default async function DetalleVentaPage({
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Estado BAF</label><select name="estado_baf_id" defaultValue={gestion?.estado_baf_id ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin estado</option>{(estadosBaf ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">CIA Celular</label><select name="cia_celular" defaultValue={gestion?.cia_celular ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar compañía</option><option>CLARO</option><option>PERSONAL</option><option>MOVISTAR</option><option>TUENTI</option></select></div>
-                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Prospector</label><input name="prospector" defaultValue={gestion?.prospector ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><GestionInputValidado name="sds" tipo="SDS" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Orden Trabajo</label><GestionInputValidado name="orden_trabajo" tipo="OT" defaultValue={gestion?.orden_trabajo ?? ''} placeholder="8 dígitos" className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /><p className="mt-1 text-xs text-gray-500">En Conexión Full con BAF nuevo, esta OT habilita automáticamente PORTA/LN.</p></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Observaciones</label><input name="linea_fija" defaultValue={gestion?.linea_fija ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
@@ -1237,6 +1235,26 @@ export default async function DetalleVentaPage({
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Instalación</label><input type="date" name="fecha_instalacion_fecha" defaultValue={partesFechaInstalacion(gestion?.fecha_instalacion).fecha} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Turno</label><select name="fecha_instalacion_turno" defaultValue={partesFechaInstalacion(gestion?.fecha_instalacion).turno} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar turno</option><option value="Turno Mañana">Turno Mañana</option><option value="Turno Tarde">Turno Tarde</option></select></div>
                               <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Motivo Estado</label><textarea name="motivo_estado" defaultValue={gestion?.motivo_estado ?? ''} rows={3} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div className="sm:col-span-2 mt-2 border-t border-gray-200 pt-4">
+                                <div className="mb-3">
+                                  <div className="text-sm font-semibold text-gray-900">Información Claro · Reporte de Fija</div>
+                                  <div className="mt-0.5 text-xs text-gray-500">Datos informados por Claro. Se actualizan desde el Reporte de Fija y no son editables desde Gestión de Ventas.</div>
+                                </div>
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                  <div>
+                                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Estado Claro</label>
+                                    <div className="min-h-10 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">{mostrar(gestion?.estado_claro)}</div>
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Motivo Cierre</label>
+                                    <div className="min-h-10 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">{mostrar(gestion?.motivo_cierre)}</div>
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Cierre</label>
+                                    <div className="min-h-10 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">{fechaSimple(gestion?.fecha_cierre ?? null)}</div>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           ) : (
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
