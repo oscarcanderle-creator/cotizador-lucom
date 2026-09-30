@@ -338,7 +338,9 @@ export async function POST(request: Request) {
     let tipoVisibleProducto = tipoProducto === 'LINEA_NUEVA' ? 'Línea Nueva' : tipoProducto
 
     if (esBafProducto) {
+      const sdsBaf = body.sds == null ? null : String(body.sds).trim().toUpperCase() || null
       const ot = body.orden_trabajo == null ? null : String(body.orden_trabajo).trim() || null
+
       if (ot && !/^\d{8}$/.test(ot)) {
         return NextResponse.json(
           { error: 'La Orden de Trabajo debe contener exactamente 8 dígitos.' },
@@ -346,12 +348,62 @@ export async function POST(request: Request) {
         )
       }
 
+      // SDS y OT identifican de forma única una gestión BAF.
+      // Se excluye el producto actual para permitir guardar sus propios valores.
+      if (sdsBaf) {
+        const { data: duplicadoSds, error: duplicadoSdsError } = await adminClient
+          .from('gestion_producto_baf')
+          .select('producto_operacion_id')
+          .eq('sds', sdsBaf)
+          .neq('producto_operacion_id', productoOperacionId)
+          .limit(1)
+          .maybeSingle()
+
+        if (duplicadoSdsError) {
+          return NextResponse.json(
+            { error: `No se pudo validar la SDS: ${duplicadoSdsError.message}` },
+            { status: 400 }
+          )
+        }
+
+        if (duplicadoSds) {
+          return NextResponse.json(
+            { error: `La SDS ${sdsBaf} ya está registrada en otra venta BAF.` },
+            { status: 409 }
+          )
+        }
+      }
+
+      if (ot) {
+        const { data: duplicadoOt, error: duplicadoOtError } = await adminClient
+          .from('gestion_producto_baf')
+          .select('producto_operacion_id')
+          .eq('orden_trabajo', ot)
+          .neq('producto_operacion_id', productoOperacionId)
+          .limit(1)
+          .maybeSingle()
+
+        if (duplicadoOtError) {
+          return NextResponse.json(
+            { error: `No se pudo validar la Orden de Trabajo: ${duplicadoOtError.message}` },
+            { status: 400 }
+          )
+        }
+
+        if (duplicadoOt) {
+          return NextResponse.json(
+            { error: `La OT ${ot} ya está registrada en otra venta BAF.` },
+            { status: 409 }
+          )
+        }
+      }
+
       payloadGestion = {
         responsable_id: responsableNuevo,
         fecha_gestion: ahora,
         prospector: body.prospector ?? null,
         cia_celular: body.cia_celular ?? null,
-        sds: body.sds ?? null,
+        sds: sdsBaf,
         orden_trabajo: ot,
         linea_fija: body.linea_fija ?? null,
         fecha_instalacion: body.fecha_instalacion ?? null,
@@ -673,9 +725,39 @@ export async function POST(request: Request) {
 
     const posteriorProducto = resultadoGuardar.data
     const guardarError = resultadoGuardar.error
-    if (guardarError || !posteriorProducto) {
+
+    if (guardarError) {
+      // Los índices UNIQUE de PostgreSQL son la protección definitiva ante
+      // guardados concurrentes que superen la validación previa.
+      if (esBafProducto && guardarError.code === '23505') {
+        const detalleError = `${guardarError.message ?? ''} ${guardarError.details ?? ''}`
+
+        if (detalleError.includes('gestion_producto_baf_sds_unique')) {
+          return NextResponse.json(
+            { error: 'La SDS ingresada ya está registrada en otra venta BAF.' },
+            { status: 409 }
+          )
+        }
+
+        if (detalleError.includes('gestion_producto_baf_ot_unique')) {
+          return NextResponse.json(
+            { error: 'La OT ingresada ya está registrada en otra venta BAF.' },
+            { status: 409 }
+          )
+        }
+
+        return NextResponse.json(
+          { error: 'La SDS o la OT ingresada ya está registrada en otra venta BAF.' },
+          { status: 409 }
+        )
+      }
+
+      return NextResponse.json({ error: guardarError.message }, { status: 400 })
+    }
+
+    if (!posteriorProducto) {
       return NextResponse.json(
-        { error: guardarError?.message || 'No se pudo recuperar la gestión guardada.' },
+        { error: 'No se pudo recuperar la gestión guardada.' },
         { status: 400 }
       )
     }

@@ -455,13 +455,24 @@ async function guardarGestionProducto(
       resultado?.error ||
       `No se pudo guardar la gestión. Código HTTP ${response.status}.`
 
-    const esErrorSim =
-      !esBaf &&
-      /\bSIM\b/i.test(mensaje)
+    let campoError: string | null = null
+
+    if (esBaf) {
+      if (/\bSDS\b/i.test(mensaje)) {
+        campoError = 'sds'
+      } else if (
+        /\bOT\b/i.test(mensaje) ||
+        /Orden de Trabajo/i.test(mensaje)
+      ) {
+        campoError = 'orden_trabajo'
+      }
+    } else if (/\bSIM\b/i.test(mensaje)) {
+      campoError = 'sim'
+    }
 
     return {
       error: mensaje,
-      campo: esErrorSim ? 'sim' : null,
+      campo: campoError,
     }
   }
 
