@@ -685,6 +685,32 @@ export default async function DetalleVentaPage({
                             <Campo label="Tipo domicilio" value={detalle?.tipo_domicilio} />
                             <Campo label="Zona" value={detalle?.zona} />
                             <Campo label="Orden de Trabajo" value={gestion?.orden_trabajo} />
+
+                            <div className="sm:col-span-2 mt-2 border-t border-gray-200 pt-4">
+                              <div className="mb-3">
+                                <div className="text-sm font-semibold text-gray-900">
+                                  Información Claro · Reporte de Fija
+                                </div>
+                                <div className="mt-0.5 text-xs text-gray-500">
+                                  Datos informados por Claro. Se actualizan desde el Reporte de Fija.
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                <Campo
+                                  label="Estado Claro"
+                                  value={gestion?.estado_claro}
+                                />
+                                <Campo
+                                  label="Motivo Cierre"
+                                  value={gestion?.motivo_cierre}
+                                />
+                                <Campo
+                                  label="Fecha Cierre"
+                                  value={fechaSimple(gestion?.fecha_cierre ?? null)}
+                                />
+                              </div>
+                            </div>
                           </>
                         ) : (
                           <>
