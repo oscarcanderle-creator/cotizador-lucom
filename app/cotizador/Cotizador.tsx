@@ -4041,7 +4041,7 @@ async function compartirPropuesta() {
 
             <div className="text-xs sm:text-sm text-gray-700 mt-1">
 
-              ☎️ Incluye Línea Fija c/8000 Minutos libres
+              ☎️ Gratis 8000 minutos, destinos fijos Local y Nacional
 
             </div>
 
