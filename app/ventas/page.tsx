@@ -40,6 +40,7 @@ export default async function VentasPage(){
  if(origenDato.toUpperCase()==='PSR'&&!obs)return{ok:false,mensaje:'Completá OBS con el ID del prospecto de Mis Referidos.'}
   const nuevos=nuevosDesde(fd),existentes=existentesDesde(fd);if(!nuevos.length)return{ok:false,mensaje:'Agregá al menos un servicio nuevo a contratar.'};if(nuevos.filter(x=>x.tipo==='BAF').length>1)return{ok:false,mensaje:'Una venta puede contener como máximo un Internet/BAF nuevo.'}
   const tieneBafNuevo=nuevos.some(x=>x.tipo==='BAF')
+  const habilitaAnadirTv=existentes.some(x=>x.tipo==='BAF'&&x.modalidad==='2PLAY')
   if(cargaItecSolicitada&&!tieneBafNuevo)return{ok:false,mensaje:'La carga ITEC solo puede utilizarse cuando la venta incluye Internet / BAF.'}
   if(cargaItecSolicitada){
    if(!/^[0-9]{8}[A-Z]{3}$/.test(itec.sds))return{ok:false,mensaje:'El SDS de ITEC debe contener exactamente 8 números y 3 letras.'}
@@ -51,7 +52,7 @@ export default async function VentasPage(){
   for(const [i,s] of nuevos.entries()){
    if(!['BAF','PORTA','LINEA_NUEVA'].includes(s.tipo)||!s.productoId)return{ok:false,mensaje:`Servicio nuevo ${i+1} incompleto.`}
    if(s.tipo==='BAF'){
-    if(!s.tipoDomicilio||!s.modalidad||!s.observaciones)return{ok:false,mensaje:'Completá todos los campos obligatorios de Internet / BAF.'}
+    if((!habilitaAnadirTv&&!s.tipoDomicilio)||!s.modalidad||!s.observaciones)return{ok:false,mensaje:'Completá todos los campos obligatorios de Internet / BAF.'}
     if(!['0','1','2'].includes(String(s.decos)))return{ok:false,mensaje:'La cantidad de decos adicionales no es válida.'}
     if(!s.tv&&s.decos!==0)return{ok:false,mensaje:'Si TV está en NO, Decos adicionales debe ser 0.'}
    }
@@ -123,6 +124,13 @@ export default async function VentasPage(){
    let servicioBafExistenteId:number|null=null
    for(const s of existentes){const {data:cs,error}=await admin.from('cliente_servicios').insert({cliente_id:clienteId,domicilio_id:dom.id,tipo_servicio:s.tipo,modalidad:s.modalidad||null,numero_servicio:s.numero||null,origen:'DECLARADO_CLIENTE',estado_verificacion:'DECLARADO',operacion_origen_id:idOperacion,created_by:user.id,updated_by:user.id}).select('id').single();if(error)throw error;serviciosCreados.push(cs.id);if(s.tipo==='BAF'&&!servicioBafExistenteId)servicioBafExistenteId=cs.id}
    const idsProductos=nuevos.map(x=>x.productoId);const {data:catalogo,error:ec}=await admin.from('productos').select('id,producto,origen,plan,precio_lista,descuento_normal,precio_cliente,beneficios').in('id',idsProductos);if(ec)throw ec;const mapa=new Map((catalogo??[]).map(p=>[Number(p.id),p]))
+   const bafNuevo=nuevos.find(x=>x.tipo==='BAF')
+   if(bafNuevo){
+    const productoBafSeleccionado=mapa.get(bafNuevo.productoId)
+    const esClaroTv=String(productoBafSeleccionado?.producto??'').trim().toUpperCase()==='CLARO TV'
+    if(habilitaAnadirTv&&!esClaroTv)throw new Error('Con Internet Claro 2PLAY existente, el único producto Internet habilitado es AÑADIR TV.')
+    if(!habilitaAnadirTv&&esClaroTv)throw new Error('AÑADIR TV requiere un servicio existente Internet Claro con modalidad 2PLAY.')
+   }
    const {data:modemsFwa,error:modemsFwaError}=await admin.from('catalogo_modems_fwa').select('id,nombre,precio,max_cuotas_factura').eq('activo',true).order('orden',{ascending:true}).order('id',{ascending:true}).limit(1);if(modemsFwaError)throw modemsFwaError
    const modemFwa=modemsFwa?.[0]??null
    const precioModemActual=Number(modemFwa?.precio??0)

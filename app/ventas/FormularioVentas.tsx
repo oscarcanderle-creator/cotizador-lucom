@@ -109,6 +109,8 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
     return true
    })
  },[productos])
+ const claroTv=useMemo(()=>productos.filter(p=>p.producto.trim().toUpperCase()==='CLARO TV').slice(0,1),[productos])
+ const habilitaAnadirTv=existentes.some(s=>s.tipo==='BAF'&&s.modalidad==='2PLAY')
  const porta=useMemo(
   ()=>productos.filter(p=>
    p.producto.toUpperCase()==='PORTABILIDAD' &&
@@ -235,7 +237,8 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
   label={s.tipo==='BAF'?'Modalidad':'Tipo Línea'}
   name={`existente_modalidad_${i}`}
   opciones={s.tipo==='BAF'?opts(['2PLAY','3PLAY']):opts(['POS','PRE'])}
-  defaultValue={s.modalidad}
+  value={s.modalidad}
+  onChange={(modalidad)=>setExistentes(a=>a.map(x=>x.id===s.id?{...x,modalidad}:x))}
   required
  />
  {s.tipo==='BAF' ? (
@@ -246,7 +249,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
 </div></div>)}<button type="button" onClick={agregarExistente} className="rounded-xl border border-dashed border-gray-400 px-4 py-2 text-sm font-semibold">+ Agregar servicio existente</button></div></Seccion>
   <Seccion n="04" titulo="Servicios Nuevos a Contratar">
    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4"><BotonProducto activo={ultimoProducto==='BAF'} onClick={()=>{setUltimoProducto('BAF');agregar('BAF')}} disabled={nuevos.some(x=>x.tipo==='BAF')}>+ Internet</BotonProducto><BotonProducto activo={ultimoProducto==='PORTA'} onClick={()=>{setUltimoProducto('PORTA');agregar('PORTA')}}>+ Portabilidad</BotonProducto><BotonProducto activo={ultimoProducto==='LINEA_NUEVA'} onClick={()=>{setUltimoProducto('LINEA_NUEVA');agregar('LINEA_NUEVA')}}>+ Línea Nueva</BotonProducto></div>
-   {rol==='TERRENO'&&nuevos.some(x=>x.tipo==='BAF')&&(
+   {rol==='TERRENO'&&nuevos.some(x=>x.tipo==='BAF')&&!habilitaAnadirTv&&(
     <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-3">
      <div className="flex items-center justify-between gap-4">
       <div>
@@ -262,7 +265,8 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
    )}
    <div className="space-y-3">{nuevos.map((s,i)=>{
     const companiaPorta=companiasPorta[s.id]??''
-    const lista=s.tipo==='BAF'?baf:s.tipo==='PORTA'?(companiaPorta?porta.filter(p=>String(p.origen??'').trim().toUpperCase()===companiaPorta):[]):ln
+    const esAnadirTv=s.tipo==='BAF'&&habilitaAnadirTv
+    const lista=s.tipo==='BAF'?(esAnadirTv?claroTv:baf):s.tipo==='PORTA'?(companiaPorta?porta.filter(p=>String(p.origen??'').trim().toUpperCase()===companiaPorta):[]):ln
     const productoSeleccionadoId=productosSeleccionados[s.id]??''
     const productoSeleccionado=lista.find(p=>String(p.id)===productoSeleccionadoId)
     const esFwa=s.tipo==='LINEA_NUEVA' && productoSeleccionado ? etiquetaPlanMovil(productoSeleccionado)==='FWA 5G 400G' : false
@@ -275,7 +279,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
   if(portas.length===0) setPortaTitularId(null)
   else if(portaTitularId===s.id || portas.length===1) setPortaTitularId(portas[0].id)
  }
-}} className="text-xs text-red-600">Quitar</button></div><input type="hidden" name={`nuevo_tipo_${i}`} value={s.tipo}/>{s.tipo==='BAF'?<><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:tituloProducto(p)}))} required/><Selector label="Tipo domicilio" name={`nuevo_tipo_domicilio_${i}`} opciones={tiposDomicilioInternet} required/><Selector label="Modalidad" name={`nuevo_modalidad_${i}`} opciones={opts(['Masivo','Cuit Standard','Cuit BAFE'])} required/><label className="block">
+}} className="text-xs text-red-600">Quitar</button></div><input type="hidden" name={`nuevo_tipo_${i}`} value={s.tipo}/>{s.tipo==='BAF'?<>{esAnadirTv?<><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5"><Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:'AÑADIR TV'}))} required/><Selector label="Modalidad" name={`nuevo_modalidad_${i}`} opciones={opts(['Masivo','Cuit Standard','Cuit BAFE'])} required/><Campo label="Observaciones" name={`nuevo_observaciones_${i}`} required/></div><input type="hidden" name={`nuevo_tipo_domicilio_${i}`} value=""/><input type="hidden" name={`nuevo_tv_${i}`} value="SI"/><input type="hidden" name={`nuevo_decos_${i}`} value="0"/><input type="hidden" name={`nuevo_zona_${i}`} value=""/></>:<><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Selector label="Plan" name={`nuevo_producto_${i}`} opciones={lista.map(p=>({value:String(p.id),label:tituloProducto(p)}))} required/><Selector label="Tipo domicilio" name={`nuevo_tipo_domicilio_${i}`} opciones={tiposDomicilioInternet} required/><Selector label="Modalidad" name={`nuevo_modalidad_${i}`} opciones={opts(['Masivo','Cuit Standard','Cuit BAFE'])} required/><label className="block">
  <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">TV *</span>
  <select className={inputClass} name={`nuevo_tv_${i}`} required value={s.tv}
   onChange={(e)=>{const tv=e.target.value as 'NO'|'SI';setNuevos(a=>a.map(x=>x.id===s.id?{...x,tv,decos:tv==='NO'?'0':x.decos}:x))}}>
@@ -290,8 +294,8 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
   <option value="0">0</option><option value="1">1</option><option value="2">2</option>
  </select>
  {s.tv==='NO' && <input type="hidden" name={`nuevo_decos_${i}`} value="0"/>}
-</label><Selector label="Zona" name={`nuevo_zona_${i}`} opciones={opts(zonas)}/><div className="sm:col-span-2"><Campo label="Horario contacto / observaciones" name={`nuevo_observaciones_${i}`} required/></div></div>
-     {rol==='TERRENO'&&cargaItec&&(
+</label><Selector label="Zona" name={`nuevo_zona_${i}`} opciones={opts(zonas)}/><div className="sm:col-span-2"><Campo label="Horario contacto / observaciones" name={`nuevo_observaciones_${i}`} required/></div></div></>}
+     {rol==='TERRENO'&&cargaItec&&!esAnadirTv&&(
       <div className="mt-3 rounded-xl border border-blue-200 bg-white p-3">
        <div className="mb-3">
         <div className="text-sm font-bold text-blue-900">Datos de carga ITEC</div>
