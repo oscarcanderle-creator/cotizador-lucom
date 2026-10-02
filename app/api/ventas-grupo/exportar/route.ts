@@ -110,7 +110,7 @@ export async function POST(request: Request) {
 
     const { data: ops, error: eOps } = await admin
       .from('operaciones')
-      .select('id_operacion,tipo,fecha_hora,vendedor,origen_dato,cliente_id,grupo_operacion')
+      .select('id_operacion,tipo,fecha_hora,vendedor,origen_dato,cliente_id,domicilio_id,grupo_operacion')
       .in('tipo', ['BAF', 'PORTA'])
       .ilike('vendedor', `${sigla} %`)
       .order('fecha_hora', { ascending: false })
@@ -119,6 +119,7 @@ export async function POST(request: Request) {
     const operaciones = (ops ?? []).filter((o: any) => extraerSigla(o.vendedor) === sigla)
     const ids = operaciones.map((o: any) => o.id_operacion)
     const clienteIds = Array.from(new Set(operaciones.map((o: any) => o.cliente_id).filter(Boolean)))
+    const domicilioIds = Array.from(new Set(operaciones.map((o: any) => o.domicilio_id).filter(Boolean)))
 
     // Reporte de Fija de la arquitectura multiproducto.
     // Conservamos gestion_baf legacy para no afectar ventas históricas.
@@ -151,8 +152,9 @@ export async function POST(request: Request) {
       if (operacionId) reporteFijaPorOperacion.set(operacionId, g)
     }
 
-    const [rCli, rBaf, rPorta, rGBaf, rGPorta, rPerfiles, rMedios] = await Promise.all([
+    const [rCli, rDom, rBaf, rPorta, rGBaf, rGPorta, rPerfiles, rMedios] = await Promise.all([
       clienteIds.length ? admin.from('clientes').select('id,dni,tipo_documento,nombre,apellido,telefono').in('id', clienteIds) : Promise.resolve({ data: [], error: null }),
+      domicilioIds.length ? admin.from('domicilios').select('id,calle_nro,piso,dpto,entre_calles,barrio,localidad,datos_extras').in('id', domicilioIds) : Promise.resolve({ data: [], error: null }),
       ids.length ? admin.from('operaciones_baf').select('operacion_id,plan,modalidad_plan').in('operacion_id', ids) : Promise.resolve({ data: [], error: null }),
       ids.length ? admin.from('operaciones_porta').select('operacion_id,nim,es_linea_nueva,gigas_acordados,compania_actual,numero_linea,tipo_sim').in('operacion_id', ids) : Promise.resolve({ data: [], error: null }),
       ids.length ? admin.from('gestion_baf').select('operacion_id,responsable_id,estado_baf_id,sds,fecha_instalacion,orden_trabajo').in('operacion_id', ids) : Promise.resolve({ data: [], error: null }),
@@ -160,7 +162,7 @@ export async function POST(request: Request) {
       admin.from('profiles').select('id,nombre,vendedor'),
       admin.from('medios_despacho_chip').select('id,nombre'),
     ])
-    for (const r of [rCli, rBaf, rPorta, rGBaf, rGPorta, rPerfiles, rMedios]) if ((r as any).error) throw (r as any).error
+    for (const r of [rCli, rDom, rBaf, rPorta, rGBaf, rGPorta, rPerfiles, rMedios]) if ((r as any).error) throw (r as any).error
 
     const idsEB = Array.from(new Set((rGBaf.data ?? []).map((g: any) => g.estado_baf_id).filter(Boolean)))
     const idsEP = Array.from(new Set((rGPorta.data ?? []).map((g: any) => g.estado_porta_id).filter(Boolean)))
@@ -173,7 +175,7 @@ export async function POST(request: Request) {
     for (const r of [rEB, rEP, rEO]) if ((r as any).error) throw (r as any).error
 
     const map = (arr: any[], key = 'id') => new Map(arr.map((x: any) => [x[key], x]))
-    const cli = map(rCli.data ?? []), baf = map(rBaf.data ?? [], 'operacion_id'), porta = map(rPorta.data ?? [], 'operacion_id')
+    const cli = map(rCli.data ?? []), dom = map(rDom.data ?? []), baf = map(rBaf.data ?? [], 'operacion_id'), porta = map(rPorta.data ?? [], 'operacion_id')
     const gb = map(rGBaf.data ?? [], 'operacion_id'), gp = map(rGPorta.data ?? [], 'operacion_id'), perfiles = map(rPerfiles.data ?? [])
     const medios = map(rMedios.data ?? []), eb = map(rEB.data ?? []), ep = map(rEP.data ?? []), eo = map(rEO.data ?? [])
     const nombrePerfil = (id: any) => { const p: any = perfiles.get(id); return p?.vendedor || p?.nombre || '-' }
@@ -183,6 +185,7 @@ export async function POST(request: Request) {
       return {
         ...o,
         cliente: cli.get(o.cliente_id) || null,
+        domicilio: dom.get(o.domicilio_id) || null,
         operaciones_baf: baf.get(o.id_operacion) || null,
         operaciones_porta: porta.get(o.id_operacion) || null,
         gestion_baf: gB ? { ...gB, estado_nombre: (eb.get(gB.estado_baf_id) as any)?.nombre || null } : null,
@@ -210,6 +213,19 @@ export async function POST(request: Request) {
         case 'cliente': return nombreCliente(o.cliente)
         case 'dni': return o.cliente?.dni || '-'
         case 'telefono': return o.cliente?.telefono || '-'
+        case 'domicilio': {
+          const d = o.domicilio
+          if (!d) return '-'
+          return [
+            d.calle_nro,
+            d.piso ? `Piso ${d.piso}` : '',
+            d.dpto ? `Dpto ${d.dpto}` : '',
+            d.entre_calles ? `Entre calles: ${d.entre_calles}` : '',
+            d.barrio ? `Barrio: ${d.barrio}` : '',
+          ].filter(Boolean).join(' | ') || '-'
+        }
+        case 'localidad': return o.domicilio?.localidad || '-'
+        case 'observaciones': return o.domicilio?.datos_extras || '-'
         case 'numero_linea': return o.tipo === 'PORTA' ? p?.numero_linea || '-' : '-'
         case 'compania_actual': return o.tipo === 'PORTA' ? p?.compania_actual || '-' : '-'
         case 'tipo_sim': return o.tipo === 'PORTA' ? (p?.tipo_sim === 'ESIM' ? 'eSIM' : p?.tipo_sim || '-') : '-'
