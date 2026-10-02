@@ -2,7 +2,7 @@
 
 import { ChangeEvent, useCallback, useEffect, useState } from 'react'
 
-type TipoDocumento = 'DNI_FRENTE' | 'DNI_DORSO' | 'DNI_COMPLETO'
+type TipoDocumento = 'DNI_FRENTE' | 'DNI_DORSO' | 'DNI_COMPLETO' | 'CHIP_OK'
 
 type Documento = {
   id: number
@@ -17,6 +17,7 @@ type Documento = {
 function etiquetaTipo(tipo: TipoDocumento) {
   if (tipo === 'DNI_FRENTE') return 'Frente'
   if (tipo === 'DNI_DORSO') return 'Dorso'
+  if (tipo === 'CHIP_OK') return 'CHIP-OK'
   return 'DNI completo'
 }
 
@@ -53,6 +54,7 @@ export default function DocumentacionDni({
   const [subiendo, setSubiendo] = useState<TipoDocumento | null>(null)
   const [abriendo, setAbriendo] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [tipoProducto, setTipoProducto] = useState('')
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -71,6 +73,7 @@ export default function DocumentacionDni({
       }
 
       setDocumentos(Array.isArray(data?.documentos) ? data.documentos : [])
+      setTipoProducto(String(data?.tipo_producto ?? '').trim().toUpperCase())
     } catch (e) {
       setError(
         e instanceof Error
@@ -259,6 +262,19 @@ export default function DocumentacionDni({
               className="hidden"
             />
           </label>
+
+          {tipoProducto === 'PORTA' && (
+            <label className="cursor-pointer rounded-lg bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-900">
+              {subiendo === 'CHIP_OK' ? 'Subiendo...' : '+ CHIP-OK'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                disabled={subiendo !== null}
+                onChange={(e) => void subir('CHIP_OK', e)}
+                className="hidden"
+              />
+            </label>
+          )}
         </div>
       )}
 

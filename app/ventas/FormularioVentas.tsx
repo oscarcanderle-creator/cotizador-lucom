@@ -360,6 +360,33 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
      <Selector label="Tipo SIM" name={`nuevo_sim_${i}`} opciones={opts(['ESIM','SIMCARD'])} required/>
 
     </div>
+
+    <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="min-w-0 sm:w-48">
+          <div className="text-sm font-bold text-blue-900">CHIP-OK</div>
+          <div className="mt-0.5 text-[11px] leading-4 text-blue-700">
+            Opcional. Foto del CHIP utilizado para la línea.
+          </div>
+        </div>
+
+        <label className="block flex-1 rounded-lg border border-blue-200 bg-white px-2.5 py-2">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+            CHIP-OK
+          </span>
+          <input
+            type="file"
+            name={`chip_ok_${i}`}
+            accept="image/jpeg,image/png"
+            className="mt-1 block w-full text-xs text-gray-600 file:mr-2 file:rounded-md file:border-0 file:bg-red-50 file:px-2.5 file:py-1.5 file:text-xs file:font-semibold file:text-red-700 hover:file:bg-red-100"
+          />
+          <span className="mt-1 block text-[10px] text-gray-500">
+            JPG o PNG · Máx. 10 MB
+          </span>
+        </label>
+      </div>
+    </div>
+
     {esFwa&&(
      <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
       <div className="mb-3">

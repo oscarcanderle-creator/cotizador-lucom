@@ -137,6 +137,7 @@ export default async function VentasPage(){
    const maxCuotasFactura=Number(modemFwa?.max_cuotas_factura??24)
    let productoBafId:number|null=null
    let productoMovilDocumentalId:number|null=null
+   const productosMovilesCreados:{indice:number;productoOperacionId:number;tipo:string}[]=[]
    for(const [i,s] of nuevos.entries()){const p=mapa.get(s.productoId);if(!p)throw new Error(`El producto seleccionado en el servicio ${i+1} no existe o ya no está disponible.`);const {data:op,error:eop}=await admin.from('operacion_productos').insert({operacion_id:idOperacion,producto_id:p.id,tipo_producto:s.tipo,responsable_id:null,orden:i+1,activo:true,producto_snapshot:p.producto,origen_snapshot:p.origen,plan_snapshot:p.plan,precio_lista_snapshot:p.precio_lista,descuento_snapshot:p.descuento_normal,precio_cliente_snapshot:p.precio_cliente,beneficios_snapshot:p.beneficios,created_by:user.id,updated_by:user.id}).select('id').single();if(eop)throw eop
     if(s.tipo==='BAF'){productoBafId=op.id;let tipoDomId:null|number=null,zonaId:null|number=null;if(s.tipoDomicilio){const {data:x}=await admin.from('catalogo_tipos_domicilio').select('id').eq('nombre',s.tipoDomicilio).maybeSingle();tipoDomId=x?.id??null}if(s.zona){const {data:x}=await admin.from('catalogo_zonas').select('id').eq('nombre',s.zona).maybeSingle();zonaId=x?.id??null}const {error}=await admin.from('operacion_producto_baf').insert({producto_operacion_id:op.id,tipo_domicilio_id:tipoDomId,zona_id:zonaId,modalidad_plan:s.modalidad||null,tv:s.tv,cantidad_decos:s.decos,horario_contacto:s.observaciones||null});if(error)throw error;const ahoraGestion=new Date().toISOString();if(cargaItecSolicitada){const {error:eg}=await admin.from('gestion_producto_baf').insert({producto_operacion_id:op.id,responsable_id:user.id,estado_baf_id:estadoBafCargadoId,cia_celular:itec.ciaCelular,sds:itec.sds,orden_trabajo:itec.ot,fecha_instalacion:`${itec.fechaInstalacion} - ${itec.turno}`,fecha_gestion:ahoraGestion,updated_at:ahoraGestion,updated_by:user.id});if(eg)throw eg}else{const {error:eg}=await admin.from('gestion_producto_baf').insert({producto_operacion_id:op.id,responsable_id:null});if(eg)throw eg}}
     else{
@@ -151,6 +152,12 @@ export default async function VentasPage(){
       if(s.pagoModem==='TARJETA'&&Number(s.cuotasModem)>60)throw new Error('La cantidad de cuotas con tarjeta no es válida.')
      }
      const {error}=await admin.from('operacion_producto_movil').insert({producto_operacion_id:op.id,numero_linea:s.tipo==='PORTA'?s.nim:null,nim:s.tipo==='PORTA'?s.nim:null,compania_actual:s.tipo==='PORTA'?s.compania:null,modalidad_actual:s.tipo==='PORTA'?s.modalidadActual:null,tipo_sim:s.sim||null,linea_titular:s.tipo==='PORTA'?s.lineaTitular:false,es_fwa:esFwa,forma_pago_modem:esFwa?s.pagoModem:null,cuotas_modem:esFwa?s.cuotasModem:null,precio_modem_snapshot:esFwa?precioModemActual:null});if(error)throw error;const {error:eg}=await admin.from('gestion_producto_movil').insert({producto_operacion_id:op.id,responsable_id:null});if(eg)throw eg
+
+     productosMovilesCreados.push({
+       indice:i,
+       productoOperacionId:Number(op.id),
+       tipo:s.tipo,
+     })
 
      // Una única documentación DNI por titular/operación.
      // PORTA titular tiene prioridad; si sólo hay LN se usa el primer móvil.
@@ -246,6 +253,82 @@ export default async function VentasPage(){
       )
      }
     }
+   }
+
+   // CHIP-OK pertenece a cada producto móvil individual.
+   // Se relaciona directamente con operacion_productos.id.
+   for(const movil of productosMovilesCreados){
+     const archivoChip=fd.get(`chip_ok_${movil.indice}`)
+
+     if(!(archivoChip instanceof File) || archivoChip.size===0)continue
+
+     const etiquetaChip=`CHIP-OK ${movil.tipo==='PORTA'?'Portabilidad':'Línea Nueva'}`
+
+     try{
+       if(archivoChip.size>10*1024*1024){
+         avisosDocumentacion.push(`${etiquetaChip} supera los 10 MB`)
+         continue
+       }
+
+       const extensionesChip:Record<string,string>={
+         'image/jpeg':'jpg',
+         'image/png':'png',
+       }
+
+       const extensionChip=extensionesChip[archivoChip.type]
+
+       if(!extensionChip){
+         avisosDocumentacion.push(`${etiquetaChip} tiene un formato no permitido`)
+         continue
+       }
+
+       const nombreVisibleChip=`CHIP-OK-${movil.productoOperacionId}.${extensionChip}`
+       const nombreInternoChip=`${crypto.randomUUID()}.${extensionChip}`
+       const storagePathChip=`${movil.productoOperacionId}/chip-ok/${nombreInternoChip}`
+       const bytesChip=Buffer.from(await archivoChip.arrayBuffer())
+
+       const {error:uploadChipError}=await admin.storage
+         .from('documentacion-dni')
+         .upload(storagePathChip,bytesChip,{
+           contentType:archivoChip.type,
+           upsert:false,
+           cacheControl:'3600',
+         })
+
+       if(uploadChipError){
+         avisosDocumentacion.push(
+           `No se pudo subir ${etiquetaChip}: ${uploadChipError.message}`
+         )
+         continue
+       }
+
+       const {error:insertChipError}=await admin
+         .from('documentos_producto_movil')
+         .insert({
+           producto_operacion_id:movil.productoOperacionId,
+           tipo_documento:'CHIP_OK',
+           storage_path:storagePathChip,
+           nombre_original:nombreVisibleChip,
+           mime_type:archivoChip.type,
+           tamano_bytes:archivoChip.size,
+           created_by:user.id,
+         })
+
+       if(insertChipError){
+         await admin.storage
+           .from('documentacion-dni')
+           .remove([storagePathChip])
+
+         avisosDocumentacion.push(
+           `No se pudo registrar ${etiquetaChip}: ${insertChipError.message}`
+         )
+       }else{
+         documentosCargados.push(etiquetaChip)
+       }
+     }catch(errorChip){
+       console.error('Error cargando CHIP-OK inicial:',errorChip)
+       avisosDocumentacion.push(`No se pudo cargar ${etiquetaChip}`)
+     }
    }
 
    const mensajeSimple=esVentaMultiproducto

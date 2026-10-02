@@ -11,6 +11,7 @@ const TIPOS_DOCUMENTO = [
   'DNI_FRENTE',
   'DNI_DORSO',
   'DNI_COMPLETO',
+  'CHIP_OK',
 ] as const
 
 const MIME_PERMITIDOS = new Set([
@@ -166,7 +167,7 @@ export async function GET(request: Request) {
 
   if ('error' in contexto) return contexto.error
 
-  const { admin } = contexto
+  const { admin, producto } = contexto
 
   const { data, error } = await admin
     .from('documentos_producto_movil')
@@ -187,6 +188,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     ok: true,
     documentos: data ?? [],
+    tipo_producto: String(producto.tipo_producto ?? '').trim().toUpperCase(),
   })
 }
 
@@ -252,11 +254,11 @@ export async function POST(request: Request) {
   }
 
   if (
-    ['DNI_FRENTE', 'DNI_DORSO'].includes(tipoDocumento) &&
+    ['DNI_FRENTE', 'DNI_DORSO', 'CHIP_OK'].includes(tipoDocumento) &&
     archivo.type === 'application/pdf'
   ) {
     return NextResponse.json(
-      { error: 'Frente y Dorso deben cargarse como imagen.' },
+      { error: 'Frente, Dorso y CHIP-OK deben cargarse como imagen.' },
       { status: 400 }
     )
   }
@@ -266,6 +268,9 @@ export async function POST(request: Request) {
   if ('error' in contexto) return contexto.error
 
   const { admin, user, producto } = contexto
+
+  // CHIP-OK está habilitado para PORTA y LINEA_NUEVA.
+  // contextoProducto() ya valida que se trate de un producto móvil.
 
   // El nombre del archivo se genera desde el DNI registrado en la Venta.
   // El navegador no decide el número de documento.
@@ -311,7 +316,9 @@ export async function POST(request: Request) {
       ? 'F'
       : tipoDocumento === 'DNI_DORSO'
         ? 'D'
-        : ''
+        : tipoDocumento === 'CHIP_OK'
+          ? '-CHIP-OK'
+          : ''
 
   const nombreStorage = `${dni}${sufijo}.${extension}`
 
@@ -320,14 +327,18 @@ export async function POST(request: Request) {
       ? 'frente'
       : tipoDocumento === 'DNI_DORSO'
         ? 'dorso'
-        : 'completo'
+        : tipoDocumento === 'CHIP_OK'
+          ? 'chip-ok'
+          : 'completo'
 
   // Storage utiliza un nombre interno opaco para evitar colisiones
-  // y permitir reemplazos seguros. El nombre visible sigue siendo DNI+F/D.
+  // y permitir reemplazos seguros.
   const nombreInterno = `${crypto.randomUUID()}.${extension}`
 
   const storagePath =
-    `${productoOperacionId}/dni/${carpeta}/${nombreInterno}`
+    tipoDocumento === 'CHIP_OK'
+      ? `${productoOperacionId}/chip-ok/${nombreInterno}`
+      : `${productoOperacionId}/dni/${carpeta}/${nombreInterno}`
 
   // Documento vigente anterior del mismo tipo, si existe.
   const { data: documentosAnteriores, error: anterioresError } = await admin
