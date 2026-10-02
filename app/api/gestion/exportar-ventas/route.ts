@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs'
 import { createClient } from '../../../../utils/supabase/server'
 import { createAdminClient } from '../../../../utils/supabase/admin'
 
-const CAMPOS_FECHA = new Set(['fecha_ingreso','fecha_carga_stl','fecha_porta','fecha_instalacion'])
+const CAMPOS_FECHA = new Set(['fecha_ingreso','fecha_carga_stl','fecha_porta','fecha_instalacion','fecha_cierre'])
 const CAMPOS_NUMERO = new Set<string>()
 const PRODUCTOS_VALIDOS = new Set(['BAF','PORTA','LN'])
 const BASES_VALIDAS = new Set(['fecha_ingreso','fecha_carga_stl','fecha_porta'])
@@ -53,6 +53,27 @@ export async function POST(request: Request){
     const {data:ops,error:eOps}=await admin.from('operaciones').select('id_operacion,tipo,fecha_hora,vendedor,origen_dato,cliente_id,grupo_operacion').in('tipo',['BAF','PORTA']).order('fecha_hora',{ascending:false})
     if(eOps) throw eOps
     const operaciones=ops??[]; const ids=operaciones.map((o:any)=>o.id_operacion); const clienteIds=Array.from(new Set(operaciones.map((o:any)=>o.cliente_id).filter(Boolean)))
+
+    // Reporte de Fija de la arquitectura multiproducto.
+    // Conservamos gestion_baf legacy para no afectar ventas históricas.
+    const {data:productosBafMultiproducto,error:errorProductosBafMultiproducto}=ids.length
+      ? await admin.from('operacion_productos').select('id,operacion_id').in('operacion_id',ids).eq('tipo_producto','BAF').eq('activo',true)
+      : {data:[],error:null}
+    if(errorProductosBafMultiproducto) throw errorProductosBafMultiproducto
+
+    const idsProductosBaf=(productosBafMultiproducto??[]).map((p:any)=>Number(p.id))
+    const {data:gestionesBafMultiproducto,error:errorGestionesBafMultiproducto}=idsProductosBaf.length
+      ? await admin.from('gestion_producto_baf').select('producto_operacion_id,estado_claro,motivo_cierre,fecha_cierre').in('producto_operacion_id',idsProductosBaf)
+      : {data:[],error:null}
+    if(errorGestionesBafMultiproducto) throw errorGestionesBafMultiproducto
+
+    const operacionPorProductoBaf=new Map((productosBafMultiproducto??[]).map((p:any)=>[Number(p.id),String(p.operacion_id)]))
+    const reporteFijaPorOperacion=new Map<string,any>()
+    for(const g of gestionesBafMultiproducto??[]){
+      const operacionId=operacionPorProductoBaf.get(Number(g.producto_operacion_id))
+      if(operacionId) reporteFijaPorOperacion.set(operacionId,g)
+    }
+
     const [rCli,rBaf,rPorta,rGBaf,rGPorta,rPerfiles,rMedios]=await Promise.all([
       clienteIds.length?admin.from('clientes').select('id,dni,tipo_documento,nombre,apellido,telefono').in('id',clienteIds):Promise.resolve({data:[],error:null}),
       ids.length?admin.from('operaciones_baf').select('operacion_id,plan,modalidad_plan').in('operacion_id',ids):Promise.resolve({data:[],error:null}),
@@ -72,7 +93,7 @@ export async function POST(request: Request){
     const nombrePerfil=(id:any)=>{const p:any=perfiles.get(id); return p?.vendedor||p?.nombre||'-'}
     const completas=operaciones.map((o:any)=>{ const gB:any=gb.get(o.id_operacion), gP:any=gp.get(o.id_operacion); return {...o,cliente:cli.get(o.cliente_id)||null,operaciones_baf:baf.get(o.id_operacion)||null,operaciones_porta:porta.get(o.id_operacion)||null,gestion_baf:gB?{...gB,estado_nombre:(eb.get(gB.estado_baf_id) as any)?.nombre||null}:null,gestion_porta:gP?{...gP,estado_vendedor_nombre:(ep.get(gP.estado_porta_id) as any)?.nombre||null,estado_bboo_nombre:(eo.get(gP.estado_bboo_id) as any)?.nombre||null}:null} })
     const responsable=(o:any)=>nombrePerfil(o.tipo==='BAF'?o.gestion_baf?.responsable_id:o.gestion_porta?.responsable_id)==='-'?'Sin responsable':nombrePerfil(o.tipo==='BAF'?o.gestion_baf?.responsable_id:o.gestion_porta?.responsable_id)
-    const valor=(o:any,c:string)=>{const p=o.operaciones_porta,g=o.gestion_porta,b=o.gestion_baf; switch(c){case'fecha_ingreso':return o.fecha_hora||null;case'tipo':return tipoVisible(o);case'vendedor':return o.vendedor||'-';case'responsable':return responsable(o);case'cliente':return nombreCliente(o.cliente);case'dni':return o.cliente?.dni||'-';case'telefono':return o.cliente?.telefono||'-';case'numero_linea':return o.tipo==='PORTA'?p?.numero_linea||'-':'-';case'compania_actual':return o.tipo==='PORTA'?p?.compania_actual||'-':'-';case'tipo_sim':return o.tipo==='PORTA'?(p?.tipo_sim==='ESIM'?'eSIM':p?.tipo_sim||'-'):'-';case'plan_acordado':return o.tipo==='PORTA'?p?.gigas_acordados||'-':'-';case'plan_cargado':return o.tipo==='PORTA'?g?.plan_cargado||'-':'-';case'estado_vendedor':return o.tipo==='PORTA'?g?.estado_vendedor_nombre||'Sin gestión':'-';case'estado_bboo':return o.tipo==='PORTA'?g?.estado_bboo_nombre||'Sin gestión':'-';case'estado_baf':return o.tipo==='BAF'?b?.estado_nombre||'Sin gestión':'-';case'bboo':return o.tipo==='PORTA'?nombrePerfil(g?.bboo_id):'-';case'fecha_carga_stl':return o.tipo==='PORTA'?g?.fecha_carga_stl||null:null;case'fecha_porta':return o.tipo==='PORTA'&&!p?.es_linea_nueva?g?.fecha_porta||null:null;case'medio_despacho_chip':return o.tipo==='PORTA'&&g?.medio_despacho_chip_id?(medios.get(g.medio_despacho_chip_id) as any)?.nombre||'-':'-';case'numero_seguimiento':return o.tipo==='PORTA'?g?.numero_seguimiento||'-':'-';case'pin':return o.tipo==='PORTA'?g?.pin_lnva_nro||'-':'-';case'sim_operativo':return o.tipo==='PORTA'?g?.sim||'-':'-';case'sds':return o.tipo==='BAF'?b?.sds||'-':g?.sds||'-';case'fecha_instalacion':return o.tipo==='BAF'?b?.fecha_instalacion||null:null;case'orden_trabajo':return o.tipo==='BAF'?b?.orden_trabajo||'-':'-';default:return'-'}}
+    const valor=(o:any,c:string)=>{const p=o.operaciones_porta,g=o.gestion_porta,b=o.gestion_baf; switch(c){case'fecha_ingreso':return o.fecha_hora||null;case'tipo':return tipoVisible(o);case'vendedor':return o.vendedor||'-';case'responsable':return responsable(o);case'cliente':return nombreCliente(o.cliente);case'dni':return o.cliente?.dni||'-';case'telefono':return o.cliente?.telefono||'-';case'numero_linea':return o.tipo==='PORTA'?p?.numero_linea||'-':'-';case'compania_actual':return o.tipo==='PORTA'?p?.compania_actual||'-':'-';case'tipo_sim':return o.tipo==='PORTA'?(p?.tipo_sim==='ESIM'?'eSIM':p?.tipo_sim||'-'):'-';case'plan_acordado':return o.tipo==='PORTA'?p?.gigas_acordados||'-':'-';case'plan_cargado':return o.tipo==='PORTA'?g?.plan_cargado||'-':'-';case'estado_vendedor':return o.tipo==='PORTA'?g?.estado_vendedor_nombre||'Sin gestión':'-';case'estado_bboo':return o.tipo==='PORTA'?g?.estado_bboo_nombre||'Sin gestión':'-';case'estado_baf':return o.tipo==='BAF'?b?.estado_nombre||'Sin gestión':'-';case'bboo':return o.tipo==='PORTA'?nombrePerfil(g?.bboo_id):'-';case'fecha_carga_stl':return o.tipo==='PORTA'?g?.fecha_carga_stl||null:null;case'fecha_porta':return o.tipo==='PORTA'&&!p?.es_linea_nueva?g?.fecha_porta||null:null;case'medio_despacho_chip':return o.tipo==='PORTA'&&g?.medio_despacho_chip_id?(medios.get(g.medio_despacho_chip_id) as any)?.nombre||'-':'-';case'numero_seguimiento':return o.tipo==='PORTA'?g?.numero_seguimiento||'-':'-';case'pin':return o.tipo==='PORTA'?g?.pin_lnva_nro||'-':'-';case'sim_operativo':return o.tipo==='PORTA'?g?.sim||'-':'-';case'sds':return o.tipo==='BAF'?b?.sds||'-':g?.sds||'-';case'fecha_instalacion':return o.tipo==='BAF'?b?.fecha_instalacion||null:null;case'orden_trabajo':return o.tipo==='BAF'?b?.orden_trabajo||'-':'-';case'estado_claro':return o.tipo==='BAF'?reporteFijaPorOperacion.get(String(o.id_operacion))?.estado_claro||'-':'-';case'motivo_cierre':return o.tipo==='BAF'?reporteFijaPorOperacion.get(String(o.id_operacion))?.motivo_cierre||'-':'-';case'fecha_cierre':return o.tipo==='BAF'?reporteFijaPorOperacion.get(String(o.id_operacion))?.fecha_cierre||null:null;default:return'-'}}
     const filtradas=completas.filter((o:any)=>{ const t=tipoVisible(o); if(!productos.includes(t))return false; const fv=baseFecha==='fecha_ingreso'?o.fecha_hora:baseFecha==='fecha_carga_stl'?o.gestion_porta?.fecha_carga_stl:o.gestion_porta?.fecha_porta; const d=diaAR(fv); return d && d>=desde && d<=hasta })
     const criterios=columnasVisibles.slice(0,2).map((c:any)=>c.campo); const vacio=(v:any)=>v==null||String(v).trim()===''||String(v).trim()==='-'
     const comparar=(a:any,b:any,c:string)=>{const va=valor(a,c),vb=valor(b,c),ea=vacio(va),ebv=vacio(vb);if(ea&&ebv)return 0;if(ea)return 1;if(ebv)return-1;if(CAMPOS_FECHA.has(c)){const ta=new Date(String(va)).getTime(),tb=new Date(String(vb)).getTime();if(!Number.isNaN(ta)&&!Number.isNaN(tb))return tb-ta}if(CAMPOS_NUMERO.has(c)){const na=Number(va),nb=Number(vb);if(Number.isFinite(na)&&Number.isFinite(nb))return nb-na}return String(va).localeCompare(String(vb),'es',{sensitivity:'base',numeric:true})}

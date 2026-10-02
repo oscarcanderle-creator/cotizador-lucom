@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs'
 import { createClient } from '../../../../utils/supabase/server'
 import { createAdminClient } from '../../../../utils/supabase/admin'
 
-const CAMPOS_FECHA = new Set(['fecha_ingreso', 'fecha_carga_stl', 'fecha_porta', 'fecha_instalacion'])
+const CAMPOS_FECHA = new Set(['fecha_ingreso', 'fecha_carga_stl', 'fecha_porta', 'fecha_instalacion', 'fecha_cierre'])
 const PRODUCTOS_VALIDOS = new Set(['BAF', 'PORTA', 'LN'])
 const BASES_VALIDAS = new Set(['fecha_ingreso', 'fecha_carga_stl', 'fecha_porta'])
 
@@ -120,6 +120,37 @@ export async function POST(request: Request) {
     const ids = operaciones.map((o: any) => o.id_operacion)
     const clienteIds = Array.from(new Set(operaciones.map((o: any) => o.cliente_id).filter(Boolean)))
 
+    // Reporte de Fija de la arquitectura multiproducto.
+    // Conservamos gestion_baf legacy para no afectar ventas históricas.
+    const { data: productosBafMultiproducto, error: errorProductosBafMultiproducto } = ids.length
+      ? await admin
+          .from('operacion_productos')
+          .select('id,operacion_id')
+          .in('operacion_id', ids)
+          .eq('tipo_producto', 'BAF')
+          .eq('activo', true)
+      : { data: [], error: null }
+    if (errorProductosBafMultiproducto) throw errorProductosBafMultiproducto
+
+    const idsProductosBaf = (productosBafMultiproducto ?? []).map((p: any) => Number(p.id))
+    const { data: gestionesBafMultiproducto, error: errorGestionesBafMultiproducto } = idsProductosBaf.length
+      ? await admin
+          .from('gestion_producto_baf')
+          .select('producto_operacion_id,estado_claro,motivo_cierre,fecha_cierre')
+          .in('producto_operacion_id', idsProductosBaf)
+      : { data: [], error: null }
+    if (errorGestionesBafMultiproducto) throw errorGestionesBafMultiproducto
+
+    const operacionPorProductoBaf = new Map(
+      (productosBafMultiproducto ?? []).map((p: any) => [Number(p.id), String(p.operacion_id)])
+    )
+    const reporteFijaPorOperacion = new Map<string, any>()
+
+    for (const g of gestionesBafMultiproducto ?? []) {
+      const operacionId = operacionPorProductoBaf.get(Number(g.producto_operacion_id))
+      if (operacionId) reporteFijaPorOperacion.set(operacionId, g)
+    }
+
     const [rCli, rBaf, rPorta, rGBaf, rGPorta, rPerfiles, rMedios] = await Promise.all([
       clienteIds.length ? admin.from('clientes').select('id,dni,tipo_documento,nombre,apellido,telefono').in('id', clienteIds) : Promise.resolve({ data: [], error: null }),
       ids.length ? admin.from('operaciones_baf').select('operacion_id,plan,modalidad_plan').in('operacion_id', ids) : Promise.resolve({ data: [], error: null }),
@@ -197,6 +228,9 @@ export async function POST(request: Request) {
         case 'sds': return o.tipo === 'BAF' ? b?.sds || '-' : g?.sds || '-'
         case 'fecha_instalacion': return o.tipo === 'BAF' ? b?.fecha_instalacion || null : null
         case 'orden_trabajo': return o.tipo === 'BAF' ? b?.orden_trabajo || '-' : '-'
+        case 'estado_claro': return o.tipo === 'BAF' ? reporteFijaPorOperacion.get(String(o.id_operacion))?.estado_claro || '-' : '-'
+        case 'motivo_cierre': return o.tipo === 'BAF' ? reporteFijaPorOperacion.get(String(o.id_operacion))?.motivo_cierre || '-' : '-'
+        case 'fecha_cierre': return o.tipo === 'BAF' ? reporteFijaPorOperacion.get(String(o.id_operacion))?.fecha_cierre || null : null
         default: return '-'
       }
     }
