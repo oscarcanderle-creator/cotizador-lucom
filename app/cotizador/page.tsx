@@ -289,6 +289,26 @@ export default async function CotizadorPage() {
 
    */
 
+  /*
+   * NOVEDADES INTERNAS DEL COTIZADOR
+   *
+   * Son independientes de las novedades / beneficios
+   * que se incorporan a la propuesta del cliente.
+   */
+
+  const {
+    data: novedadesCotizador,
+    error: errorNovedadesCotizador,
+  } = await supabase
+    .from('novedades_cotizador')
+    .select('id, titulo, contenido, activo, orden')
+    .eq('activo', true)
+    .order('orden')
+
+  if (errorNovedadesCotizador) {
+    throw new Error(errorNovedadesCotizador.message)
+  }
+
   const vendedor =
 
     profile.nombre?.trim() ||
@@ -312,6 +332,8 @@ export default async function CotizadorPage() {
       }
 
       novedades={novedades ?? []}
+
+      novedadesCotizador={novedadesCotizador ?? []}
 
       usuario={vendedor}
 

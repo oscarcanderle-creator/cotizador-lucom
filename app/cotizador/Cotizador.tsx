@@ -83,6 +83,8 @@ type Props = {
 
   novedades: NovedadPropuesta[]
 
+  novedadesCotizador: NovedadPropuesta[]
+
   usuario: string
 
   rol: string
@@ -226,6 +228,8 @@ export default function Cotizador({
   promocionesFlash,
 
   novedades,
+
+  novedadesCotizador,
 
   usuario,
 
@@ -2411,6 +2415,43 @@ async function compartirPropuesta() {
           </div>
 
             </>
+
+          )}
+
+          {/* NOVEDADES INTERNAS DEL COTIZADOR */}
+
+          {novedadesCotizador.length > 0 && (
+
+            <div className="mb-3">
+
+              <h2 className="text-base font-semibold mb-2">
+                Novedades
+              </h2>
+
+              <div className="space-y-2">
+
+                {novedadesCotizador.map((novedad) => (
+
+                  <div
+                    key={novedad.id}
+                    className="bg-yellow-50 border border-yellow-300 rounded-xl px-4 py-3 shadow-sm"
+                  >
+
+                    <div className="text-sm font-bold text-gray-900">
+                      {novedad.titulo}
+                    </div>
+
+                    <div className="text-sm text-gray-600 mt-1 leading-relaxed whitespace-pre-line">
+                      {novedad.contenido}
+                    </div>
+
+                  </div>
+
+                ))}
+
+              </div>
+
+            </div>
 
           )}
 

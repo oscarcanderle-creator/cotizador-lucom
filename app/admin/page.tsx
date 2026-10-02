@@ -81,7 +81,7 @@ export default async function AdminPage() {
               Novedades / Beneficios
             </div>
             <div className="text-sm text-gray-500 mt-2">
-              Editá los tres cuadros informativos de la Propuesta.
+              Administrá novedades de la Propuesta y novedades internas del Cotizador.
             </div>
           </a>
 
