@@ -263,7 +263,7 @@ export default function DocumentacionDni({
             />
           </label>
 
-          {tipoProducto === 'PORTA' && (
+          {['PORTA', 'LINEA_NUEVA'].includes(tipoProducto) && (
             <label className="cursor-pointer rounded-lg bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-900">
               {subiendo === 'CHIP_OK' ? 'Subiendo...' : '+ CHIP-OK'}
               <input
