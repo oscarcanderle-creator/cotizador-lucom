@@ -568,6 +568,23 @@ export async function POST(request: Request) {
       const ventaValidada = estadoVendedorNombre === 'VENTA VALIDADA'
       const sdsEnvio = String(body.sds ?? anteriorProducto?.sds ?? '').trim().toUpperCase()
 
+      // BBOO no puede gestionar una Portabilidad hasta que el vendedor
+      // haya llevado previamente la venta al estado VENTA VALIDADA.
+      // Esta restricción no aplica a Línea Nueva.
+      if (
+        rolActor === 'BBOO' &&
+        tipoProducto === 'PORTA' &&
+        !ventaValidada
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'La Portabilidad debe estar en Venta Validada antes de iniciar la gestión BBOO.',
+          },
+          { status: 403 }
+        )
+      }
+
       if (
         rolActor === 'BBOO' &&
         medioGeneraId &&

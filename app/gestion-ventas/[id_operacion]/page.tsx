@@ -1115,7 +1115,25 @@ export default async function DetalleVentaPage({
                   const gestion: any = esBaf ? bafGestion.get(productoId) : movilGestion.get(productoId)
                   const habilitacion: any = esBaf ? { habilitado: true, motivo: 'GESTION_BAF' } : habilitaciones.get(productoId)
                   const habilitado = esBaf || habilitacion?.habilitado === true
-                  const puedeEditarProducto = puedeEditar && habilitado
+
+                  const estadoVendedorProducto = (estadosPorta ?? []).find(
+                    (estado: any) => Number(estado.id) === Number(gestion?.estado_porta_id)
+                  )
+
+                  const productoVentaValidada =
+                    String(estadoVendedorProducto?.nombre ?? '').trim().toUpperCase() ===
+                    'VENTA VALIDADA'
+
+                  const bbooBloqueadoPorValidacion =
+                    profile.rol === 'BBOO' &&
+                    producto.tipo_producto === 'PORTA' &&
+                    !productoVentaValidada
+
+                  const puedeEditarProducto =
+                    puedeEditar &&
+                    habilitado &&
+                    !bbooBloqueadoPorValidacion
+
                   const responsableActual = producto.responsable_id ?? gestion?.responsable_id ?? null
 
                   return (
@@ -1208,6 +1226,12 @@ export default async function DetalleVentaPage({
                         <input type="hidden" name="tipo_producto" value={producto.tipo_producto} />
                         <input type="hidden" name="recurso_clave" value={String(op.id_operacion)} />
                         <input type="hidden" name="sesion_token" value={sesionTokenSolicitado ?? ''} />
+
+                        {bbooBloqueadoPorValidacion && (
+                          <div className="mb-4 rounded-lg bg-red-600 px-4 py-3 text-sm font-semibold text-white">
+                            La Portabilidad debe estar en Venta Validada antes de iniciar la gestión BBOO.
+                          </div>
+                        )}
 
                         <fieldset disabled={!puedeEditarProducto}>
                           <div className="mb-4 rounded-lg border border-gray-200 bg-white px-3 py-2">
@@ -1507,8 +1531,23 @@ export default async function DetalleVentaPage({
       profile.rol === 'SUPERVISOR' ||
       (profile.rol === 'VENDEDOR' && profile.puede_gestionar_ventas === true))
 
+  const estadoVendedorActual = (estadosPorta ?? []).find(
+    (estado: any) => Number(estado.id) === Number(gestionPorta?.estado_porta_id)
+  )
+
+  const portaVentaValidada =
+    String(estadoVendedorActual?.nombre ?? '').trim().toUpperCase() ===
+    'VENTA VALIDADA'
+
+  // Para PORTA, BBOO solo puede comenzar su gestión una vez que
+  // Estado Vendedor haya alcanzado VENTA VALIDADA.
+  // Línea Nueva conserva el comportamiento actual.
+  const bbooHabilitadoPorValidacion =
+    !esPorta || porta?.es_linea_nueva === true || portaVentaValidada
+
   const puedeEditarEstadoBboo =
     puedeEditar &&
+    bbooHabilitadoPorValidacion &&
     (profile.rol === 'ADMIN' || profile.rol === 'SUPERVISOR' || profile.rol === 'BBOO')
 
 
@@ -2169,6 +2208,11 @@ export default async function DetalleVentaPage({
                         </option>
                       ))}
                     </select>
+                    {esPorta && porta?.es_linea_nueva !== true && !portaVentaValidada && (
+                      <p className="mt-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white">
+                        Gestión BBOO no disponible. La Portabilidad debe estar en Venta Validada.
+                      </p>
+                    )}
                   </div>
 
                   <div className="sm:col-span-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
