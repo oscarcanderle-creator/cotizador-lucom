@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# migracion historica / supabase local
+/backups/
+/supabase/.temp/
+scripts/migracion-historica/*.bak-*
+supabase/migrations/*.bak
