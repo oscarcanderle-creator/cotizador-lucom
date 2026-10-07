@@ -336,6 +336,8 @@ export async function POST(request: Request) {
     const ahora = new Date().toISOString()
     let payloadGestion: Record<string, unknown>
     let tipoVisibleProducto = tipoProducto === 'LINEA_NUEVA' ? 'Línea Nueva' : tipoProducto
+    let puedeEditarPinMedio = false
+    let medioEfectivo: number | null = null
 
     if (esBafProducto) {
       const sdsBaf = body.sds == null ? null : String(body.sds).trim().toUpperCase() || null
@@ -473,7 +475,7 @@ export async function POST(request: Request) {
       // Permisos finos de logística móvil.
       // PIN y Medio: Vendedor gestor o BBOO (ADMIN/SUPERVISOR conservan acceso general).
       // Seguimiento y Legajo Enviado: exclusivamente BBOO.
-      const puedeEditarPinMedio =
+      puedeEditarPinMedio =
         rolActor === 'BBOO' ||
         (rolActor === 'VENDEDOR' && actorProducto.puede_gestionar_ventas === true) ||
         ['ADMIN','SUPERVISOR'].includes(rolActor)
@@ -481,7 +483,7 @@ export async function POST(request: Request) {
       const pinEfectivo = puedeEditarPinMedio
         ? body.pin_lnva_nro ?? null
         : anteriorProducto?.pin_lnva_nro ?? null
-      const medioEfectivo = puedeEditarPinMedio
+      medioEfectivo = puedeEditarPinMedio
         ? body.medio_despacho_chip_id ?? null
         : anteriorProducto?.medio_despacho_chip_id ?? null
 
@@ -711,7 +713,6 @@ export async function POST(request: Request) {
         spn: anteriorProducto?.spn ?? null,
         pin_lnva_nro: pinEfectivo,
         documentacion_dni: body.documentacion_dni ?? null,
-        medio_despacho_chip_id: medioEfectivo,
         fecha_porta: fechaPortaEfectiva,
         numero_seguimiento: seguimientoEfectivo,
         id_envio: idEnvioEfectivo,
@@ -777,6 +778,38 @@ export async function POST(request: Request) {
         { error: 'No se pudo recuperar la gestión guardada.' },
         { status: 400 }
       )
+    }
+
+    // ----------------------------------------------------------------
+    // Medio de despacho único por operación multiproducto.
+    // La gestión normal NO escribe este campo: la RPC es la única responsable
+    // de sincronizarlo y auditarlo en todos los productos móviles vigentes.
+    // ----------------------------------------------------------------
+    const medioAnteriorOperacion = anteriorProducto?.medio_despacho_chip_id ?? null
+    const huboCambioMedioOperacion =
+      esMovilProducto &&
+      puedeEditarPinMedio &&
+      String(medioAnteriorOperacion ?? '') !== String(medioEfectivo ?? '')
+
+    if (huboCambioMedioOperacion) {
+      const { error: sincronizacionMedioError } = await supabase.rpc(
+        'sincronizar_medio_despacho_operacion',
+        {
+          p_operacion_id: operacionId,
+          p_producto_operacion_id: productoOperacionId,
+          p_medio_despacho_chip_id: medioEfectivo,
+        }
+      )
+
+      if (sincronizacionMedioError) {
+        return NextResponse.json(
+          {
+            error:
+              `La gestión se guardó, pero no se pudo sincronizar el Medio de despacho CHIP en toda la operación: ${sincronizacionMedioError.message}`,
+          },
+          { status: 400 }
+        )
+      }
     }
 
     if (responsableNuevo !== responsableAnterior) {
@@ -874,16 +907,18 @@ export async function POST(request: Request) {
       agregarCambio(cambiosProducto, etiqueta, anteriorValor, nuevoValor, formateadorCampo(campo))
     }
 
-    const filasHistorial = cambiosProducto.map((cambio) => ({
-      producto_operacion_id: productoOperacionId,
-      tipo_accion: 'MODIFICACION',
-      campo: cambio.campo,
-      etiqueta: cambio.campo,
-      valor_anterior: cambio.anterior,
-      valor_nuevo: cambio.nuevo,
-      usuario_id: user.id,
-      rol_actor: rolActor,
-    }))
+    const filasHistorial = [
+      ...cambiosProducto.map((cambio) => ({
+        producto_operacion_id: productoOperacionId,
+        tipo_accion: 'MODIFICACION',
+        campo: cambio.campo,
+        etiqueta: cambio.campo,
+        valor_anterior: cambio.anterior,
+        valor_nuevo: cambio.nuevo,
+        usuario_id: user.id,
+        rol_actor: rolActor,
+      })),
+    ]
 
     // Historial específico de estados: un evento independiente por tipo de estado.
     const filasHistorialEstado: Array<Record<string, unknown>> = []
@@ -923,7 +958,10 @@ export async function POST(request: Request) {
     if (historialEstadoResult.error) {
       console.error('No se pudo registrar historial_estados_producto:', historialEstadoResult.error)
     }
-    if (cambiosProducto.length === 0) {
+    const cantidadCambiosGestion =
+      cambiosProducto.length + (huboCambioMedioOperacion ? 1 : 0)
+
+    if (cantidadCambiosGestion === 0) {
       await liberarBloqueoProducto()
       return NextResponse.json({ ok: true, cambios: 0, notificacion: 'NO_CAMBIOS' })
     }
@@ -937,7 +975,7 @@ export async function POST(request: Request) {
       await liberarBloqueoProducto()
       return NextResponse.json({
         ok: true,
-        cambios: cambiosProducto.length,
+        cambios: cantidadCambiosGestion,
         notificacion: 'NO_REQUERIDA',
       })
     }
@@ -1002,7 +1040,7 @@ export async function POST(request: Request) {
       await liberarBloqueoProducto()
       return NextResponse.json({
         ok: true,
-        cambios: cambiosProducto.length,
+        cambios: cantidadCambiosGestion,
         notificacion: 'ERROR',
         aviso: 'La gestión se guardó, pero no se pudo registrar la notificación.',
       })
@@ -1012,7 +1050,7 @@ export async function POST(request: Request) {
       await liberarBloqueoProducto()
       return NextResponse.json({
         ok: true,
-        cambios: cambiosProducto.length,
+        cambios: cantidadCambiosGestion,
         notificacion: 'ERROR',
         aviso: errorDestinatario || 'No hay destinatario para la notificación.',
       })
@@ -1037,7 +1075,7 @@ export async function POST(request: Request) {
       ])
       return NextResponse.json({
         ok: true,
-        cambios: cambiosProducto.length,
+        cambios: cantidadCambiosGestion,
         notificacion: 'ENVIADA',
       })
     } catch (error) {
@@ -1056,7 +1094,7 @@ export async function POST(request: Request) {
       ])
       return NextResponse.json({
         ok: true,
-        cambios: cambiosProducto.length,
+        cambios: cantidadCambiosGestion,
         notificacion: 'ERROR',
         aviso: 'La gestión se guardó, pero no se pudo enviar el email.',
       })
