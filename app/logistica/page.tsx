@@ -421,8 +421,17 @@ export default async function LogisticaPage({
     ? bandejaSolicitada
     : 'PARA_PREPARAR'
 
+  // Diagnóstico temporal: mide cada consulta sin registrar datos personales.
+  async function medirConsulta<T>(nombre: string, consulta: PromiseLike<T>): Promise<T> {
+    const inicio = performance.now()
+    try {
+      return await consulta
+    } finally {
+      console.info(`[Logistica] ${nombre}: ${(performance.now() - inicio).toFixed(0)} ms`)
+    }
+  }
+
   const [
-    operacionesResultado,
     productosResultado,
     gestionesMovilesResultado,
     estadosBbooResultado,
@@ -433,8 +442,123 @@ export default async function LogisticaPage({
     loteGestionesResultado,
     cadetesResultado,
   ] = await Promise.all([
+    medirConsulta('productos móviles',
     consultarTodasLasFilas(() => admin
-      .from('operaciones')
+      .from('operacion_productos')
+      .select('id, operacion_id, tipo_producto, orden')
+      .eq('activo', true)
+      .in('tipo_producto', ['PORTA', 'LINEA_NUEVA'])
+      .order('orden', { ascending: true })
+      .order('id', { ascending: true }))
+    ),
+
+    medirConsulta('gestión móvil',
+    consultarTodasLasFilas(() => admin
+      .from('gestion_producto_movil')
+      .select(`
+        producto_operacion_id,
+        fecha_carga_stl,
+        sim,
+        estado_bboo_id,
+        medio_despacho_chip_id,
+        numero_seguimiento
+      `)
+      .order('producto_operacion_id', { ascending: true }))
+    ),
+
+    medirConsulta('estados BBOO',
+    admin
+      .from('estados_bboo')
+      .select('id, codigo, nombre')
+    ),
+
+    medirConsulta('medios',
+    admin
+      .from('medios_despacho_chip')
+      .select('id, nombre, activo')
+    ),
+
+    medirConsulta('gestiones de entrega',
+    admin
+      .from('gestiones_entrega')
+      .select(`
+        id,
+        codigo_gestion,
+        operacion_id,
+        estado_entrega_id,
+        medio_despacho_chip_id,
+        fecha_lista_entrega,
+        fecha_primera_distribucion,
+        fecha_reingreso,
+        cantidad_impresiones,
+        fecha_ultima_impresion,
+        created_at,
+        updated_at
+      `)
+      .order('created_at', { ascending: false })
+    ),
+
+    medirConsulta('estados de entrega',
+    admin
+      .from('estados_entrega')
+      .select('id, codigo, nombre')
+    ),
+
+    medirConsulta('lotes',
+    admin
+      .from('lotes_despacho')
+      .select(`
+        id,
+        codigo_lote,
+        medio_despacho_chip_id,
+        estado,
+        fecha_entrega_transporte,
+        created_at,
+        updated_at
+      `)
+      .order('created_at', { ascending: false })
+    ),
+
+    medirConsulta('relaciones de lotes',
+    admin
+      .from('lote_despacho_gestiones')
+      .select(`
+        id,
+        lote_despacho_id,
+        gestion_entrega_id,
+        resultado,
+        fecha_resultado,
+        fecha_incorporacion
+      `)
+    ),
+
+    medirConsulta('perfiles logísticos',
+    admin
+      .from('profiles')
+      .select('id, nombre, rol')
+      .in('rol', ['CADETERIA', 'TERRENO'])
+      .eq('activo', true)
+      .order('nombre', { ascending: true }),
+    )
+  ])
+
+  // Consultar únicamente operaciones relacionadas con productos móviles activos
+  // o con una Gestión de Entrega (incluye historial de entregas).
+  const idsOperaciones = [...new Set([
+    ...(productosResultado.data ?? []).map((p: any) => String(p.operacion_id)),
+    ...(gestionesEntregaResultado.data ?? []).map((g: any) => String(g.operacion_id)),
+  ].filter((id: string) => id && id !== 'null' && id !== 'undefined'))]
+
+  const operacionesResultado = await medirConsulta('operaciones filtradas', (async () => {
+    const registros: any[] = []
+    const tamanoLote = 150
+    // Lotes pequeños para evitar URLs excesivas y limitar la concurrencia.
+    for (let inicio = 0; inicio < idsOperaciones.length; inicio += tamanoLote * 4) {
+      const grupos = Array.from({ length: 4 }, (_, indice) =>
+        idsOperaciones.slice(inicio + indice * tamanoLote, inicio + (indice + 1) * tamanoLote)
+      ).filter(grupo => grupo.length > 0)
+      const respuestas = await Promise.all(grupos.map(ids => admin
+        .from('operaciones')
       .select(`
         id_operacion,
         fecha_hora,
@@ -457,90 +581,15 @@ export default async function LogisticaPage({
           datos_extras
         )
       `)
-      .order('fecha_hora', { ascending: false })
-      .order('id_operacion', { ascending: false })),
-
-    consultarTodasLasFilas(() => admin
-      .from('operacion_productos')
-      .select('id, operacion_id, tipo_producto, orden')
-      .eq('activo', true)
-      .in('tipo_producto', ['PORTA', 'LINEA_NUEVA'])
-      .order('orden', { ascending: true })
-      .order('id', { ascending: true })),
-
-    consultarTodasLasFilas(() => admin
-      .from('gestion_producto_movil')
-      .select(`
-        producto_operacion_id,
-        fecha_carga_stl,
-        sim,
-        estado_bboo_id,
-        medio_despacho_chip_id,
-        numero_seguimiento
-      `)
-      .order('producto_operacion_id', { ascending: true })),
-
-    admin
-      .from('estados_bboo')
-      .select('id, codigo, nombre'),
-
-    admin
-      .from('medios_despacho_chip')
-      .select('id, nombre, activo'),
-
-    admin
-      .from('gestiones_entrega')
-      .select(`
-        id,
-        codigo_gestion,
-        operacion_id,
-        estado_entrega_id,
-        medio_despacho_chip_id,
-        fecha_lista_entrega,
-        fecha_primera_distribucion,
-        fecha_reingreso,
-        cantidad_impresiones,
-        fecha_ultima_impresion,
-        created_at,
-        updated_at
-      `)
-      .order('created_at', { ascending: false }),
-
-    admin
-      .from('estados_entrega')
-      .select('id, codigo, nombre'),
-
-    admin
-      .from('lotes_despacho')
-      .select(`
-        id,
-        codigo_lote,
-        medio_despacho_chip_id,
-        estado,
-        fecha_entrega_transporte,
-        created_at,
-        updated_at
-      `)
-      .order('created_at', { ascending: false }),
-
-    admin
-      .from('lote_despacho_gestiones')
-      .select(`
-        id,
-        lote_despacho_id,
-        gestion_entrega_id,
-        resultado,
-        fecha_resultado,
-        fecha_incorporacion
-      `),
-
-    admin
-      .from('profiles')
-      .select('id, nombre, rol')
-      .in('rol', ['CADETERIA', 'TERRENO'])
-      .eq('activo', true)
-      .order('nombre', { ascending: true }),
-  ])
+        .in('id_operacion', ids)
+      ))
+      for (const respuesta of respuestas) {
+        if (respuesta.error) return { data: null, error: respuesta.error }
+        registros.push(...(respuesta.data ?? []))
+      }
+    }
+    return { data: registros, error: null }
+  })())
 
   for (const [nombre, resultado] of [
     ['operaciones', operacionesResultado],
@@ -632,29 +681,31 @@ export default async function LogisticaPage({
 
   const paraPreparar: any[] = []
 
+  const operacionesHistoricasPrueba = new Set([
+    'HIST-MOVIL-000005',
+    'HIST-MOVIL-000006',
+    'HIST-MOVIL-000012',
+    'HIST-MOVIL-000014',
+    'HIST-MOVIL-000015',
+    'HIST-MOVIL-000016',
+    'HIST-MOVIL-000018',
+    'HIST-MOVIL-000019',
+    'HIST-MOVIL-000023',
+    'HIST-MOVIL-000026',
+    'HIST-MOVIL-000003',
+    'HIST-MOVIL-000004',
+    'HIST-MOVIL-000013',
+    'HIST-MOVIL-000020',
+    'HIST-MOVIL-000021',
+    'HIST-MOVIL-000045',
+    'HIST-MOVIL-000058',
+    'HIST-MOVIL-000063',
+    'HIST-MOVIL-000072',
+    'HIST-MOVIL-000081',
+  ])
+
   for (const [operacionId, productosMoviles] of productosPorOperacion) {
-const operacionesHistoricasPrueba = new Set([
-  'HIST-MOVIL-000005',
-  'HIST-MOVIL-000006',
-  'HIST-MOVIL-000012',
-  'HIST-MOVIL-000014',
-  'HIST-MOVIL-000015',
-  'HIST-MOVIL-000016',
-  'HIST-MOVIL-000018',
-  'HIST-MOVIL-000019',
-  'HIST-MOVIL-000023',
-  'HIST-MOVIL-000026',
-  'HIST-MOVIL-000003',
-  'HIST-MOVIL-000004',
-  'HIST-MOVIL-000013',
-  'HIST-MOVIL-000020',
-  'HIST-MOVIL-000021',
-  'HIST-MOVIL-000045',
-  'HIST-MOVIL-000058',
-  'HIST-MOVIL-000063',
-  'HIST-MOVIL-000072',
-  'HIST-MOVIL-000081',
-])
+
 
 if (
   operacionId.startsWith('HIST-') &&
@@ -785,19 +836,25 @@ if (
     (gestion: any) => !gestionesComprometidasEnLote.has(Number(gestion.id))
   )
 
+  const gestionesCompletasPorId = new Map(
+    gestionesCompletas.map((gestion: any) => [Number(gestion.id), gestion])
+  )
+  const relacionesPorLote = new Map<number, any[]>()
+  for (const relacion of loteGestiones) {
+    const loteId = Number(relacion.lote_despacho_id)
+    const relaciones = relacionesPorLote.get(loteId) ?? []
+    relaciones.push(relacion)
+    relacionesPorLote.set(loteId, relaciones)
+  }
+
   const lotesAbiertos = lotesDespacho
     .filter((lote: any) => String(lote.estado ?? '').toUpperCase() === 'ABIERTO')
     .map((lote: any) => {
-      const relaciones = loteGestiones.filter(
-        (relacion: any) => Number(relacion.lote_despacho_id) === Number(lote.id)
-      )
+      const relaciones = relacionesPorLote.get(Number(lote.id)) ?? []
 
       const gestiones = relaciones
         .map((relacion: any) =>
-          gestionesCompletas.find(
-            (gestion: any) =>
-              Number(gestion.id) === Number(relacion.gestion_entrega_id)
-          )
+          gestionesCompletasPorId.get(Number(relacion.gestion_entrega_id))
         )
         .filter(Boolean)
 

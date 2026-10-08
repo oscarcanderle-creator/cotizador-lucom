@@ -217,6 +217,14 @@ export default async function GestionVentasPage({
 }: {
   searchParams: SearchParams
 }) {
+  const diagnosticoInicio = performance.now()
+  let diagnosticoAnterior = diagnosticoInicio
+  const medirEtapa = (nombre: string) => {
+    const ahora = performance.now()
+    console.info(`[GestionVentas] ${nombre}: ${(ahora - diagnosticoAnterior).toFixed(0)} ms; acumulado ${(ahora - diagnosticoInicio).toFixed(0)} ms`)
+    diagnosticoAnterior = ahora
+  }
+
   const supabase = await createClient()
 
   const {
@@ -253,6 +261,8 @@ export default async function GestionVentasPage({
    * Esto evita que RLS o las relaciones embebidas oculten Cliente,
    * datos PORTA/LN y demás información necesaria en el listado.
    */
+  medirEtapa('autenticación y permisos')
+
   const admin = createAdminClient()
 
   const rolVista =
@@ -277,6 +287,8 @@ export default async function GestionVentasPage({
       `No se pudo cargar la configuración de la vista ${rolVista}: ${errorVista.message}`
     )
   }
+
+  medirEtapa('configuración de vista')
 
   const columnasPredeterminadas = [
     { campo: 'fecha_ingreso', etiqueta: 'Fecha Ingreso', ancho: 125, orden: 1 },
@@ -318,6 +330,8 @@ export default async function GestionVentasPage({
   if (errorBandejas) {
     throw new Error(`No se pudieron cargar las bandejas: ${errorBandejas.message}`)
   }
+
+  medirEtapa('bandejas y parámetros')
 
   // Optimización: recuperar por ID las operaciones de un filtro logístico simple.
   const filtrosLogisticos = [1, 2, 3, 4]
@@ -394,6 +408,8 @@ export default async function GestionVentasPage({
     throw new Error(`No se pudieron cargar las ventas: ${error.message}`)
   }
 
+  medirEtapa('consulta de operaciones')
+
   const { data: consultasBase, error: errorConsultas } = esVendedorGestor
     ? await admin
         .from('consultas')
@@ -426,9 +442,12 @@ export default async function GestionVentasPage({
     throw new Error(`No se pudieron cargar las consultas: ${errorConsultas.message}`)
   }
 
+  medirEtapa('consulta de consultas')
+
   const consultas = consultasBase ?? []
 
   const operaciones = operacionesBase ?? []
+  console.info(`[GestionVentas] operaciones recuperadas: ${operaciones.length}`)
   const idsOperaciones = operaciones.map((o: any) => o.id_operacion)
   const idsClientes = Array.from(
     new Set(
@@ -447,30 +466,36 @@ export default async function GestionVentasPage({
     configurar?: (consulta: any) => any
   ) {
     const datos: any[] = []
+    const tamanoLote = 100
+    const concurrencia = 3
 
-    for (let i = 0; i < ids.length; i += 100) {
-      const lote = ids.slice(i, i + 100)
+    // Ejecutar hasta tres lotes simultáneamente por tabla, conservando
+    // el orden de las respuestas y la misma configuración de filtros.
+    for (let i = 0; i < ids.length; i += tamanoLote * concurrencia) {
+      const lotes = Array.from({ length: concurrencia }, (_, indice) =>
+        ids.slice(i + indice * tamanoLote, i + (indice + 1) * tamanoLote)
+      ).filter((lote) => lote.length > 0)
 
-      let consulta = admin
-        .from(tabla)
-        .select(columnas)
-        .in(campo, lote)
+      const resultados = await Promise.all(lotes.map(async (lote) => {
+        let consulta = admin
+          .from(tabla)
+          .select(columnas)
+          .in(campo, lote)
 
-      if (configurar) {
-        consulta = configurar(consulta)
+        if (configurar) consulta = configurar(consulta)
+        return await consulta
+      }))
+
+      for (const resultado of resultados) {
+        if (resultado.error) return { data: null, error: resultado.error }
+        datos.push(...(resultado.data ?? []))
       }
-
-      const { data, error } = await consulta
-
-      if (error) {
-        return { data: null, error }
-      }
-
-      datos.push(...(data ?? []))
     }
 
     return { data: datos, error: null }
   }
+
+  medirEtapa('preparación de lotes')
 
   const [
     clientesResultado,
@@ -568,6 +593,8 @@ export default async function GestionVentasPage({
       .order('orden', { ascending: true }),
   ])
 
+  medirEtapa('consultas paralelas de datos asociados')
+
   if (clientesResultado.error) {
     throw new Error(
       `No se pudieron cargar los clientes: ${clientesResultado.error.message}`
@@ -639,6 +666,8 @@ export default async function GestionVentasPage({
   const productosNuevos = productosNuevosResultado.data ?? []
   const idsProductosNuevos = productosNuevos.map((p: any) => p.id)
 
+  medirEtapa('procesamiento inicial')
+
   // Documentación DNI vigente asociada a productos móviles.
   // DNI OK = PDF completo, o Frente + Dorso.
   const { data: documentosDniResultado, error: errorDocumentosDni } =
@@ -656,6 +685,8 @@ export default async function GestionVentasPage({
     )
   }
 
+  medirEtapa('documentación DNI')
+
   const tiposDniPorProducto = new Map<number, Set<string>>()
   for (const documento of documentosDniResultado ?? []) {
     const productoId = Number(documento.producto_operacion_id)
@@ -671,6 +702,8 @@ export default async function GestionVentasPage({
     return completo || frenteYDorso ? 'DNI OK' : 'DNI INCOMPLETO'
   }
 
+  medirEtapa('procesamiento DNI')
+
   const [detalleBafNuevoResultado, detalleMovilNuevoResultado, gestionBafNuevaResultado, gestionMovilNuevaResultado] = await Promise.all([
     idsProductosNuevos.length > 0
       ? admin.from('operacion_producto_baf').select('*').in('producto_operacion_id', idsProductosNuevos)
@@ -685,6 +718,8 @@ export default async function GestionVentasPage({
       ? admin.from('gestion_producto_movil').select('*').in('producto_operacion_id', idsProductosNuevos)
       : Promise.resolve({ data: [], error: null }),
   ])
+
+  medirEtapa('detalle y gestión multiproducto')
 
   for (const resultado of [detalleBafNuevoResultado, detalleMovilNuevoResultado, gestionBafNuevaResultado, gestionMovilNuevaResultado]) {
     if (resultado.error) throw new Error(`No se pudo cargar la arquitectura multiproducto: ${resultado.error.message}`)
@@ -740,6 +775,8 @@ export default async function GestionVentasPage({
           .in('id', estadosBbooIds)
       : Promise.resolve({ data: [], error: null }),
   ])
+
+  medirEtapa('consultas de estados')
 
   if (estadosBafResultado.error) {
     throw new Error(
@@ -818,6 +855,8 @@ export default async function GestionVentasPage({
   const gestionBafNuevaPorProducto = new Map((gestionBafNuevaResultado.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
   const gestionMovilNuevaPorProducto = new Map((gestionMovilNuevaResultado.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
 
+  medirEtapa('construcción de índices')
+
   const habilitacionesMoviles = new Map<number, any>()
 
   const productosMovilesParaEvaluar = productosNuevos.filter(
@@ -846,6 +885,8 @@ export default async function GestionVentasPage({
       )
     }
   }
+
+  medirEtapa('RPC de habilitaciones')
 
   const productosPorOperacion = new Map<string, any[]>()
   for (const producto of productosNuevos) {
@@ -883,6 +924,8 @@ export default async function GestionVentasPage({
     productosPorOperacion.set(producto.operacion_id, lista)
   }
 
+  medirEtapa('construcción de productos')
+
   // Datos logísticos de entregas. Se toma la gestión más reciente por operación.
   // Consultas paginadas para no perder registros por el límite de PostgREST.
   const gestionesEntregaDatos: any[] = []
@@ -912,6 +955,8 @@ export default async function GestionVentasPage({
       })
     }
   }
+
+  medirEtapa('gestiones y estados logísticos')
 
   const operacionesCompletas = operaciones.map((operacion: any) => {
     const gestionPorta =
@@ -1179,6 +1224,8 @@ export default async function GestionVentasPage({
     valor2: string
     conector: 'AND' | 'OR'
   }
+
+  medirEtapa('construcción de registros y opciones')
 
   const filtrosAvanzados: FiltroAvanzado[] = [1, 2, 3, 4]
     .map((numero) => {
@@ -1778,6 +1825,8 @@ export default async function GestionVentasPage({
 
     return fechaB - fechaA
   })
+
+  medirEtapa('filtros y preparación de render')
 
   return (
     <main className="min-h-screen bg-gray-50">
