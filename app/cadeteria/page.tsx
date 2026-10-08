@@ -72,7 +72,7 @@ export default async function CadeteriaPage() {
     redirect('/cambiar-password')
   }
 
-  if (profile.rol !== 'CADETERIA') {
+  if (!['CADETERIA', 'TERRENO'].includes(profile.rol)) {
     redirect('/ventas')
   }
 

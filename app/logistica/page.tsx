@@ -4,59 +4,61 @@ import { createClient } from '../../utils/supabase/server'
 import { createAdminClient } from '../../utils/supabase/admin'
 import AppHeader from '../../components/AppHeader'
 import CrearLoteDespacho from '../../components/CrearLoteDespacho'
+import SeleccionarImpresiones from '../../components/SeleccionarImpresiones'
 
 const ROLES_LOGISTICA = ['ADMIN', 'SUPERVISOR', 'BBOO']
 
-async function crearGestionEntrega(formData: FormData) {
+// Recupera todas las páginas; PostgREST suele limitar cada respuesta a 1.000 filas.
+// Solución de compatibilidad: a futuro conviene filtrar elegibilidad en PostgreSQL.
+async function consultarTodasLasFilas(crearConsulta: () => any) {
+  const tamanoPagina = 500
+  const filas: any[] = []
+  let inicio = 0
+
+  while (true) {
+    const { data, error } = await crearConsulta().range(inicio, inicio + tamanoPagina - 1)
+    if (error) return { data: null, error }
+    const pagina = data ?? []
+    filas.push(...pagina)
+    if (pagina.length < tamanoPagina) break
+    inicio += tamanoPagina
+  }
+
+  return { data: filas, error: null }
+}
+
+
+async function imprimirGestiones(formData: FormData) {
   'use server'
 
-  const operacionId = String(
-    formData.get('operacion_id') ?? ''
-  ).trim()
-
-  if (!operacionId) {
-    throw new Error('Operación inválida.')
+  const operaciones = [...new Set(formData.getAll('operacion_ids').map(String).map(v => v.trim()).filter(Boolean))]
+  const reimpresiones = [...new Set(formData.getAll('gestion_entrega_ids').map(Number))]
+  if (operaciones.length === 0 && reimpresiones.length === 0) throw new Error('Seleccioná al menos una entrega.')
+  if (operaciones.length > 100 || reimpresiones.length > 100 || reimpresiones.some(id => !Number.isSafeInteger(id) || id <= 0)) {
+    throw new Error('Selección inválida o demasiado grande.')
   }
-
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+  const { data: profile } = await supabase.from('profiles').select('rol, activo').eq('id', user.id).single()
+  if (!profile?.activo || !ROLES_LOGISTICA.includes(profile.rol)) redirect('/ventas')
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
+  const ids: number[] = []
+  for (const operacionId of operaciones) {
+    const { data, error } = await supabase.rpc('crear_gestion_entrega', { p_operacion_id: operacionId })
+    if (error) throw new Error(`No se pudo preparar ${operacionId}: ${error.message}`)
+    const registro = Array.isArray(data) ? data[0] : data
+    const id = Number(registro?.gestion_entrega_id ?? registro?.id)
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`La creación de ${operacionId} no devolvió un ID de gestión válido.`)
+    ids.push(id)
   }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('rol, activo')
-    .eq('id', user.id)
-    .single()
-
-  if (
-    !profile ||
-    !profile.activo ||
-    !ROLES_LOGISTICA.includes(profile.rol)
-  ) {
-    redirect('/ventas')
+  ids.push(...reimpresiones)
+  for (const id of ids) {
+    const { error } = await supabase.rpc('registrar_impresion_gestion_entrega', { p_gestion_entrega_id: id })
+    if (error) throw new Error(`La entrega ${id} fue preparada, pero no se pudo registrar la solicitud de impresión: ${error.message}`)
   }
-
-  const { error } = await supabase.rpc(
-    'crear_gestion_entrega',
-    {
-      p_operacion_id: operacionId,
-    }
-  )
-
-  if (error) {
-    throw new Error(
-      `No se pudo crear la Gestión de Entrega: ${error.message}`
-    )
-  }
-
   revalidatePath('/logistica')
-  redirect('/logistica?bandeja=EN_PREPARACION')
+  redirect(`/logistica/imprimir?ids=${ids.join(',')}`)
 }
 
 async function confirmarGestionEntregaLista(formData: FormData) {
@@ -431,7 +433,7 @@ export default async function LogisticaPage({
     loteGestionesResultado,
     cadetesResultado,
   ] = await Promise.all([
-    admin
+    consultarTodasLasFilas(() => admin
       .from('operaciones')
       .select(`
         id_operacion,
@@ -455,16 +457,18 @@ export default async function LogisticaPage({
           datos_extras
         )
       `)
-      .order('fecha_hora', { ascending: false }),
+      .order('fecha_hora', { ascending: false })
+      .order('id_operacion', { ascending: false })),
 
-    admin
+    consultarTodasLasFilas(() => admin
       .from('operacion_productos')
       .select('id, operacion_id, tipo_producto, orden')
       .eq('activo', true)
       .in('tipo_producto', ['PORTA', 'LINEA_NUEVA'])
-      .order('orden', { ascending: true }),
+      .order('orden', { ascending: true })
+      .order('id', { ascending: true })),
 
-    admin
+    consultarTodasLasFilas(() => admin
       .from('gestion_producto_movil')
       .select(`
         producto_operacion_id,
@@ -473,7 +477,8 @@ export default async function LogisticaPage({
         estado_bboo_id,
         medio_despacho_chip_id,
         numero_seguimiento
-      `),
+      `)
+      .order('producto_operacion_id', { ascending: true })),
 
     admin
       .from('estados_bboo')
@@ -494,6 +499,8 @@ export default async function LogisticaPage({
         fecha_lista_entrega,
         fecha_primera_distribucion,
         fecha_reingreso,
+        cantidad_impresiones,
+        fecha_ultima_impresion,
         created_at,
         updated_at
       `)
@@ -626,6 +633,35 @@ export default async function LogisticaPage({
   const paraPreparar: any[] = []
 
   for (const [operacionId, productosMoviles] of productosPorOperacion) {
+const operacionesHistoricasPrueba = new Set([
+  'HIST-MOVIL-000005',
+  'HIST-MOVIL-000006',
+  'HIST-MOVIL-000012',
+  'HIST-MOVIL-000014',
+  'HIST-MOVIL-000015',
+  'HIST-MOVIL-000016',
+  'HIST-MOVIL-000018',
+  'HIST-MOVIL-000019',
+  'HIST-MOVIL-000023',
+  'HIST-MOVIL-000026',
+  'HIST-MOVIL-000003',
+  'HIST-MOVIL-000004',
+  'HIST-MOVIL-000013',
+  'HIST-MOVIL-000020',
+  'HIST-MOVIL-000021',
+  'HIST-MOVIL-000045',
+  'HIST-MOVIL-000058',
+  'HIST-MOVIL-000063',
+  'HIST-MOVIL-000072',
+  'HIST-MOVIL-000081',
+])
+
+if (
+  operacionId.startsWith('HIST-') &&
+  !operacionesHistoricasPrueba.has(operacionId)
+) {
+  continue
+}
     if (operacionesConGE.has(operacionId)) continue
 
     const productosVigentes = productosMoviles.filter((producto: any) => {
@@ -918,115 +954,24 @@ export default async function LogisticaPage({
                 </div>
               </div>
             ) : (
-              paraPreparar.map((registro: any) => {
-                const operacion = registro.operacion
-                const cliente = Array.isArray(operacion?.cliente)
-                  ? operacion.cliente[0]
-                  : operacion?.cliente
-                const domicilio = Array.isArray(operacion?.domicilio)
-                  ? operacion.domicilio[0]
-                  : operacion?.domicilio
-
-                return (
-                  <section
-                    key={operacion.id_operacion}
-                    className="overflow-hidden rounded-2xl border border-gray-200 bg-white"
-                  >
-                    <div className="flex flex-col gap-3 border-b border-gray-200 p-5 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <div className="flex flex-wrap gap-2">
-                          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
-                            PARA PREPARAR
-                          </span>
-                          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
-                            {texto(registro.medio?.nombre)}
-                          </span>
-                        </div>
-
-                        <h2 className="mt-3 text-lg font-semibold text-gray-900">
-                          {nombreCliente(cliente)}
-                        </h2>
-
-                        <div className="mt-1 text-sm text-gray-500">
-                          Operación {texto(operacion.id_operacion)}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-start gap-3 sm:items-end">
-                        <div className="text-sm text-gray-500">
-                          {fechaArgentina(operacion.fecha_hora)}
-                        </div>
-
-                        <form action={crearGestionEntrega}>
-                          <input
-                            type="hidden"
-                            name="operacion_id"
-                            value={operacion.id_operacion}
-                          />
-                          <button
-                            type="submit"
-                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-                          >
-                            Preparar entrega
-                          </button>
-                        </form>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-3">
-                      <div>
-                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Contacto
-                        </div>
-                        <div className="mt-1 text-sm font-medium text-gray-800">
-                          {texto(cliente?.telefono)}
-                        </div>
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Domicilio
-                        </div>
-                        <div className="mt-1 text-sm font-medium text-gray-800">
-                          {domicilioVisible(domicilio)}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Vendedor
-                        </div>
-                        <div className="mt-1 text-sm text-gray-800">
-                          {texto(operacion.vendedor)}
-                        </div>
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Chips a preparar
-                        </div>
-
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {registro.productos.map(({ producto, gestion }: any) => (
-                            <span
-                              key={producto.id}
-                              className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700"
-                            >
-                              <span className="font-semibold">
-                                {producto.tipo_producto === 'LINEA_NUEVA'
-                                  ? 'LÍNEA NUEVA'
-                                  : 'PORTA'}
-                              </span>
-                              {' · SIM '}
-                              {texto(gestion?.sim)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                )
-              })
+              <SeleccionarImpresiones
+                registros={paraPreparar.map((registro: any) => {
+                  const operacion = registro.operacion
+                  const cliente = Array.isArray(operacion?.cliente) ? operacion.cliente[0] : operacion?.cliente
+                  const domicilio = Array.isArray(operacion?.domicilio) ? operacion.domicilio[0] : operacion?.domicilio
+                  return {
+                    id: String(operacion.id_operacion),
+                    cliente: nombreCliente(cliente),
+                    domicilio: domicilioVisible(domicilio),
+                    telefono: texto(cliente?.telefono),
+                    vendedor: texto(operacion.vendedor),
+                    medio: texto(registro.medio?.nombre),
+                    fecha: fechaArgentina(operacion.fecha_hora),
+                    chips: registro.productos.map(({ producto, gestion }: any) => ({ tipo: producto.tipo_producto, sim: texto(gestion?.sim) }))
+                  }
+                })}
+                action={imprimirGestiones}
+              />
             )}
           </div>
         ) : bandejaActiva === 'LISTAS' ? (
@@ -1271,6 +1216,15 @@ export default async function LogisticaPage({
                           </div>
                         )}
 
+                        {bandejaActiva === 'EN_PREPARACION' && (
+                          <form action={imprimirGestiones} className="mt-4">
+                            <input type="hidden" name="gestion_entrega_ids" value={gestion.id} />
+                            <button type="submit" className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-100">
+                              {Number(gestion.cantidad_impresiones ?? 0) > 0 ? 'Reimprimir hoja de envío' : 'Imprimir hoja de envío'}
+                            </button>
+                            <div className="mt-1 text-xs text-gray-500">Solicitudes de impresión: {Number(gestion.cantidad_impresiones ?? 0)}</div>
+                          </form>
+                        )}
                         {bandejaActiva === 'EN_PREPARACION' && (
                           <form
                             action={confirmarGestionEntregaLista}

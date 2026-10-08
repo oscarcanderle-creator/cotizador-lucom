@@ -24,6 +24,7 @@ type Actual =
 
   | 'REPORTES'
   | 'LOGISTICA'
+  | 'ENTREGAS'
 
   | 'ADMIN'
 
@@ -86,6 +87,7 @@ const items = [
 
   { key: 'REPORTES', label: 'Reportes', href: '/reportes', roles: ['SUPERVISOR', 'ADMIN', 'BBOO'] },
   { key: 'LOGISTICA', label: 'Logística', href: '/logistica', roles: ['SUPERVISOR', 'ADMIN', 'BBOO'] },
+  { key: 'ENTREGAS', label: 'Mis Entregas', href: '/cadeteria', roles: ['CADETERIA', 'TERRENO'] },
 
   { key: 'ADMIN', label: 'ADMIN', href: '/admin', roles: ['ADMIN'] },
 
@@ -108,6 +110,8 @@ function Icono({ tipo }: { tipo: Actual }) {
   if (tipo === 'SUPER') return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="m4 7 5-4 5 5 6-6"/></svg>
 
   if (tipo === 'REPORTES') return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19V5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M14 3v6h6M8 17v-4M12 17V9M16 17v-6"/></svg>
+
+  if (tipo === 'ENTREGAS') return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M7 10h10M7 14h5"/><path d="m14 16 2 2 4-4"/></svg>
 
   if (tipo === 'LOGISTICA') return <svg className={base} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h11v11H3z"/><path d="M14 9h4l3 3v5h-7z"/><circle cx="7" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M14 19H9M3 19h2"/></svg>
 

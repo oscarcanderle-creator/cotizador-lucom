@@ -74,7 +74,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (!esCadeteria && esRutaCadeteria) {
+  if (!['CADETERIA', 'TERRENO'].includes(profile.rol) && esRutaCadeteria) {
     const url = request.nextUrl.clone()
     url.pathname = '/ventas'
     return NextResponse.redirect(url)
