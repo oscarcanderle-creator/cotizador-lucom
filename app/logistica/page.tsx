@@ -330,6 +330,19 @@ type SearchParams = Promise<{
   bandeja?: string
 }>
 
+function grupoMedio(nombre: unknown) {
+  const normalizado = String(nombre ?? '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (normalizado === 'CADETERIA') return 'CADETERIA'
+  if (normalizado === 'LUCOM TERRENO' || normalizado === 'TERRENO') return 'LUCOM TERRENO'
+  return 'OTROS'
+}
+
+const GRUPOS_DESPACHO = [
+  { codigo: 'CADETERIA', titulo: 'CADETERÍA' },
+  { codigo: 'LUCOM TERRENO', titulo: 'LUCOM TERRENO' },
+  { codigo: 'OTROS', titulo: 'OTROS MEDIOS' },
+]
+
 function texto(valor: unknown) {
   const resultado = String(valor ?? '').trim()
   return resultado || '-'
@@ -1043,10 +1056,20 @@ if (
                 </p>
               </div>
 
-              <CrearLoteDespacho
-                gestiones={gestionesSeleccionablesLote}
-                action={crearLoteDespacho}
-              />
+              <div className="space-y-6">
+                {GRUPOS_DESPACHO.filter(grupo => grupo.codigo !== 'OTROS' || gestionesSeleccionablesLote.some((g: any) => grupoMedio(g.medio_nombre) === 'OTROS')).map(grupo => {
+                  const gestionesGrupo = gestionesSeleccionablesLote.filter((g: any) => grupoMedio(g.medio_nombre) === grupo.codigo)
+                  return (
+                    <div key={grupo.codigo} className="space-y-3">
+                      <div className="flex items-center justify-between rounded-xl bg-gray-900 px-4 py-3 text-white">
+                        <h3 className="font-semibold">{grupo.titulo}</h3>
+                        <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">{gestionesGrupo.length} gestiones</span>
+                      </div>
+                      <CrearLoteDespacho gestiones={gestionesGrupo} action={crearLoteDespacho} />
+                    </div>
+                  )
+                })}
+              </div>
             </section>
 
             <section className="rounded-2xl border border-gray-200 bg-white p-5">
@@ -1065,7 +1088,15 @@ if (
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {lotesAbiertos.map((lote: any) => (
+                  {GRUPOS_DESPACHO.filter(grupo => grupo.codigo !== 'OTROS' || lotesAbiertos.some((lote: any) => grupoMedio(lote.medio?.nombre) === 'OTROS')).map(grupo => {
+                    const lotesGrupo = lotesAbiertos.filter((lote: any) => grupoMedio(lote.medio?.nombre) === grupo.codigo)
+                    return (
+                      <div key={grupo.codigo} className="space-y-3">
+                        <div className="flex items-center justify-between rounded-xl bg-gray-900 px-4 py-3 text-white">
+                          <h3 className="font-semibold">{grupo.titulo}</h3>
+                          <span className="rounded-full bg-white/20 px-3 py-1 text-xs">{lotesGrupo.length} lotes</span>
+                        </div>
+                        {lotesGrupo.map((lote: any) => (
                     <div
                       key={lote.id}
                       className="rounded-xl border border-gray-200 bg-gray-50 p-4"
@@ -1195,7 +1226,10 @@ if (
                         </div>
                       </div>
                     </div>
-                  ))}
+                        ))}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </section>
@@ -1209,7 +1243,15 @@ if (
                 </div>
               </div>
             ) : (
-              registrosGE.map((gestion: any) => {
+              GRUPOS_DESPACHO.filter(grupo => grupo.codigo !== 'OTROS' || registrosGE.some((g: any) => grupoMedio(g.medio?.nombre) === 'OTROS')).map(grupo => {
+                const gestionesGrupo = registrosGE.filter((g: any) => grupoMedio(g.medio?.nombre) === grupo.codigo)
+                return (
+                  <div key={grupo.codigo} className="space-y-4">
+                    <div className="flex items-center justify-between rounded-xl bg-gray-900 px-5 py-4 text-white">
+                      <h2 className="text-lg font-semibold">{grupo.titulo}</h2>
+                      <span className="rounded-full bg-white/20 px-3 py-1 text-sm font-semibold">{gestionesGrupo.length} gestiones</span>
+                    </div>
+                    {gestionesGrupo.map((gestion: any) => {
                 const operacion = gestion.operacion
                 const cliente = Array.isArray(operacion?.cliente)
                   ? operacion.cliente[0]
@@ -1229,10 +1271,10 @@ if (
                           <span className="rounded-full bg-gray-900 px-2.5 py-1 text-xs font-semibold text-white">
                             {texto(gestion.codigo_gestion)}
                           </span>
-                          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                          <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-900">
                             {texto(gestion.estado?.nombre)}
                           </span>
-                          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                          <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-900">
                             {texto(gestion.medio?.nombre)}
                           </span>
                         </div>
@@ -1347,6 +1389,9 @@ if (
                       </div>
                     </div>
                   </section>
+                )
+                    })}
+                  </div>
                 )
               })
             )}
