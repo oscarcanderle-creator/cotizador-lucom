@@ -385,6 +385,40 @@ export default async function GestionVentasPage({
     )
   )
 
+
+  async function consultarPorLotes(
+    tabla: string,
+    columnas: string,
+    campo: string,
+    ids: string[],
+    configurar?: (consulta: any) => any
+  ) {
+    const datos: any[] = []
+
+    for (let i = 0; i < ids.length; i += 100) {
+      const lote = ids.slice(i, i + 100)
+
+      let consulta = admin
+        .from(tabla)
+        .select(columnas)
+        .in(campo, lote)
+
+      if (configurar) {
+        consulta = configurar(consulta)
+      }
+
+      const { data, error } = await consulta
+
+      if (error) {
+        return { data: null, error }
+      }
+
+      datos.push(...(data ?? []))
+    }
+
+    return { data: datos, error: null }
+  }
+
   const [
     clientesResultado,
     bafResultado,
@@ -398,46 +432,56 @@ export default async function GestionVentasPage({
     estadosConsultaResultado,
   ] = await Promise.all([
     idsClientes.length > 0
-      ? admin
-          .from('clientes')
-          .select('id, dni, tipo_documento, nombre, apellido, telefono')
-          .in('id', idsClientes)
+      ? consultarPorLotes(
+          'clientes',
+          'id, dni, tipo_documento, nombre, apellido, telefono',
+          'id',
+          idsClientes
+        )
       : Promise.resolve({ data: [], error: null }),
 
     idsOperaciones.length > 0
-      ? admin
-          .from('operaciones_baf')
-          .select('operacion_id, plan, modalidad_plan')
-          .in('operacion_id', idsOperaciones)
+      ? consultarPorLotes(
+          'operaciones_baf',
+          'operacion_id, plan, modalidad_plan',
+          'operacion_id',
+          idsOperaciones
+        )
       : Promise.resolve({ data: [], error: null }),
 
     idsOperaciones.length > 0
-      ? admin
-          .from('operaciones_porta')
-          .select(`
-            operacion_id,
+      ? consultarPorLotes(
+          'operaciones_porta',
+          `
+          operacion_id,
             nim,
             es_linea_nueva,
             gigas_acordados,
             compania_actual,
             numero_linea,
             tipo_sim
-          `)
-          .in('operacion_id', idsOperaciones)
+          `,
+          'operacion_id',
+          idsOperaciones
+        )
       : Promise.resolve({ data: [], error: null }),
 
     idsOperaciones.length > 0
-      ? admin
-          .from('gestion_baf')
-          .select('operacion_id, responsable_id, fecha_gestion, updated_at, estado_baf_id, sds, fecha_instalacion, orden_trabajo')
-          .in('operacion_id', idsOperaciones)
+      ? consultarPorLotes(
+          'gestion_baf',
+          'operacion_id, responsable_id, fecha_gestion, updated_at, estado_baf_id, sds, fecha_instalacion, orden_trabajo',
+          'operacion_id',
+          idsOperaciones
+        )
       : Promise.resolve({ data: [], error: null }),
 
     idsOperaciones.length > 0
-      ? admin
-          .from('gestion_porta')
-          .select('operacion_id, responsable_id, updated_at, estado_porta_id, estado_bboo_id, bboo_id, medio_despacho_chip_id, fecha_carga_stl, fecha_porta, pin_lnva_nro, sim, plan_cargado, sds, numero_seguimiento')
-          .in('operacion_id', idsOperaciones)
+      ? consultarPorLotes(
+          'gestion_porta',
+          'operacion_id, responsable_id, updated_at, estado_porta_id, estado_bboo_id, bboo_id, medio_despacho_chip_id, fecha_carga_stl, fecha_porta, pin_lnva_nro, sim, plan_cargado, sds, numero_seguimiento',
+          'operacion_id',
+          idsOperaciones
+        )
       : Promise.resolve({ data: [], error: null }),
 
     admin
@@ -451,12 +495,13 @@ export default async function GestionVentasPage({
       .order('nombre', { ascending: true }),
 
     idsOperaciones.length > 0
-      ? admin
-          .from('operacion_productos')
-          .select('id, operacion_id, tipo_producto, responsable_id, orden, producto_snapshot, plan_snapshot')
-          .in('operacion_id', idsOperaciones)
-          .eq('activo', true)
-          .order('orden', { ascending: true })
+      ? consultarPorLotes(
+          'operacion_productos',
+          'id, operacion_id, tipo_producto, responsable_id, orden, producto_snapshot, plan_snapshot',
+          'operacion_id',
+          idsOperaciones,
+          (q) => q.eq('activo', true).order('orden', { ascending: true })
+        )
       : Promise.resolve({ data: [], error: null }),
     admin
       .from('tipos_consulta')

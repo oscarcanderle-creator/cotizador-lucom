@@ -883,7 +883,7 @@ export default function Cotizador({
 
           [campo]: valor,
 
-          cantidad: 1,
+          cantidad: campo === 'cantidad' ? Math.max(1, Math.floor(Number(valor) || 1)) : linea.cantidad,
 
           portabilidades,
 
@@ -1349,7 +1349,7 @@ export default function Cotizador({
 
             plan: linea.plan,
 
-            cantidad: 1,
+            cantidad: Math.max(1, Number(linea.cantidad) || 1),
 
             precioLista:
 
@@ -2627,7 +2627,7 @@ async function compartirPropuesta() {
 
                 >
 
-                  <div className="grid grid-cols-1 sm:grid-cols-[1.15fr_.95fr_auto] gap-2 items-end">
+                  <div className={ventaSincronizada ? "grid grid-cols-1 sm:grid-cols-[1.15fr_.95fr_auto] gap-2 items-end" : "grid grid-cols-1 sm:grid-cols-[minmax(0,1.15fr)_85px_minmax(0,.95fr)_36px]"}>
 
                     {/* PLAN */}
 
@@ -2704,6 +2704,30 @@ async function compartirPropuesta() {
                       </select>
 
                     </div>
+
+                    {/* CANTIDAD */}
+                    {!ventaSincronizada && (
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-0.5">
+                          Cant.
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={999}
+                          step={1}
+                          value={linea.cantidad}
+                          onChange={(e) =>
+                            actualizarLinea(
+                              linea.id,
+                              "cantidad",
+                              Math.min(999, Math.max(1, Number(e.target.value) || 1))
+                            )
+                          }
+                          className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white text-gray-900 text-center"
+                        />
+                      </div>
+                    )}
 
                     {/* TIPO */}
 
@@ -2849,7 +2873,7 @@ async function compartirPropuesta() {
                     </div>
                   )}
 
-                  {linea.tipo !== 'LINEA NUEVA' && linea.portabilidades[0] && (
+                  {ventaSincronizada && linea.tipo !== 'LINEA NUEVA' && linea.portabilidades[0] && (
 
                     <div className="mt-1.5 pt-1.5 border-t border-gray-100">
 
@@ -3794,7 +3818,46 @@ async function compartirPropuesta() {
 
               <div className="space-y-1.5">
 
-                {resultado.lineas.map(
+                {(ventaSincronizada
+                  ? resultado.lineas
+                  : resultado.lineas.reduce<typeof resultado.lineas>(
+                      (agrupadas, linea) => {
+                        const original = lineas.find(
+                          (item) => item.id === linea.id
+                        )
+
+                        const existente = agrupadas.find((item) => {
+                          const originalExistente = lineas.find(
+                            (l) => l.id === item.id
+                          )
+
+                          return (
+                            item.plan === linea.plan &&
+                            item.tipo === linea.tipo &&
+                            item.precioLista === linea.precioLista &&
+                            item.descuentoAplicado === linea.descuentoAplicado &&
+                            item.precioUnitario === linea.precioUnitario &&
+                            item.tipoDescuento === linea.tipoDescuento &&
+                            item.nombreFlash === linea.nombreFlash &&
+                            item.beneficiosNormal === linea.beneficiosNormal &&
+                            originalExistente?.formaPagoModem === original?.formaPagoModem &&
+                            originalExistente?.cuotasModem === original?.cuotasModem &&
+                            originalExistente?.precioModem === original?.precioModem
+                          )
+                        })
+
+                        if (existente) {
+                          existente.cantidad += linea.cantidad
+                          existente.subtotal += linea.subtotal
+                        } else {
+                          agrupadas.push({ ...linea })
+                        }
+
+                        return agrupadas
+                      },
+                      []
+                    )
+                ).map(
 
                   (linea) => (
 
@@ -3812,6 +3875,9 @@ async function compartirPropuesta() {
 
                           <span className="font-medium">
 
+                            {!ventaSincronizada && linea.cantidad > 1
+                              ? `${linea.cantidad} × `
+                              : ''}
                             {linea.plan}
 
                           </span>
@@ -3840,7 +3906,7 @@ async function compartirPropuesta() {
 
                       </div>
 
-                      {linea.tipo !== 'LINEA NUEVA' && (
+                      {ventaSincronizada && linea.tipo !== 'LINEA NUEVA' && (
 
                         <div className="mt-0.5 text-[11px] text-gray-600">
 
