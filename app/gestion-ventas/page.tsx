@@ -294,10 +294,7 @@ export default async function GestionVentasPage({
     (vistaConfigurada ?? []).length > 0
       ? (vistaConfigurada ?? []).map((columna: any) => ({
           campo: String(columna.campo),
-          etiqueta:
-            esBboo && String(columna.campo) === 'responsable'
-              ? 'BBOO asignado'
-              : String(columna.etiqueta || columna.campo),
+          etiqueta: String(columna.etiqueta || columna.campo),
           ancho: Math.min(600, Math.max(60, Number(columna.ancho) || 140)),
           orden: Number(columna.orden) || 0,
         }))
@@ -322,7 +319,54 @@ export default async function GestionVentasPage({
     throw new Error(`No se pudieron cargar las bandejas: ${errorBandejas.message}`)
   }
 
-  const { data: operacionesBase, error } = await admin
+  // Optimización: recuperar por ID las operaciones de un filtro logístico simple.
+  const filtrosLogisticos = [1, 2, 3, 4]
+    .map((n) => ({
+      campo: String((params as any)[`f${n}_field`] ?? '').trim(),
+      condicion: String((params as any)[`f${n}_op`] ?? '').trim(),
+      valor: String((params as any)[`f${n}_value`] ?? '').trim(),
+    }))
+    .filter((f) => f.campo && f.condicion)
+
+  const filtroEstadoLogistico =
+    filtrosLogisticos.length === 1 &&
+    filtrosLogisticos[0].campo === 'estado_logistico' &&
+    filtrosLogisticos[0].condicion === 'es'
+      ? filtrosLogisticos[0].valor
+      : null
+
+  let idsFiltrados: string[] | null = null
+
+  if (filtroEstadoLogistico !== null) {
+    const { data: estadoEntrega, error: errorEstado } = await admin
+      .from('estados_entrega')
+      .select('id')
+      .eq('codigo', filtroEstadoLogistico)
+      .maybeSingle()
+
+    if (errorEstado) {
+      throw new Error(`Error consultando estado logístico: ${errorEstado.message}`)
+    }
+
+    idsFiltrados = []
+
+    if (estadoEntrega) {
+      const { data: entregas, error: errorEntregas } = await admin
+        .from('gestiones_entrega')
+        .select('operacion_id')
+        .eq('estado_entrega_id', estadoEntrega.id)
+
+      if (errorEntregas) {
+        throw new Error(`Error consultando entregas: ${errorEntregas.message}`)
+      }
+
+      idsFiltrados = Array.from(
+        new Set((entregas ?? []).map((e: any) => String(e.operacion_id)))
+      )
+    }
+  }
+
+  let consultaOperaciones = admin
     .from('operaciones')
     .select(`
       id_operacion,
@@ -336,6 +380,15 @@ export default async function GestionVentasPage({
     `)
     .in('tipo', ['BAF', 'PORTA'])
     .order('fecha_hora', { ascending: false })
+
+  if (idsFiltrados !== null) {
+    consultaOperaciones = consultaOperaciones.in(
+      'id_operacion',
+      idsFiltrados.length ? idsFiltrados : ['__SIN_COINCIDENCIAS__']
+    )
+  }
+
+  const { data: operacionesBase, error } = await consultaOperaciones
 
   if (error) {
     throw new Error(`No se pudieron cargar las ventas: ${error.message}`)
@@ -830,6 +883,36 @@ export default async function GestionVentasPage({
     productosPorOperacion.set(producto.operacion_id, lista)
   }
 
+  // Datos logísticos de entregas. Se toma la gestión más reciente por operación.
+  // Consultas paginadas para no perder registros por el límite de PostgREST.
+  const gestionesEntregaDatos: any[] = []
+  for (let inicio = 0; ; inicio += 500) {
+    const { data, error: errorEntregas } = await admin
+      .from('gestiones_entrega')
+      .select('id, operacion_id, estado_entrega_id, codigo_gestion, fecha_lista_entrega, fecha_primera_distribucion, fecha_reingreso, created_at')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(inicio, inicio + 499)
+    if (errorEntregas) throw new Error(`No se pudieron cargar las gestiones de entrega: ${errorEntregas.message}`)
+    gestionesEntregaDatos.push(...(data ?? []))
+    if ((data ?? []).length < 500) break
+  }
+  const { data: estadosEntregaDatos, error: errorEstadosEntrega } = await admin
+    .from('estados_entrega')
+    .select('id, codigo, nombre')
+  if (errorEstadosEntrega) throw new Error(`No se pudieron cargar los estados logísticos: ${errorEstadosEntrega.message}`)
+  const estadosEntregaPorId = new Map((estadosEntregaDatos ?? []).map((e: any) => [Number(e.id), e]))
+  const entregaPorOperacion = new Map<string, any>()
+  for (const entrega of gestionesEntregaDatos) {
+    const id = String(entrega.operacion_id ?? '')
+    if (id && !entregaPorOperacion.has(id)) {
+      entregaPorOperacion.set(id, {
+        ...entrega,
+        estado: estadosEntregaPorId.get(Number(entrega.estado_entrega_id)) ?? null,
+      })
+    }
+  }
+
   const operacionesCompletas = operaciones.map((operacion: any) => {
     const gestionPorta =
       gestionPortaPorOperacion.get(operacion.id_operacion) ?? null
@@ -869,6 +952,7 @@ export default async function GestionVentasPage({
         gestionBafPorOperacion.get(operacion.id_operacion) ?? null,
       gestion_porta: gestionPorta,
       productos_nuevos: productosNuevos,
+      entrega_logistica: entregaPorOperacion.get(String(operacion.id_operacion)) ?? null,
       tratada: tratadaNueva || tratadaHistorica,
     }
   })
@@ -948,12 +1032,6 @@ export default async function GestionVentasPage({
   }
 
   const nombreBboo = (operacion: any) => nombresBboo(operacion).join(' | ')
-
-  const nombresAsignacionVista = (operacion: any) =>
-    esBboo ? nombresBboo(operacion) : nombresResponsables(operacion)
-
-  const nombreAsignacionVista = (operacion: any) =>
-    esBboo ? nombreBboo(operacion) : nombreResponsable(operacion)
 
   const fechaUltimaGestion = (operacion: any) => {
     if (Array.isArray(operacion.productos_nuevos) && operacion.productos_nuevos.length > 0) {
@@ -1063,7 +1141,7 @@ export default async function GestionVentasPage({
 
   const responsables = Array.from(
     new Set([
-      ...operacionesCompletas.flatMap((o: any) => nombresAsignacionVista(o)),
+      ...operacionesCompletas.flatMap((o: any) => nombresResponsables(o)),
       ...consultasCompletas
         .map((c: any) => String(c.responsable ?? '').trim())
         .filter((nombre: string) => nombre && nombre !== 'Sin asignar'),
@@ -1159,7 +1237,50 @@ export default async function GestionVentasPage({
     }).format(fecha)
   }
 
+  const movilesGestionados = (operacion: any): any[] =>
+    (Array.isArray(operacion.productos_nuevos) ? operacion.productos_nuevos : [])
+      .filter((p: any) => ['PORTA', 'LINEA_NUEVA'].includes(String(p.tipo_producto)))
+
+  const datoLogistico = (operacion: any, campo: string): string => {
+    const moviles = movilesGestionados(operacion)
+    const entrega = operacion.entrega_logistica
+    const valores = (obtener: (p: any) => unknown) =>
+      Array.from(new Set(moviles.map(obtener).filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '').map(String))).join(' | ')
+    switch (campo) {
+      case 'legajo_enviado':
+        return moviles.length ? (moviles.every((p: any) => p.gestion?.legajo_enviado === true) ? 'Sí' : moviles.some((p: any) => p.gestion?.legajo_enviado === true) ? 'Parcial' : 'No') : ''
+      case 'fecha_legajo_enviado':
+        return valores((p) => p.gestion?.fecha_legajo_enviado)
+      case 'estado_logistico':
+        return String(entrega?.estado?.codigo ?? '')
+      case 'codigo_gestion_entrega':
+        return String(entrega?.codigo_gestion ?? '')
+      case 'fecha_lista_entrega':
+        return String(entrega?.fecha_lista_entrega ?? '')
+      case 'fecha_primera_distribucion':
+        return String(entrega?.fecha_primera_distribucion ?? '')
+      case 'fecha_reingreso':
+        return String(entrega?.fecha_reingreso ?? '')
+      default:
+        return ''
+    }
+  }
+  const camposLogistica = new Set([
+    'legajo_enviado', 'fecha_legajo_enviado', 'estado_logistico',
+    'codigo_gestion_entrega', 'fecha_lista_entrega',
+    'fecha_primera_distribucion', 'fecha_reingreso',
+  ])
+  const camposFechaLogistica = new Set([
+    'fecha_legajo_enviado', 'fecha_lista_entrega',
+    'fecha_primera_distribucion', 'fecha_reingreso',
+  ])
+
   const valorCampoAvanzado = (operacion: any, campo: string) => {
+    if (camposLogistica.has(campo)) {
+      const dato = datoLogistico(operacion, campo)
+      return camposFechaLogistica.has(campo) ? fechaSoloDiaArgentina(dato || null) : dato
+    }
+
     if (operacion.clase === 'CONSULTA') {
       switch (campo) {
         case 'registro':
@@ -1212,12 +1333,16 @@ export default async function GestionVentasPage({
       case 'vendedor':
         return String(operacion.vendedor ?? '')
       case 'responsable': {
-        const nombre = nombreAsignacionVista(operacion)
+        const nombre = nombreResponsable(operacion)
         if (nombre === 'Sin responsable' || nombre === 'Sin BBOO asignado' || nombre === '-') return ''
         return nombre
       }
+      case 'bboo':
+        return nombreBboo(operacion).replace(/^Sin BBOO asignado$|^-$/, '')
       case 'medio_despacho':
-        return gestionPorta?.medio_despacho_chip_id
+        return movilesGestionados(operacion).length
+          ? Array.from(new Set(movilesGestionados(operacion).map((p: any) => p.gestion?.medio_despacho_chip_id ? medioDespachoPorId.get(p.gestion.medio_despacho_chip_id) : '').filter(Boolean))).join(' | ')
+          : gestionPorta?.medio_despacho_chip_id
           ? String(medioDespachoPorId.get(gestionPorta.medio_despacho_chip_id) ?? '')
           : ''
       case 'tipo_sim':
@@ -1257,7 +1382,7 @@ export default async function GestionVentasPage({
     if (filtro.condicion === 'vacio') return actual === ''
     if (filtro.condicion === 'no_vacio') return actual !== ''
 
-    if (['fecha_carga_stl', 'fecha_porta'].includes(filtro.campo)) {
+    if (['fecha_carga_stl', 'fecha_porta', ...camposFechaLogistica].includes(filtro.campo)) {
       if (!actual || !esperado) return false
       if (filtro.condicion === 'es') return actual === esperado
       if (filtro.condicion === 'antes') return actual < esperado
@@ -1321,6 +1446,11 @@ export default async function GestionVentasPage({
   }
 
   const valorColumna = (operacion: any, campo: string) => {
+    if (camposLogistica.has(campo)) {
+      const dato = datoLogistico(operacion, campo)
+      return dato || '-'
+    }
+
     if (operacion.clase === 'CONSULTA') {
       switch (campo) {
         case 'fecha_ingreso':
@@ -1380,7 +1510,7 @@ export default async function GestionVentasPage({
       switch (campo) {
         case 'tipo': return tipoVisible(operacion)
         case 'servicios': return tipoVisible(operacion)
-        case 'responsable': return nombreAsignacionVista(operacion)
+        case 'responsable': return nombreResponsable(operacion)
         case 'numero_linea': return valoresMoviles((p) => p.detalle?.numero_linea)
         case 'compania_actual': return valoresMoviles((p) => p.detalle?.compania_actual)
         case 'tipo_sim': return valoresMoviles((p) => p.detalle?.tipo_sim === 'ESIM' ? 'eSIM' : p.detalle?.tipo_sim)
@@ -1415,7 +1545,7 @@ export default async function GestionVentasPage({
       case 'vendedor':
         return operacion.vendedor || '-'
       case 'responsable':
-        return nombreAsignacionVista(operacion)
+        return nombreResponsable(operacion)
       case 'cliente':
         return nombreCliente(cliente)
       case 'dni':
@@ -1485,7 +1615,7 @@ export default async function GestionVentasPage({
       return <FechaDosLineas fecha={valor ? String(valor) : null} />
     }
 
-    if (['fecha_carga_stl', 'fecha_porta', 'fecha_instalacion'].includes(campo)) {
+    if (['fecha_carga_stl', 'fecha_porta', 'fecha_instalacion', ...camposFechaLogistica].includes(campo)) {
       return <span>{fechaSoloArgentinaVisual(valor ? String(valor) : null)}</span>
     }
 
@@ -1555,7 +1685,7 @@ export default async function GestionVentasPage({
       if (esConsulta) {
         if (String(registro.responsable ?? '') !== filtroResponsable) return false
       } else {
-        if (!nombresAsignacionVista(registro).includes(filtroResponsable)) {
+        if (!nombresResponsables(registro).includes(filtroResponsable)) {
           return false
         }
       }
@@ -1806,6 +1936,7 @@ export default async function GestionVentasPage({
             estados={estados}
             vendedores={vendedores}
             responsables={responsables}
+            bbooAsignados={Array.from(new Set(operacionesCompletas.flatMap((o: any) => nombresBboo(o)))).sort((a, b) => a.localeCompare(b, 'es'))}
             mediosDespacho={mediosDespacho.map((m: any) => String(m.nombre ?? '')).filter(Boolean)}
             companias={companias}
             tiposConsulta={(tiposConsultaResultado.data ?? [])

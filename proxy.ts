@@ -8,9 +8,18 @@ const RUTAS_PUBLICAS = [
 ]
 
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({
-    request,
-  })
+  const pathname = request.nextUrl.pathname
+
+  // Evitar consultas a Supabase en rutas públicas.
+  if (
+    RUTAS_PUBLICAS.some(
+      (ruta) => pathname === ruta || pathname.startsWith(`${ruta}/`)
+    )
+  ) {
+    return NextResponse.next({ request })
+  }
+
+  let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,9 +34,7 @@ export async function proxy(request: NextRequest) {
             request.cookies.set(name, value)
           })
 
-          response = NextResponse.next({
-            request,
-          })
+          response = NextResponse.next({ request })
 
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options)
@@ -47,19 +54,11 @@ export async function proxy(request: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('rol, activo, debe_cambiar_password')
+    .select('rol, activo')
     .eq('id', user.id)
     .single()
 
   if (!profile || !profile.activo) {
-    return response
-  }
-
-  const pathname = request.nextUrl.pathname
-
-  if (RUTAS_PUBLICAS.some(
-    (ruta) => pathname === ruta || pathname.startsWith(`${ruta}/`)
-  )) {
     return response
   }
 
@@ -74,7 +73,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (!['CADETERIA', 'TERRENO'].includes(profile.rol) && esRutaCadeteria) {
+  if (
+    !['CADETERIA', 'TERRENO'].includes(profile.rol) &&
+    esRutaCadeteria
+  ) {
     const url = request.nextUrl.clone()
     url.pathname = '/ventas'
     return NextResponse.redirect(url)

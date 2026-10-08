@@ -14,6 +14,7 @@ type Props = {
   estados: string[]
   vendedores: string[]
   responsables: string[]
+  bbooAsignados?: string[]
   mediosDespacho: string[]
   companias: string[]
   tiposConsulta?: string[]
@@ -26,6 +27,7 @@ const CAMPOS = [
   ['tipo', 'Tipo'],
   ['vendedor', 'Vendedor'],
   ['responsable', 'Responsable'],
+  ['bboo', 'BBOO asignado'],
   ['domicilio', 'Domicilio'],
   ['localidad', 'Localidad'],
   ['operacion_vinculada', 'Operación vinculada'],
@@ -39,6 +41,13 @@ const CAMPOS = [
   ['sim_operativo', 'SIM operativo'],
   ['numero_seguimiento', 'Número de seguimiento'],
   ['documentacion_dni', 'Documentación DNI'],
+  ['legajo_enviado', 'Legajo Enviado'],
+  ['fecha_legajo_enviado', 'Fecha Legajo Enviado'],
+  ['estado_logistico', 'Estado logístico'],
+  ['codigo_gestion_entrega', 'Código gestión de entrega'],
+  ['fecha_lista_entrega', 'Fecha lista para entrega'],
+  ['fecha_primera_distribucion', 'Fecha primera distribución'],
+  ['fecha_reingreso', 'Fecha reingreso'],
 ] as const
 
 const vacio: Filtro = {
@@ -50,6 +59,8 @@ const vacio: Filtro = {
 }
 
 function condiciones(campo: string) {
+  if (campo === 'legajo_enviado') return [['es', 'es'], ['no_es', 'no es']]
+
   if (campo === 'documentacion_dni') {
     return [
       ['es', 'es'],
@@ -57,7 +68,7 @@ function condiciones(campo: string) {
     ]
   }
 
-  if (['fecha_carga_stl', 'fecha_porta'].includes(campo)) {
+  if (['fecha_carga_stl', 'fecha_porta', 'fecha_legajo_enviado', 'fecha_lista_entrega', 'fecha_primera_distribucion', 'fecha_reingreso'].includes(campo)) {
     return [
       ['es', 'es'],
       ['antes', 'antes de'],
@@ -78,6 +89,7 @@ function condiciones(campo: string) {
   if (
     [
       'numero_seguimiento',
+      'codigo_gestion_entrega',
       'domicilio',
       'localidad',
       'operacion_vinculada',
@@ -114,6 +126,7 @@ export default function FiltrosAvanzadosVentas({
   estados,
   vendedores,
   responsables,
+  bbooAsignados = [],
   mediosDespacho,
   companias,
   tiposConsulta = [],
@@ -137,10 +150,13 @@ export default function FiltrosAvanzadosVentas({
     if (campo === 'tipo') return ['BAF', 'PORTA', 'LN', ...tiposConsulta]
     if (campo === 'vendedor') return vendedores
     if (campo === 'responsable') return responsables.filter((v) => v !== 'Sin responsable')
+    if (campo === 'bboo') return bbooAsignados.filter((v) => v !== 'Sin BBOO asignado' && v !== '-')
     if (campo === 'medio_despacho') return mediosDespacho
     if (campo === 'tipo_sim') return ['eSIM', 'SIMCARD']
     if (campo === 'compania_actual') return companias
     if (campo === 'documentacion_dni') return ['DNI OK', 'DNI INCOMPLETO']
+    if (campo === 'legajo_enviado') return ['Sí', 'Parcial', 'No']
+    if (campo === 'estado_logistico') return ['EN_PREPARACION', 'LISTA_PARA_ENTREGA', 'EN_DISTRIBUCION', 'REINGRESO_PENDIENTE', 'REINGRESADO', 'ENTREGADO', 'NO_ENTREGADO']
     return []
   }
 
@@ -158,7 +174,7 @@ export default function FiltrosAvanzadosVentas({
       <div className="space-y-2">
         {filtros.map((filtro, indice) => {
           const requiereValor = !['vacio', 'no_vacio'].includes(filtro.condicion)
-          const esFecha = ['fecha_carga_stl', 'fecha_porta'].includes(filtro.campo)
+          const esFecha = ['fecha_carga_stl', 'fecha_porta', 'fecha_legajo_enviado', 'fecha_lista_entrega', 'fecha_primera_distribucion', 'fecha_reingreso'].includes(filtro.campo)
           const opciones = opcionesValor(filtro.campo)
 
           return (
@@ -243,6 +259,7 @@ export default function FiltrosAvanzadosVentas({
                     </>
                   ) : [
                     'numero_seguimiento',
+                    'codigo_gestion_entrega',
                     'domicilio',
                     'localidad',
                     'operacion_vinculada',
