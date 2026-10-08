@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '../../../utils/supabase/server'
 import { createAdminClient } from '../../../utils/supabase/admin'
 import ImprimirAhora from '../../../components/ImprimirAhora'
+import QRCode from 'qrcode'
 
 export default async function ImprimirLogistica({ searchParams }: { searchParams: Promise<{ ids?: string }> }) {
   const supabase = await createClient()
@@ -39,6 +40,8 @@ export default async function ImprimirLogistica({ searchParams }: { searchParams
   const uno = (valor: any) => Array.isArray(valor) ? valor[0] : valor
   const mostrar = (valor: unknown) => String(valor ?? '').trim() || '—'
 
+  const qrPorId = new Map<number, string>(await Promise.all(ids.map(async id => [id, await QRCode.toDataURL(`https://cotizador-lucom-psi.vercel.app/logistica/entrega/${id}`, { width: 260, margin: 2, errorCorrectionLevel: 'M' })] as const)))
+
   return <main className="mx-auto max-w-4xl bg-white p-6 text-gray-950 print:max-w-none print:p-0">
     <ImprimirAhora />
     <p className="mb-4 text-xs text-gray-500 print:hidden">Cada hoja corresponde a una entrega. La solicitud de impresión ya fue registrada en PGL.</p>
@@ -52,7 +55,7 @@ export default async function ImprimirLogistica({ searchParams }: { searchParams
       return <article key={id} className="mb-8 min-h-[245mm] break-after-page border border-gray-300 p-8 print:mb-0 print:border-0 print:p-6">
         <div className="flex items-start justify-between border-b-2 border-gray-900 pb-4">
           <div><h1 className="text-2xl font-bold">HOJA DE ENVÍO</h1><p className="text-sm">Grupo Lucom · Logística</p></div>
-          <div className="text-right text-sm"><strong>{mostrar(gestion.codigo_gestion)}</strong><div>Operación: {mostrar(gestion.operacion_id)}</div><div>{mostrar(medios.get(Number(gestion.medio_despacho_chip_id)))}</div></div>
+          <div className="flex items-center gap-4"><div className="text-right text-sm"><strong>{mostrar(gestion.codigo_gestion)}</strong><div>Operación: {mostrar(gestion.operacion_id)}</div><div>{mostrar(medios.get(Number(gestion.medio_despacho_chip_id)))}</div></div><div className="text-center"><img src={qrPorId.get(id)} alt={`QR de la gestión ${id}`} width={105} height={105} className="mx-auto" /><div className="text-[10px]">Escanear entrega #{id}</div></div></div>
         </div>
         <section className="mt-6 space-y-2"><h2 className="font-bold uppercase">Destinatario</h2>
           <p><strong>Nombre:</strong> {mostrar([cliente?.apellido, cliente?.nombre].filter(Boolean).join(', '))}</p>
