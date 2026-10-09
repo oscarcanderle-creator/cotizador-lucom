@@ -5,6 +5,15 @@ import { createClient } from '../../../utils/supabase/server'
 import { createAdminClient } from '../../../utils/supabase/admin'
 import AppHeader from '../../../components/AppHeader'
 
+function normalizarDniVendedor(valor: FormDataEntryValue | null): string | null {
+  const dni = String(valor ?? '').trim()
+  if (!dni) return null
+  if (!/^[0-9]{7,8}$/.test(dni)) {
+    throw new Error('El DNI del vendedor debe contener 7 u 8 dígitos, sin puntos ni espacios.')
+  }
+  return dni
+}
+
 type RolUsuario = 'ADMIN' | 'SUPERVISOR' | 'VENDEDOR' | 'TERRENO' | 'BBOO' | 'CADETERIA'
 
 async function validarAdmin() {
@@ -69,7 +78,7 @@ export default async function AdminUsuariosPage() {
   } = await supabase
     .from('profiles')
     .select(
-      'id, nombre, vendedor, rol, activo, puede_gestionar_ventas, debe_cambiar_password, created_at'
+      'id, nombre, vendedor, dni_vendedor, rol, activo, puede_gestionar_ventas, debe_cambiar_password, created_at'
     )
     .order('nombre')
 
@@ -166,6 +175,8 @@ export default async function AdminUsuariosPage() {
         String(formData.get('rol') ?? '')
       )
 
+    const dniVendedor = normalizarDniVendedor(formData.get('dni_vendedor'))
+
     const esCadeteria = rol === 'CADETERIA'
     const vendedorEfectivo = esCadeteria ? null : vendedor
     const puedeGestionarVentas =
@@ -174,7 +185,7 @@ export default async function AdminUsuariosPage() {
 
     if (
       !nombre ||
-      (!esCadeteria && !vendedor) ||
+      ((rol === 'VENDEDOR' || rol === 'TERRENO') && !vendedor) ||
       !email ||
       !password
     ) {
@@ -224,6 +235,7 @@ export default async function AdminUsuariosPage() {
           id: nuevoUsuario.user.id,
           nombre,
           vendedor: vendedorEfectivo,
+          dni_vendedor: dniVendedor,
           rol,
           activo: true,
           puede_gestionar_ventas: puedeGestionarVentas,
@@ -285,6 +297,8 @@ export default async function AdminUsuariosPage() {
     const activo =
       formData.get('activo') === 'on'
 
+    const dniVendedor = normalizarDniVendedor(formData.get('dni_vendedor'))
+
     const esCadeteria = rol === 'CADETERIA'
     const vendedorEfectivo = esCadeteria ? null : vendedor
     const puedeGestionarVentas =
@@ -294,7 +308,7 @@ export default async function AdminUsuariosPage() {
     if (
       !id ||
       !email ||
-      (!esCadeteria && !vendedor)
+      ((rol === 'VENDEDOR' || rol === 'TERRENO') && !vendedor)
     ) {
       throw new Error(
         esCadeteria
@@ -382,6 +396,7 @@ export default async function AdminUsuariosPage() {
         .update({
           nombre,
           vendedor: vendedorEfectivo,
+          dni_vendedor: dniVendedor,
           rol,
           activo,
           puede_gestionar_ventas: puedeGestionarVentas,
@@ -674,6 +689,21 @@ export default async function AdminUsuariosPage() {
 
             <div>
               <label className="block text-xs text-gray-500 mb-1">
+                DNI vendedor (opcional)
+              </label>
+              <input
+                type="text"
+                name="dni_vendedor"
+                inputMode="numeric"
+                pattern="[0-9]{7,8}"
+                maxLength={8}
+                placeholder="7 u 8 dígitos"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
                 Email
               </label>
 
@@ -810,7 +840,7 @@ export default async function AdminUsuariosPage() {
                   {/* EDITAR / ACTIVAR */}
                   <form
                     action={actualizarUsuario}
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1.4fr_1.4fr_160px_auto_auto_auto] gap-3 lg:items-end"
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:items-end"
                   >
                     <input
                       type="hidden"
@@ -858,6 +888,22 @@ export default async function AdminUsuariosPage() {
                         defaultValue={
                           usuario.vendedor ?? ''
                         }
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">
+                        DNI vendedor
+                      </label>
+                      <input
+                        type="text"
+                        name="dni_vendedor"
+                        inputMode="numeric"
+                        pattern="[0-9]{7,8}"
+                        maxLength={8}
+                        defaultValue={usuario.dni_vendedor ?? ''}
+                        placeholder="7 u 8 dígitos"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900"
                       />
                     </div>
