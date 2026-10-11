@@ -5,12 +5,21 @@ import { ChangeEvent, DragEvent, useRef, useState } from 'react'
 
 type TipoReporte =
   | 'ITEC'
+  | 'ITEC_FIJA'
   | 'FIJA'
   | 'WFM'
   | 'ACTIVACIONES'
   | 'CATER'
 
+type PendienteItecFija = { fila: number; sds: string; ot?: string; motivos: string[] }
+
 type ResultadoValidacion = {
+  nuevas?: number
+  existentes?: number
+  duplicados_archivo?: number
+  preventas_omitidas?: number
+  cantidad_pendientes?: number
+  pendientes?: PendienteItecFija[]
   ok: boolean
   tipo: string
   reporte: string
@@ -36,6 +45,12 @@ type ResultadoValidacion = {
 }
 
 type ResultadoImportacion = {
+  nuevas?: number
+  existentes?: number
+  duplicados_archivo?: number
+  preventas_omitidas?: number
+  cantidad_pendientes?: number
+  pendientes?: PendienteItecFija[]
   ok: boolean
   importacion_id: number
   encontrados: number
@@ -58,6 +73,11 @@ const REPORTES: {
     value: 'ITEC',
     label: 'ITEC',
     descripcion: 'Padrón de PSR, teléfonos, POS, tipo de PSR y Caminante.',
+  },
+  {
+    value: 'ITEC_FIJA',
+    label: 'ITEC FIJA - Ventas BAF',
+    descripcion: 'Importación de ventas BAF desde ITEC FIJA con validación y control de SDS.',
   },
   {
     value: 'FIJA',
@@ -151,7 +171,7 @@ export default function ImportarReportesClient() {
       formData.append('tipo', tipoReporte)
       formData.append('archivo', archivo)
 
-      const response = await fetch('/api/reportes/importar/validar', {
+      const response = await fetch(tipoReporte === 'ITEC_FIJA' ? '/api/reportes/importar/itec-fija/validar' : '/api/reportes/importar/validar', {
         method: 'POST',
         body: formData,
       })
@@ -185,7 +205,7 @@ export default function ImportarReportesClient() {
       formData.append('tipo', tipoReporte)
       formData.append('archivo', archivo)
 
-      const response = await fetch('/api/reportes/importar/confirmar', {
+      const response = await fetch(tipoReporte === 'ITEC_FIJA' ? '/api/reportes/importar/itec-fija/confirmar' : '/api/reportes/importar/confirmar', {
         method: 'POST',
         body: formData,
       })
@@ -206,6 +226,28 @@ export default function ImportarReportesClient() {
     } finally {
       setProcesando(false)
     }
+  }
+
+  function descargarPendientesItecFija(etapa: 'validacion' | 'importacion' = 'validacion') {
+    const pendientes = etapa === 'importacion'
+      ? (resultadoImportacion?.pendientes ?? [])
+      : (resultado?.pendientes ?? [])
+    if (!pendientes.length) return
+    const escapar = (valor: unknown) => `"${String(valor ?? '').replace(/"/g, '""')}"`
+    const filas = [
+      ['Fila CSV', 'SDS', 'OT', 'Motivos'],
+      ...pendientes.map(p => [String(p.fila), p.sds, p.ot ?? '', p.motivos.join(' | ')])
+    ]
+    const csv = '\uFEFF' + filas.map(f => f.map(escapar).join(';')).join('\r\n')
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8'})
+    const url = URL.createObjectURL(blob)
+    const enlace = document.createElement('a')
+    enlace.href = url
+    enlace.download = `ITEC_FIJA_pendientes_${etapa}_${new Date().toISOString().slice(0,10)}.csv`
+    document.body.appendChild(enlace)
+    enlace.click()
+    enlace.remove()
+    URL.revokeObjectURL(url)
   }
 
   function descargarDuplicadosItec() {
@@ -452,10 +494,66 @@ export default function ImportarReportesClient() {
                   Descartados
                 </div>
                 <div className="mt-1 text-xl font-bold text-gray-900">
-                  {resultado.registros_descartados}
+                  {tipoReporte === 'ITEC_FIJA'
+                    ? ((resultado.duplicados_archivo ?? 0) + (resultado.cantidad_pendientes ?? 0))
+                    : resultado.registros_descartados}
                 </div>
               </div>
             </div>
+
+            {resultado.tipo === 'ITEC_FIJA' && (
+              <div className="mt-5 rounded-lg border border-gray-200 bg-white p-4">
+                <h3 className="text-base font-bold text-gray-900">Detalle de validación ITEC FIJA</h3>
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    ['Nuevas', resultado.nuevas ?? 0],
+                    ['Existentes', resultado.existentes ?? 0],
+                    ['Duplicadas en CSV', resultado.duplicados_archivo ?? 0],
+                     ['Preventas omitidas', resultado.preventas_omitidas ?? 0],
+                    ['Pendientes', resultado.cantidad_pendientes ?? 0],
+                  ].map(([titulo, valor]) => (
+                    <div key={titulo} className="rounded-lg border border-gray-200 p-3">
+                      <div className="text-xs font-semibold text-gray-500">{titulo}</div>
+                      <div className="mt-1 text-xl font-bold text-gray-900">{valor}</div>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-sm text-gray-600">
+                  Las ventas existentes se omiten para evitar duplicados por SDS.
+                  Las pendientes requieren revisión antes de importarse.
+                </p>
+                {(resultado.pendientes?.length ?? 0) > 0 && (
+                  <>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="font-semibold text-gray-900">Registros pendientes y motivos</h4>
+                       <button type="button" onClick={() => descargarPendientesItecFija('validacion')}
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50">
+                        Descargar pendientes CSV
+                      </button>
+                    </div>
+                    <div className="mt-3 overflow-x-auto rounded-lg border border-gray-200">
+                      <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
+                        <thead className="bg-gray-50 text-gray-700">
+                          <tr><th className="px-3 py-2">Fila CSV</th><th className="px-3 py-2">SDS</th><th className="px-3 py-2">Motivo</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {(resultado.pendientes ?? []).map((pendiente, indice) => (
+                            <tr key={`${pendiente.fila}-${indice}`}>
+                              <td className="px-3 py-2">{pendiente.fila}</td>
+                              <td className="px-3 py-2 font-mono">{pendiente.sds || '—'}</td>
+                              <td className="px-3 py-2">{pendiente.motivos.join(' · ')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+                <p className="mt-4 text-sm font-semibold text-amber-800">
+                  Confirmá únicamente después de verificar el detalle de validación.
+                </p>
+              </div>
+            )}
 
             {resultado.tipo === 'ITEC' &&
             (resultado.duplicados_itec?.length ?? 0) > 0 && (
@@ -526,13 +624,76 @@ export default function ImportarReportesClient() {
 
               <div className="rounded-lg bg-white p-3">
                 <div className="text-xs font-semibold uppercase text-gray-500">
-                  Descartados
+                  {tipoReporte === 'ITEC_FIJA' ? 'No importadas' : 'Descartados'}
                 </div>
                 <div className="mt-1 text-xl font-bold text-gray-900">
-                  {resultadoImportacion.descartados}
+                  {tipoReporte === 'ITEC_FIJA'
+                    ? (resultadoImportacion.cantidad_pendientes ?? resultadoImportacion.pendientes?.length ?? 0)
+                    : resultadoImportacion.descartados}
                 </div>
               </div>
             </div>
+
+            {(tipoReporte === 'ITEC_FIJA' || resultadoImportacion.reporte?.toUpperCase().includes('ITEC FIJA')) && (
+              <div className="mt-5 rounded-lg border border-amber-200 bg-white p-4">
+                <h3 className="text-base font-bold text-gray-900">Resultado final ITEC FIJA</h3>
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {([
+                    ['Creadas', resultadoImportacion.nuevas ?? resultadoImportacion.insertados],
+                    ['Existentes', resultadoImportacion.existentes ?? resultadoImportacion.sin_cambios],
+                    ['Duplicadas en CSV', resultadoImportacion.duplicados_archivo ?? 0],
+                     ['Preventas omitidas', resultadoImportacion.preventas_omitidas ?? 0],
+                    ['No importadas', resultadoImportacion.cantidad_pendientes ?? resultadoImportacion.pendientes?.length ?? 0],
+                  ] as const).map(([titulo, valor]) => (
+                    <div key={titulo} className="rounded-lg border border-gray-200 p-3">
+                      <div className="text-xs font-semibold text-gray-500">{titulo}</div>
+                      <div className="mt-1 text-xl font-bold text-gray-900">{valor}</div>
+                    </div>
+                  ))}
+                </div>
+                {(resultadoImportacion.pendientes?.length ?? 0) > 0 ? (
+                  <div className="mt-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h4 className="text-sm font-bold text-amber-900">
+                        Ventas no importadas ({resultadoImportacion.pendientes?.length})
+                      </h4>
+                      <button type="button" onClick={() => descargarPendientesItecFija('importacion')}
+                        className="rounded-lg border border-amber-400 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-50">
+                        Descargar no importadas CSV
+                      </button>
+                    </div>
+                    <p className="mt-2 text-sm text-gray-600">
+                      Estos son los errores reales de la importación. Las ventas existentes no se consideran errores.
+                    </p>
+                    <div className="mt-3 overflow-x-auto rounded-lg border border-gray-200">
+                      <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
+                        <thead className="bg-gray-50 text-gray-700">
+                          <tr><th className="px-3 py-2">Fila CSV</th><th className="px-3 py-2">SDS</th><th className="px-3 py-2">OT</th><th className="px-3 py-2">Motivo</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {resultadoImportacion.pendientes?.map((pendiente, indice) => (
+                            <tr key={`${pendiente.fila}-${indice}`}>
+                              <td className="px-3 py-2">{pendiente.fila}</td>
+                              <td className="px-3 py-2 font-mono">{pendiente.sds || '—'}</td>
+                              <td className="px-3 py-2 font-mono">{pendiente.ot || '—'}</td>
+                              <td className="px-3 py-2">{pendiente.motivos.join(' · ')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (resultadoImportacion.cantidad_pendientes ?? 0) > 0 ? (
+                  <p className="mt-4 text-sm font-semibold text-amber-800">
+                    Hay ventas no importadas, pero el servidor no devolvió el detalle de las filas. Revisá la respuesta del endpoint de confirmación.
+                  </p>
+                ) : (
+                  <p className="mt-4 text-sm font-semibold text-green-800">
+                    No hubo ventas pendientes de importación.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="mt-4 text-sm font-semibold text-green-900">
               {resultadoImportacion.mensaje}
