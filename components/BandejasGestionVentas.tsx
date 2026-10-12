@@ -17,6 +17,8 @@ type FiltrosGuardados = {
   vendedor?: string
   responsable?: string
   estado?: string
+  dni?: string
+  telefono?: string
   avanzados?: FiltroAvanzado[]
 }
 
@@ -42,6 +44,8 @@ function hrefBandeja(bandeja: Bandeja) {
   if (filtros.vendedor) params.set('vendedor', filtros.vendedor)
   if (filtros.responsable) params.set('responsable', filtros.responsable)
   if (filtros.estado) params.set('estado', filtros.estado)
+  if (filtros.dni) params.set('dni', filtros.dni)
+  if (filtros.telefono) params.set('telefono', filtros.telefono)
 
   const avanzados = Array.isArray(filtros.avanzados)
     ? filtros.avanzados.slice(0, 4)

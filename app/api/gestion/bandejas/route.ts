@@ -76,6 +76,8 @@ export async function POST(request: Request) {
     String(filtros.vendedor ?? '').trim() ||
     String(filtros.responsable ?? '').trim() ||
     String(filtros.estado ?? '').trim() ||
+    String(filtros.dni ?? '').trim() ||
+    String(filtros.telefono ?? '').trim() ||
     (Array.isArray(filtros.avanzados) && filtros.avanzados.length > 0)
   )
 

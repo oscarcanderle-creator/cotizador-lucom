@@ -27,6 +27,8 @@ const CAMPOS = [
   ['tipo', 'Tipo'],
   ['vendedor', 'Vendedor'],
   ['responsable', 'Responsable'],
+  ['dni', 'DNI'],
+  ['telefono', 'Teléfono'],
   ['bboo', 'BBOO asignado'],
   ['domicilio', 'Domicilio'],
   ['localidad', 'Localidad'],
@@ -88,6 +90,8 @@ function condiciones(campo: string) {
 
   if (
     [
+      'dni',
+      'telefono',
       'numero_seguimiento',
       'codigo_gestion_entrega',
       'domicilio',
@@ -258,6 +262,8 @@ export default function FiltrosAvanzadosVentas({
                       )}
                     </>
                   ) : [
+                    'dni',
+                    'telefono',
                     'numero_seguimiento',
                     'codigo_gestion_entrega',
                     'domicilio',
@@ -271,7 +277,11 @@ export default function FiltrosAvanzadosVentas({
                       value={filtro.valor}
                       onChange={(e) => cambiar(indice, { valor: e.target.value })}
                       placeholder={
-                        filtro.campo === 'numero_seguimiento'
+                        filtro.campo === 'dni'
+                          ? 'DNI...'
+                          : filtro.campo === 'telefono'
+                            ? 'Teléfono...'
+                            : filtro.campo === 'numero_seguimiento'
                           ? 'Número de seguimiento...'
                           : filtro.campo === 'domicilio'
                             ? 'Domicilio...'

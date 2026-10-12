@@ -8,6 +8,9 @@ import ExportarVentas from '../../components/ExportarVentas'
 
 type SearchParams = Promise<{
   q?: string
+
+  dni?: string
+  telefono?: string
   registro?: string
   tipo?: string
   vendedor?: string
@@ -318,6 +321,8 @@ export default async function GestionVentasPage({
   const filtroTipo = String(params?.tipo ?? '').trim().toUpperCase()
   const filtroVendedor = String(params?.vendedor ?? '').trim()
   const filtroResponsable = String(params?.responsable ?? '').trim()
+  const filtroDni = String(params?.dni ?? '').trim()
+  const filtroTelefono = String(params?.telefono ?? '').trim()
   const filtroEstado = String(params?.estado ?? '').trim()
   const bandejaActiva = String(params?.bandeja ?? '').trim()
 
@@ -1249,6 +1254,8 @@ export default async function GestionVentasPage({
     filtroVendedor ||
     filtroResponsable ||
     filtroEstado ||
+    filtroDni ||
+    filtroTelefono ||
     bandejaActiva ||
     filtrosAvanzados.length > 0
   )
@@ -1259,6 +1266,8 @@ export default async function GestionVentasPage({
     vendedor: filtroVendedor,
     responsable: filtroResponsable,
     estado: filtroEstado,
+    dni: filtroDni,
+    telefono: filtroTelefono,
     avanzados: filtrosAvanzados,
   }
 
@@ -1268,6 +1277,8 @@ export default async function GestionVentasPage({
     filtroVendedor ||
     filtroResponsable ||
     filtroEstado ||
+    filtroDni ||
+    filtroTelefono ||
     filtrosAvanzados.length > 0
   )
 
@@ -1323,6 +1334,11 @@ export default async function GestionVentasPage({
   ])
 
   const valorCampoAvanzado = (operacion: any, campo: string) => {
+    if (campo === 'dni' || campo === 'telefono') {
+      const valor = String(valorColumna(operacion, campo) ?? '').trim()
+      return valor === '-' ? '' : valor
+    }
+
     if (camposLogistica.has(campo)) {
       const dato = datoLogistico(operacion, campo)
       return camposFechaLogistica.has(campo) ? fechaSoloDiaArgentina(dato || null) : dato
@@ -1746,6 +1762,14 @@ export default async function GestionVentasPage({
       }
     }
 
+    if (filtroDni || filtroTelefono) {
+      const dni = String(valorColumna(registro, 'dni') ?? '').trim()
+      const telefono = String(valorColumna(registro, 'telefono') ?? '').trim()
+      const digitos = (texto: string) => texto.replace(/\D/g, '')
+      if (filtroDni && (!digitos(filtroDni) || !digitos(dni).includes(digitos(filtroDni)))) return false
+      if (filtroTelefono && (!digitos(filtroTelefono) || !digitos(telefono).includes(digitos(filtroTelefono)))) return false
+    }
+
     if (!cumpleFiltrosAvanzados(registro)) return false
 
     if (!q) return true
@@ -1884,6 +1908,30 @@ export default async function GestionVentasPage({
               name="q"
               defaultValue={params?.q ?? ''}
               placeholder="ID, cliente, DNI, teléfono, NIM, línea, vendedor..."
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">DNI</label>
+            <input
+              type="text"
+              name="dni"
+              inputMode="numeric"
+              defaultValue={filtroDni}
+              placeholder="Buscar DNI..."
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Teléfono</label>
+            <input
+              type="text"
+              name="telefono"
+              inputMode="tel"
+              defaultValue={filtroTelefono}
+              placeholder="Buscar teléfono..."
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
             />
           </div>
