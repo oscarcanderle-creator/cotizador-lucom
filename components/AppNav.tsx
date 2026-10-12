@@ -85,7 +85,7 @@ const items = [
   { key: 'VENTAS_GRUPO', label: 'Ventas del Grupo', href: '/ventas-grupo', roles: ['VENDEDOR', 'TERRENO'] },
 
 
-  { key: 'REPORTES', label: 'Reportes', href: '/reportes', roles: ['SUPERVISOR', 'ADMIN', 'BBOO'] },
+  { key: 'REPORTES', label: 'Reportes', href: '/reportes', roles: ['VENDEDOR', 'TERRENO', 'SUPERVISOR', 'ADMIN', 'BBOO', 'CADETERIA'] },
   { key: 'LOGISTICA', label: 'Logística', href: '/logistica', roles: ['SUPERVISOR', 'ADMIN', 'BBOO'] },
   { key: 'ENTREGAS', label: 'Mis Entregas', href: '/cadeteria', roles: ['CADETERIA', 'TERRENO'] },
 
