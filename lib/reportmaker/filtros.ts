@@ -1,12 +1,9 @@
-/** Motor de filtros de ReportMaker v7. Sin dependencias de React ni Supabase. */
-export const CAMPOS_FILTRABLES = [
-  'id_operacion', 'tipo', 'negocios', 'vendedor', 'origen_dato',
-  'cliente', 'dni', 'telefono', 'estado_venta', 'estado_bboo',
-  'plan', 'sim', 'legajo_enviado',
-] as const
+/** Motor de filtros de ReportMaker. Sin dependencias de React ni Supabase. */
+import { CAMPOS_VENTAS } from './catalogo'
+export const CAMPOS_FILTRABLES = CAMPOS_VENTAS.map(c => c.id)
 
 export type CampoFiltrable = (typeof CAMPOS_FILTRABLES)[number]
-export type OperadorFiltro = 'igual' | 'contiene'
+export type OperadorFiltro = 'igual' | 'distinto' | 'contiene' | 'no_contiene' | 'comienza_con' | 'no_comienza_con' | 'termina_con' | 'vacio' | 'no_vacio' | 'uno_de' | 'no_uno_de'
 export type UnionFiltro = 'AND' | 'OR'
 export type FiltroReportMaker = {
   id: number
@@ -17,6 +14,7 @@ export type FiltroReportMaker = {
 }
 
 const CAMPOS_VALIDOS = new Set<string>(CAMPOS_FILTRABLES)
+const OPERADORES_VALIDOS = new Set<string>(['igual', 'distinto', 'contiene', 'no_contiene', 'comienza_con', 'no_comienza_con', 'termina_con', 'vacio', 'no_vacio', 'uno_de', 'no_uno_de'])
 const MAX_FILTROS = 4
 
 export function validarFiltros(entrada: unknown): FiltroReportMaker[] {
@@ -37,11 +35,15 @@ export function validarFiltros(entrada: unknown): FiltroReportMaker[] {
     if (typeof f.campo !== 'string' || !CAMPOS_VALIDOS.has(f.campo)) {
       throw new Error(`El campo del filtro ${indice + 1} no está disponible.`)
     }
-    if (f.operador !== 'igual' && f.operador !== 'contiene') {
+    if (!OPERADORES_VALIDOS.has(String(f.operador))) {
       throw new Error(`El operador del filtro ${indice + 1} no es válido.`)
     }
-    if (typeof f.valor !== 'string' || !f.valor.trim() || f.valor.length > 200) {
-      throw new Error(`Ingresá un valor válido (máximo 200 caracteres) en el filtro ${indice + 1}.`)
+    if (
+      typeof f.valor !== 'string' ||
+      f.valor.length > 4000 ||
+      (!['vacio', 'no_vacio'].includes(String(f.operador)) && !f.valor.trim())
+    ) {
+      throw new Error(`Ingresá un valor válido (máximo 4000 caracteres) en el filtro ${indice + 1}.`)
     }
     if (f.union !== 'AND' && f.union !== 'OR') {
       throw new Error(`La unión del filtro ${indice + 1} no es válida.`)
@@ -49,7 +51,7 @@ export function validarFiltros(entrada: unknown): FiltroReportMaker[] {
     return {
       id: f.id,
       campo: f.campo as CampoFiltrable,
-      operador: f.operador,
+      operador: f.operador as OperadorFiltro,
       valor: f.valor.trim(),
       union: f.union,
     }
@@ -69,7 +71,32 @@ export function cumpleFiltros(
   const evaluar = (f: FiltroReportMaker): boolean => {
     const dato = normalizar(registro[f.campo])
     const esperado = normalizar(f.valor)
-    return f.operador === 'igual' ? dato === esperado : dato.includes(esperado)
+    switch (f.operador) {
+      case 'igual':
+        return dato === esperado
+      case 'distinto':
+        return dato !== esperado
+      case 'contiene':
+        return dato.includes(esperado)
+      case 'no_contiene':
+        return !dato.includes(esperado)
+      case 'comienza_con':
+        return dato.startsWith(esperado)
+      case 'no_comienza_con':
+        return !dato.startsWith(esperado)
+      case 'termina_con':
+        return dato.endsWith(esperado)
+      case 'uno_de':
+        return esperado.split('\n').includes(dato)
+      case 'no_uno_de':
+        return !esperado.split('\n').includes(dato)
+      case 'vacio':
+        return dato === ''
+      case 'no_vacio':
+        return dato !== ''
+      default:
+        return false
+    }
   }
   let cumple = evaluar(filtros[0])
   for (let i = 1; i < filtros.length; i++) {

@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CAMPOS_VENTAS } from '../../lib/reportmaker/catalogo'
+import { CAMPOS_FILTRABLES } from '../../lib/reportmaker/filtros'
 
 type Negocio = 'INTERNET' | 'PORTABILIDAD' | 'LINEA_NUEVA'
 type Union = 'AND' | 'OR'
@@ -15,16 +16,12 @@ type RespuestaPreview = {
   error?: string
 }
 
-const CAMPOS_DISPONIBLES = new Set([
-  'id_operacion', 'fecha_ingreso', 'tipo', 'vendedor', 'origen_dato',
-  'cliente', 'dni', 'telefono', 'estado_venta', 'estado_bboo',
-  'plan', 'sim', 'legajo_enviado', 'fecha_porta', 'fecha_carga_stl',
-])
+const CAMPOS_DISPONIBLES = new Set(CAMPOS_VENTAS.map(c => c.id))
 
 type Filtro = {
   id: number
   campo: string
-  operador: 'igual' | 'contiene'
+  operador: 'igual' | 'distinto' | 'contiene' | 'no_contiene' | 'comienza_con' | 'no_comienza_con' | 'termina_con' | 'vacio' | 'no_vacio' | 'uno_de' | 'no_uno_de'
   valor: string
   union: Union
 }
@@ -35,41 +32,15 @@ const NEGOCIOS: { id: Negocio; nombre: string; descripcion: string }[] = [
   { id: 'LINEA_NUEVA', nombre: 'Línea Nueva', descripcion: 'Altas de líneas nuevas y sus variantes' },
 ]
 
-const CAMPOS_ADICIONALES = [
-  { id: 'cliente', etiqueta: 'Cliente', columna: 'cliente', tipo: 'texto' },
-  { id: 'dni', etiqueta: 'DNI', columna: 'dni', tipo: 'texto' },
-  { id: 'telefono', etiqueta: 'Teléfono', columna: 'telefono', tipo: 'texto' },
-  { id: 'estado_venta', etiqueta: 'Estado Venta', columna: 'estado_venta', tipo: 'texto' },
-  { id: 'estado_bboo', etiqueta: 'Estado BBOO', columna: 'estado_bboo', tipo: 'texto' },
-  { id: 'plan', etiqueta: 'Plan', columna: 'plan', tipo: 'texto' },
-  { id: 'sim', etiqueta: 'SIM', columna: 'sim', tipo: 'texto' },
-  { id: 'legajo_enviado', etiqueta: 'Legajo Enviado', columna: 'legajo_enviado', tipo: 'texto' },
-  { id: 'fecha_porta', etiqueta: 'Fecha Porta', columna: 'fecha_porta', tipo: 'fecha' },
-  { id: 'fecha_carga_stl', etiqueta: 'Fecha Cargado STL', columna: 'fecha_carga_stl', tipo: 'fecha' },
-] as const
-
-const CAMPOS = [
-  ...CAMPOS_VENTAS.filter(c => c.id !== 'observaciones'),
-  ...CAMPOS_ADICIONALES,
-]
+const CAMPOS = CAMPOS_VENTAS
 
 const CATEGORIAS = [
-  {
-    nombre: 'Operación',
-    ids: ['id_operacion', 'fecha_ingreso', 'tipo', 'vendedor', 'origen_dato'],
-  },
-  {
-    nombre: 'Cliente',
-    ids: ['cliente', 'dni', 'telefono'],
-  },
-  {
-    nombre: 'Gestión comercial',
-    ids: ['estado_venta', 'estado_bboo', 'plan', 'legajo_enviado'],
-  },
-  {
-    nombre: 'Portabilidad y Línea Nueva',
-    ids: ['sim', 'fecha_porta', 'fecha_carga_stl'],
-  },
+  { nombre: 'Operación', ids: ['id_operacion', 'fecha_ingreso', 'tipo', 'negocios', 'vendedor', 'origen_dato'] },
+  { nombre: 'Cliente', ids: ['cliente', 'dni', 'telefono'] },
+  { nombre: 'Domicilio', ids: ['domicilio', 'localidad', 'barrio', 'entre_calles', 'observaciones'] },
+  { nombre: 'Gestión comercial', ids: ['responsable', 'bboo', 'estado_venta', 'estado_vendedor', 'estado_bboo', 'plan', 'sds', 'legajo_enviado'] },
+  { nombre: 'Telefonía móvil', ids: ['numero_linea', 'compania_actual', 'tipo_sim', 'plan_acordado', 'plan_cargado', 'pin', 'medio_despacho_chip', 'numero_seguimiento', 'sim', 'fecha_porta', 'fecha_carga_stl'] },
+  { nombre: 'Internet BAF', ids: ['estado_baf', 'estado_claro', 'motivo_cierre', 'fecha_cierre', 'fecha_instalacion', 'orden_trabajo'] },
 ]
 
 const INICIALES = [
@@ -99,6 +70,31 @@ export default function EditorReportMaker() {
   const [consultaRealizada, setConsultaRealizada] = useState(false)
   const [busquedaParcial, setBusquedaParcial] = useState(false)
   const [examinadas, setExaminadas] = useState(0)
+  const [opciones, setOpciones] = useState<Record<string, string[]>>({})
+  const [cargandoOpciones, setCargandoOpciones] = useState(false)
+  const [opcionesParciales, setOpcionesParciales] = useState(false)
+  const [busquedasMultiples, setBusquedasMultiples] = useState<Record<number, string>>({})
+
+  useEffect(() => {
+    if (!desde || !hasta || desde > hasta || !negocios.length) {
+      setOpciones({})
+      return
+    }
+    const controlador = new AbortController()
+    setCargandoOpciones(true)
+    setOpciones({})
+    fetch('/api/reportmaker/opciones', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ negocios, desde, hasta }), signal: controlador.signal,
+    }).then(async respuesta => {
+      const datos = await respuesta.json()
+      if (!respuesta.ok) throw new Error(datos.error || 'Error al cargar opciones')
+      setOpciones(datos.opciones ?? {})
+      setOpcionesParciales(Boolean(datos.busquedaParcial))
+    }).catch(error => { if (error.name !== 'AbortError') setOpciones({}) })
+      .finally(() => { if (!controlador.signal.aborted) setCargandoOpciones(false) })
+    return () => controlador.abort()
+  }, [negocios, desde, hasta])
 
   const columnasEfectivas = useMemo(
     () => todosCampos ? CAMPOS.map(c => c.id) : columnas,
@@ -120,7 +116,7 @@ export default function EditorReportMaker() {
   function alternarColumna(id: string) {
     setColumnas(actual => {
       if (actual.includes(id)) return actual.filter(c => c !== id)
-      if (actual.length >= 10) return actual
+      
       return [...actual, id]
     })
   }
@@ -136,10 +132,10 @@ export default function EditorReportMaker() {
   }
 
   function agregarFiltro() {
-    setFiltros(actual => [
+    setFiltros(actual => actual.length >= 4 ? actual : [
       ...actual,
       {
-        id: Date.now(),
+        id: Math.max(0, ...actual.map(f => f.id)) + 1,
         campo: 'tipo',
         operador: 'igual',
         valor: '',
@@ -164,7 +160,7 @@ export default function EditorReportMaker() {
       const respuesta = await fetch('/api/reportmaker/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ negocios, desde, hasta }),
+        body: JSON.stringify({ negocios, desde, hasta, filtros }),
       })
       const datos: RespuestaPreview = await respuesta.json()
       if (!respuesta.ok) {
@@ -217,7 +213,9 @@ export default function EditorReportMaker() {
   const puedeConsultar = negocios.length > 0 &&
     columnasEfectivas.length > 0 &&
     Boolean(desde && hasta && desde <= hasta) &&
-    filtros.length === 0
+    filtros.length <= 4 && filtros.every(f =>
+      ['vacio', 'no_vacio'].includes(f.operador) || f.valor.trim().length > 0
+    )
 
   const puedeExportar = puedeConsultar &&
     columnasEfectivas.every(c => CAMPOS_DISPONIBLES.has(c)) &&
@@ -269,7 +267,7 @@ export default function EditorReportMaker() {
               checked={!todosCampos}
               onChange={() => setTodosCampos(false)}
             />
-            Seleccionar hasta 10 columnas
+            Seleccionar columnas
           </label>
 
           <label className="flex items-center gap-2">
@@ -285,7 +283,7 @@ export default function EditorReportMaker() {
         {!todosCampos ? (
           <>
             <p className="mt-4 text-sm text-gray-500">
-              Columnas seleccionadas: {columnas.length} de 10
+              Columnas seleccionadas: {columnas.length} de {CAMPOS.length}
             </p>
 
             <input
@@ -321,10 +319,6 @@ export default function EditorReportMaker() {
                           <input
                             type="checkbox"
                             checked={columnas.includes(campo.id)}
-                            disabled={
-                              !columnas.includes(campo.id) &&
-                              columnas.length >= 10
-                            }
                             onChange={() => alternarColumna(campo.id)}
                           />
                           {campo.etiqueta}
@@ -375,7 +369,7 @@ export default function EditorReportMaker() {
         ) : (
           <p className="mt-4 rounded-lg bg-gray-100 p-3 text-sm text-gray-700">
             Se incluirán todos los campos disponibles del catálogo,
-            sin el límite de 10 columnas.
+            sin límite de columnas.
           </p>
         )}
       </section>
@@ -416,9 +410,10 @@ export default function EditorReportMaker() {
         <button
           type="button"
           onClick={agregarFiltro}
+          disabled={filtros.length >= 4}
           className="mt-5 rounded-lg bg-red-700 px-3 py-2 text-sm text-white"
         >
-          + Agregar filtro
+          + Agregar filtro ({filtros.length}/4)
         </button>
 
         <div className="mt-4 space-y-3">
@@ -434,7 +429,7 @@ export default function EditorReportMaker() {
                 }
                 className="rounded border p-2 text-sm text-gray-900"
               >
-                {CAMPOS.filter(c => c.tipo === 'texto').map(c => (
+                {CAMPOS.filter(c => CAMPOS_FILTRABLES.some(id => id === c.id)).map(c => (
                   <option key={c.id} value={c.id}>
                     {c.etiqueta}
                   </option>
@@ -452,16 +447,110 @@ export default function EditorReportMaker() {
               >
                 <option value="igual">Es igual a</option>
                 <option value="contiene">Contiene</option>
+                <option value="comienza_con">Comienza con</option>
+                <option value="distinto">No es igual a</option>
+                <option value="no_contiene">No contiene</option>
+                <option value="no_comienza_con">No comienza con</option>
+                <option value="termina_con">Termina con</option>
+                <option value="vacio">Está vacío</option>
+                <option value="no_vacio">No está vacío</option>
+                <option value="uno_de">Es uno de</option>
+                <option value="no_uno_de">No es uno de</option>
               </select>
 
-              <input
-                value={filtro.valor}
-                onChange={e =>
-                  actualizarFiltro(filtro.id, { valor: e.target.value })
-                }
-                placeholder="Valor"
-                className="rounded border p-2 text-sm text-gray-900"
-              />
+              {opcionesParciales && <span className="text-xs text-amber-700">Opciones parciales (límite de consulta).</span>}
+              {['uno_de', 'no_uno_de'].includes(filtro.operador) ? (
+                <div className="rounded-lg border p-2 text-sm text-gray-900">
+                  <input
+                    value={busquedasMultiples[filtro.id] ?? ''}
+                    onChange={evento => setBusquedasMultiples(actual => ({
+                      ...actual, [filtro.id]: evento.target.value
+                    }))}
+                    placeholder="Buscar valores..."
+                    className="mb-2 w-full rounded border p-2"
+                  />
+                  {(() => {
+                    const seleccionados = filtro.valor ? filtro.valor.split('\n') : []
+                    const buscar = (busquedasMultiples[filtro.id] ?? '')
+                      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+                    const visibles = (opciones[filtro.campo] ?? []).filter(valor =>
+                      valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                        .toLowerCase().includes(buscar)
+                    )
+                    const alternar = (valor: string, marcado: boolean) => {
+                      const siguientes = marcado
+                        ? [...new Set([...seleccionados, valor])]
+                        : seleccionados.filter(v => v !== valor)
+                      actualizarFiltro(filtro.id, { valor: siguientes.join('\n') })
+                    }
+                    return (
+                      <>
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span>{seleccionados.length} seleccionados</span>
+                          <button type="button"
+                            className="rounded border px-2 py-1"
+                            onClick={() => actualizarFiltro(filtro.id, {
+                              valor: [...new Set([...seleccionados, ...visibles])].join('\n')
+                            })}
+                          >
+                            Seleccionar visibles
+                          </button>
+                        </div>
+                        <div className="max-h-44 space-y-1 overflow-y-auto">
+                          {visibles.map(valor => (
+                            <label key={valor} className="flex items-center gap-2">
+                              <input type="checkbox"
+                                checked={seleccionados.includes(valor)}
+                                onChange={evento => alternar(valor, evento.target.checked)}
+                              />
+                              <span>{valor}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {opcionesParciales && (
+                          <p className="mt-2 text-xs text-amber-700">
+                            Lista parcial: seleccionar visibles no incluye valores no encontrados.
+                          </p>
+                        )}
+                        {visibles.length === 0 && (
+                          <p className="text-xs text-gray-500">Sin coincidencias.</p>
+                        )}
+                      </>
+                    )
+                  })()}
+                </div>
+              ) : ['vacio', 'no_vacio'].includes(filtro.operador) ? (
+                <span className="rounded border bg-gray-50 p-2 text-sm text-gray-500">
+                  No requiere valor
+                </span>
+              ) : filtro.operador === 'igual' && opciones[filtro.campo]?.length ? (
+                <select
+                  value={filtro.valor}
+                  onChange={e => actualizarFiltro(filtro.id, { valor: e.target.value })}
+                  className="rounded border p-2 text-sm text-gray-900"
+                >
+                  <option value="">Seleccionar valor</option>
+                  {filtro.valor && !opciones[filtro.campo].includes(filtro.valor) &&
+                    <option value={filtro.valor}>{filtro.valor}</option>}
+                  {opciones[filtro.campo].map(valor =>
+                    <option key={valor} value={valor}>{valor}</option>)}
+                </select>
+              ) : (
+                <input
+                  value={filtro.valor}
+                  onChange={e => actualizarFiltro(filtro.id, { valor: e.target.value })}
+                  placeholder={
+                    filtro.operador === 'comienza_con'
+                      ? 'Ejemplo: T1'
+                      : filtro.operador === 'contiene'
+                        ? 'Escribir texto a buscar'
+                        : cargandoOpciones
+                          ? 'Cargando opciones...'
+                          : 'Valor'
+                  }
+                  className="rounded border p-2 text-sm text-gray-900"
+                />
+              )}
 
               <div className="flex gap-2">
                 {indice > 0 && (
@@ -505,14 +594,8 @@ export default function EditorReportMaker() {
           {' · '}Columnas: {camposSeleccionados.length}
         </p>
         <p className="mt-2 text-sm text-amber-800">
-          Vista previa de datos reales. XLSX y CSV exportan todos los registros del período (hasta 10.000), sin filtros personalizados por ahora.
+          Vista previa de hasta 100 coincidencias. XLSX y CSV aplican los mismos filtros y exportan hasta 10.000 registros.
         </p>
-        {filtros.length > 0 && (
-          <p className="mt-2 text-sm text-red-700" role="alert">
-            Los filtros personalizados todavía no están implementados en la API.
-            Quitalos para consultar sin filtros; así evitamos mostrar resultados engañosos.
-          </p>
-        )}
         <button
           type="button"
           onClick={consultarVistaPrevia}
@@ -536,8 +619,6 @@ export default function EditorReportMaker() {
         {errorExportacion && <p className="mt-2 text-sm text-red-700" role="alert">{errorExportacion}</p>}
         {columnasEfectivas.some(c => !CAMPOS_DISPONIBLES.has(c)) &&
           <p className="mt-2 text-sm text-amber-800">Para exportar, quitá los campos todavía no disponibles.</p>}
-        {filtros.length > 0 &&
-          <p className="mt-2 text-sm text-amber-800">Los filtros deben estar implementados antes de exportar con condiciones.</p>}
 
         {!desde || !hasta ? (
           <p className="mt-2 text-sm text-gray-600">Seleccioná las fechas Desde y Hasta para consultar.</p>

@@ -1,20 +1,12 @@
 import { NextResponse } from 'next/server'
 import ExcelJS from 'exceljs'
 import { POST as consultarPreview } from '../preview/route'
+import { validarFiltros } from '../../../../lib/reportmaker/filtros'
+import { CAMPOS_VENTAS } from '../../../../lib/reportmaker/catalogo'
 
-const PERMITIDOS = new Set([
-  'id_operacion','fecha_ingreso','tipo','negocios','vendedor','origen_dato',
-  'cliente','dni','telefono','estado_venta','estado_bboo','plan','sim',
-  'legajo_enviado','fecha_porta','fecha_carga_stl',
-])
+const PERMITIDOS = new Set(CAMPOS_VENTAS.map(c => c.id))
 const MAX_REGISTROS = 10000
-const TITULOS: Record<string,string> = {
-  id_operacion:'ID operación',fecha_ingreso:'Fecha de ingreso',tipo:'Tipo de operación',
-  negocios:'Negocios',vendedor:'Vendedor',origen_dato:'Origen del dato',
-  cliente:'Cliente',dni:'DNI',telefono:'Teléfono',estado_venta:'Estado Venta',
-  estado_bboo:'Estado BBOO',plan:'Plan',sim:'SIM',legajo_enviado:'Legajo Enviado',
-  fecha_porta:'Fecha Porta',fecha_carga_stl:'Fecha Cargado STL',
-}
+const TITULOS: Record<string,string> = Object.fromEntries(CAMPOS_VENTAS.map(c => [c.id, c.etiqueta]))
 type Registro = Record<string, string | number | boolean | null>
 export async function POST(request: Request) {
   try {
@@ -26,8 +18,8 @@ export async function POST(request: Request) {
         body.columnas.some((c:unknown) => typeof c !== 'string' || !PERMITIDOS.has(c)) ||
         new Set(body.columnas).size !== body.columnas.length)
       return NextResponse.json({error:'Columnas inválidas o no disponibles.'},{status:400})
-    if (Array.isArray(body.filtros) && body.filtros.length)
-      return NextResponse.json({error:'Primero debemos implementar los filtros personalizados.'},{status:400})
+    try { validarFiltros(body.filtros) }
+    catch (error) { return NextResponse.json({error:error instanceof Error ? error.message : 'Filtros inválidos.'},{status:400}) }
     const registros: Registro[] = []
     let offset = 0
     let agotadas = false
@@ -35,7 +27,7 @@ export async function POST(request: Request) {
     for (let vuelta = 0; vuelta <= MAX_REGISTROS / 100; vuelta++) {
       const peticion = new Request(new URL('/api/reportmaker/preview', request.url), {
         method:'POST', headers: {cookie:request.headers.get('cookie') || '', 'content-type':'application/json'},
-        body:JSON.stringify({negocios:body.negocios,desde:body.desde,hasta:body.hasta,offset}),
+        body:JSON.stringify({negocios:body.negocios,desde:body.desde,hasta:body.hasta,offset,filtros:body.filtros}),
       })
       const respuesta = await consultarPreview(peticion)
       const datos = await respuesta.json()
@@ -49,7 +41,7 @@ export async function POST(request: Request) {
       registros.push(...lote)
       agotadas = Boolean(datos.agotadas)
       const siguiente = Number(datos.siguienteOffset)
-      if (agotadas || lote.length === 0) break
+      if (agotadas) break
       if (!Number.isSafeInteger(siguiente) || siguiente <= offset)
         return NextResponse.json({error:'No se pudo completar la paginación.'},{status:500})
       offset = siguiente
