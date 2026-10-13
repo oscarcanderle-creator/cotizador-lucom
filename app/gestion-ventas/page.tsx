@@ -388,6 +388,10 @@ export default async function GestionVentasPage({
   // Búsqueda histórica: primero localizar clientes en toda la base de datos.
   // Sin DNI/Teléfono se conserva la carga habitual de las últimas 500 operaciones.
   const busquedaHistorica = Boolean(filtroDni || filtroTelefono)
+
+  // Los identificadores históricos se buscan directamente en la base.
+  const busquedaIdHistorico = /^HIST-[A-Z0-9_-]+$/i.test(q)
+
   let clientesHistoricos: number[] | null = null
 
   if (busquedaHistorica) {
@@ -419,6 +423,11 @@ export default async function GestionVentasPage({
     .in('tipo', ['BAF', 'PORTA'])
     .order('fecha_hora', { ascending: false })
     .limit(busquedaHistorica ? 1000 : 500)
+
+  if (busquedaIdHistorico) {
+    consultaOperaciones = consultaOperaciones
+      .ilike('id_operacion', q)
+  }
 
   if (clientesHistoricos !== null) {
     // Un conjunto vacío nunca debe volver a la consulta sin filtro.
@@ -1000,6 +1009,24 @@ export default async function GestionVentasPage({
 
   medirEtapa('gestiones y estados logísticos')
 
+  // Normalizar vendedor para operaciones actuales e históricas.
+  const nombreVendedor = (valor: unknown): string => {
+    if (typeof valor === 'string') return valor.trim() || '-'
+
+    if (valor && typeof valor === 'object' && !Array.isArray(valor)) {
+      const perfil = valor as Record<string, unknown>
+
+      for (const campo of ['vendedor', 'nombre', 'name']) {
+        const nombre = perfil[campo]
+        if (typeof nombre === 'string' && nombre.trim()) {
+          return nombre.trim()
+        }
+      }
+    }
+
+    return '-'
+  }
+
   const operacionesCompletas = operaciones.map((operacion: any) => {
     const gestionPorta =
       gestionPortaPorOperacion.get(operacion.id_operacion) ?? null
@@ -1028,6 +1055,7 @@ export default async function GestionVentasPage({
 
     return {
       ...operacion,
+      vendedor: nombreVendedor(operacion.vendedor),
       cliente: operacion.cliente_id
         ? clientesPorId.get(operacion.cliente_id) ?? null
         : null,

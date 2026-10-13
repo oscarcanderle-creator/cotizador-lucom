@@ -16,7 +16,7 @@ async function autorizar() {
   const rol = String(perfil?.rol ?? '').toUpperCase()
   const sigla = String(perfil?.vendedor ?? '').trim().split(/\s+/)[0]?.toUpperCase() || ''
   const autorizado = perfil?.activo === true && (
-    ['ADMIN', 'SUPER', 'SUPERVISOR'].includes(rol) ||
+    ['ADMIN', 'SUPER', 'SUPERVISOR', 'BBOO'].includes(rol) ||
     (['VENDEDOR', 'TERRENO'].includes(rol) && /^[A-Z0-9]{2}$/.test(sigla))
   )
   return { user, autorizado }

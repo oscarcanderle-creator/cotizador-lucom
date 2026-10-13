@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     const rol = texto(perfil.rol).toUpperCase()
     const sigla = extraerSigla(perfil.vendedor)
     const accesoGlobal =
-  ['ADMIN', 'SUPER', 'SUPERVISOR'].includes(rol) ||
+  ['ADMIN', 'SUPER', 'SUPERVISOR', 'BBOO'].includes(rol) ||
   (rol === 'VENDEDOR' && sigla === 'L1')
 
 const accesoGrupo =

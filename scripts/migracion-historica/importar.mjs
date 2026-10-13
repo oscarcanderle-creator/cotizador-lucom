@@ -54,13 +54,29 @@ const NOMBRE_ARCHIVO_MOVIL = path.basename(ARCHIVO_MOVIL)
 function texto(v) {
   if (v === null || v === undefined) return ''
   if (v instanceof Date) return v
+
   if (typeof v === 'object') {
-    if ('text' in v) return String(v.text ?? '').trim()
-    if ('result' in v) return String(v.result ?? '').trim()
     if (Array.isArray(v.richText)) {
       return v.richText.map(x => x.text ?? '').join('').trim()
     }
+
+    if (typeof v.text === 'string') {
+      return v.text.trim()
+    }
+
+    if ('result' in v) {
+      return texto(v.result)
+    }
+
+    if (typeof v.formula === 'string') {
+      return ''
+    }
+
+    throw new Error(
+      `Formato de celda Excel no reconocido: ${JSON.stringify(v)}`
+    )
   }
+
   return String(v).trim()
 }
 

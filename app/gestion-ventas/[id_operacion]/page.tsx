@@ -537,6 +537,7 @@ export default async function DetalleVentaPage({
     planesPortaResult,
     mediosDespachoResult,
     usuariosBbooResult,
+    perfilesVisualizacionResult,
     operacionResult,
   ] = await Promise.all([
     supabase
@@ -581,6 +582,9 @@ export default async function DetalleVentaPage({
       .eq('activo', true)
       .eq('rol', 'BBOO')
       .order('nombre', { ascending: true }),
+    admin
+      .from('profiles')
+      .select('id, nombre, vendedor'),
     admin
       .from('operaciones')
       .select(`
@@ -695,6 +699,10 @@ export default async function DetalleVentaPage({
   const { data: planesPorta, error: planesPortaError } = planesPortaResult
   const { data: mediosDespacho, error: mediosDespachoError } = mediosDespachoResult
   const { data: usuariosBboo, error: usuariosBbooError } = usuariosBbooResult
+  const { data: perfilesVisualizacion, error: perfilesVisualizacionError } = perfilesVisualizacionResult
+  if (perfilesVisualizacionError) {
+    throw new Error(`No se pudieron cargar los perfiles asignados: ${perfilesVisualizacionError.message}`)
+  }
   const { data: operacion, error } = operacionResult
 
   if (responsablesError) throw new Error(`No se pudieron cargar los responsables: ${responsablesError.message}`)
@@ -926,7 +934,7 @@ export default async function DetalleVentaPage({
 
     const nombreResponsableProducto = (idResponsable: string | null | undefined) => {
       if (!idResponsable) return 'Sin asignar'
-      const r = (responsables ?? []).find((x: any) => x.id === idResponsable)
+      const r = (perfilesVisualizacion ?? []).find((x: any) => x.id === idResponsable)
       return r?.vendedor || r?.nombre || 'Usuario no disponible'
     }
 
@@ -935,7 +943,7 @@ export default async function DetalleVentaPage({
       if (idBboo === user.id && profile.rol === 'BBOO') {
         return profile.nombre?.trim() || user.email || 'Usuario BBOO'
       }
-      const r = (usuariosBboo ?? []).find((x: any) => x.id === idBboo)
+      const r = (perfilesVisualizacion ?? []).find((x: any) => x.id === idBboo)
       return r?.vendedor || r?.nombre || 'Usuario BBOO no disponible'
     }
 
@@ -1608,7 +1616,7 @@ export default async function DetalleVentaPage({
   const responsableActualId =
     esBaf ? gestionBaf?.responsable_id : gestionPorta?.responsable_id
 
-  const responsableActual = (responsables ?? []).find(
+  const responsableActual = (perfilesVisualizacion ?? []).find(
     (responsable: any) => responsable.id === responsableActualId
   )
 
