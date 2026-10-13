@@ -385,6 +385,25 @@ export default async function GestionVentasPage({
     }
   }
 
+  // Búsqueda histórica: primero localizar clientes en toda la base de datos.
+  // Sin DNI/Teléfono se conserva la carga habitual de las últimas 500 operaciones.
+  const busquedaHistorica = Boolean(filtroDni || filtroTelefono)
+  let clientesHistoricos: number[] | null = null
+
+  if (busquedaHistorica) {
+    const { data: encontrados, error: errorBusqueda } = await admin.rpc(
+      'buscar_clientes_gestion_ventas',
+      { p_dni: filtroDni, p_telefono: filtroTelefono }
+    )
+    if (errorBusqueda) {
+      throw new Error(`No se pudo buscar el historial por DNI/Teléfono: ${errorBusqueda.message}`)
+    }
+    clientesHistoricos = Array.from(new Set(
+      (encontrados ?? []).map((fila: any) => Number(fila.cliente_id))
+        .filter((id: number) => Number.isSafeInteger(id) && id > 0)
+    ))
+  }
+
   let consultaOperaciones = admin
     .from('operaciones')
     .select(`
@@ -399,6 +418,14 @@ export default async function GestionVentasPage({
     `)
     .in('tipo', ['BAF', 'PORTA'])
     .order('fecha_hora', { ascending: false })
+    .limit(busquedaHistorica ? 1000 : 500)
+
+  if (clientesHistoricos !== null) {
+    // Un conjunto vacío nunca debe volver a la consulta sin filtro.
+    consultaOperaciones = clientesHistoricos.length
+      ? consultaOperaciones.in('cliente_id', clientesHistoricos)
+      : consultaOperaciones.eq('cliente_id', -1)
+  }
 
   if (idsFiltrados !== null) {
     consultaOperaciones = consultaOperaciones.in(
@@ -499,6 +526,17 @@ export default async function GestionVentasPage({
 
     return { data: datos, error: null }
   }
+
+  // Iniciar logística en paralelo con las consultas de datos asociados.
+  // Se espera el resultado más adelante, antes de construir el mapa de entregas.
+  const entregasPendientes = idsOperaciones.length > 0
+    ? consultarPorLotes(
+        'gestiones_entrega',
+        'id, operacion_id, estado_entrega_id, codigo_gestion, fecha_lista_entrega, fecha_primera_distribucion, fecha_reingreso, created_at',
+        'operacion_id',
+        idsOperaciones
+      )
+    : Promise.resolve({ data: [], error: null })
 
   medirEtapa('preparación de lotes')
 
@@ -933,18 +971,17 @@ export default async function GestionVentasPage({
 
   // Datos logísticos de entregas. Se toma la gestión más reciente por operación.
   // Consultas paginadas para no perder registros por el límite de PostgREST.
-  const gestionesEntregaDatos: any[] = []
-  for (let inicio = 0; ; inicio += 500) {
-    const { data, error: errorEntregas } = await admin
-      .from('gestiones_entrega')
-      .select('id, operacion_id, estado_entrega_id, codigo_gestion, fecha_lista_entrega, fecha_primera_distribucion, fecha_reingreso, created_at')
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .range(inicio, inicio + 499)
-    if (errorEntregas) throw new Error(`No se pudieron cargar las gestiones de entrega: ${errorEntregas.message}`)
-    gestionesEntregaDatos.push(...(data ?? []))
-    if ((data ?? []).length < 500) break
+  // Consultar entregas solo de las operaciones cargadas en esta vista.
+  // Evita recorrer toda la tabla de logistica en cada cambio de filtros.
+  const entregasResultado = await entregasPendientes
+  if (entregasResultado.error) {
+    throw new Error(`No se pudieron cargar las gestiones de entrega: ${entregasResultado.error.message}`)
   }
+  const gestionesEntregaDatos = [...(entregasResultado.data ?? [])].sort((a: any, b: any) => {
+    const fecha = String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''))
+    if (fecha !== 0) return fecha
+    return Number(b.id) - Number(a.id)
+  })
   const { data: estadosEntregaDatos, error: errorEstadosEntrega } = await admin
     .from('estados_entrega')
     .select('id, codigo, nombre')

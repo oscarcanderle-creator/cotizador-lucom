@@ -26,6 +26,16 @@ type Filtro = {
   union: Union
 }
 
+type ConfiguracionBandeja = {
+  negocios: Negocio[]
+  columnas: string[]
+  todosCampos: boolean
+  desde: string
+  hasta: string
+  filtros: Filtro[]
+}
+type BandejaReportMaker = { id: string; nombre: string; configuracion: ConfiguracionBandeja }
+
 const NEGOCIOS: { id: Negocio; nombre: string; descripcion: string }[] = [
   { id: 'INTERNET', nombre: 'Internet', descripcion: 'BAF y sus variantes' },
   { id: 'PORTABILIDAD', nombre: 'Portabilidad', descripcion: 'Portabilidades y sus variantes' },
@@ -74,6 +84,87 @@ export default function EditorReportMaker() {
   const [cargandoOpciones, setCargandoOpciones] = useState(false)
   const [opcionesParciales, setOpcionesParciales] = useState(false)
   const [busquedasMultiples, setBusquedasMultiples] = useState<Record<number, string>>({})
+  const [bandejas, setBandejas] = useState<BandejaReportMaker[]>([])
+  const [bandejaSeleccionada, setBandejaSeleccionada] = useState('')
+  const [nombreBandeja, setNombreBandeja] = useState('')
+  const [procesandoBandeja, setProcesandoBandeja] = useState(false)
+  const [mensajeBandeja, setMensajeBandeja] = useState('')
+
+  async function cargarBandejas() {
+    try {
+      const respuesta = await fetch('/api/reportmaker/bandejas', { cache: 'no-store' })
+      const datos = await respuesta.json()
+      if (!respuesta.ok) throw new Error(datos.error || 'No se pudieron cargar las bandejas.')
+      setBandejas(Array.isArray(datos.bandejas) ? datos.bandejas : [])
+    } catch (error) {
+      setMensajeBandeja(error instanceof Error ? error.message : 'Error al cargar bandejas.')
+    }
+  }
+
+  useEffect(() => { void cargarBandejas() }, [])
+
+  function aplicarBandeja(id: string) {
+    setBandejaSeleccionada(id)
+    const bandeja = bandejas.find(b => b.id === id)
+    if (!bandeja) return
+    const c = bandeja.configuracion
+    setNegocios(c.negocios)
+    setColumnas(c.columnas)
+    setTodosCampos(c.todosCampos)
+    setDesde(c.desde)
+    setHasta(c.hasta)
+    setFiltros(c.filtros.map((f, indice) => ({ ...f, id: indice + 1 })))
+    setRegistros([])
+    setConsultaRealizada(false)
+    setErrorConsulta('')
+    setBusquedaParcial(false)
+    setExaminadas(0)
+    setBusquedasMultiples({})
+    setNombreBandeja(bandeja.nombre)
+    setMensajeBandeja(`Bandeja «${bandeja.nombre}» recuperada. Generá la vista previa para consultar.`)
+  }
+
+  async function guardarBandeja() {
+    const nombre = nombreBandeja.trim()
+    if (!nombre || procesandoBandeja) return
+    setProcesandoBandeja(true)
+    setMensajeBandeja('')
+    try {
+      const respuesta = await fetch('/api/reportmaker/bandejas', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, configuracion: { negocios, columnas, todosCampos, desde, hasta, filtros } }),
+      })
+      const datos = await respuesta.json()
+      if (!respuesta.ok) throw new Error(datos.error || 'No se pudo guardar la bandeja.')
+      await cargarBandejas()
+      setBandejaSeleccionada(datos.bandeja.id)
+      setMensajeBandeja('Bandeja guardada correctamente.')
+    } catch (error) {
+      setMensajeBandeja(error instanceof Error ? error.message : 'Error al guardar bandeja.')
+    } finally { setProcesandoBandeja(false) }
+  }
+
+  async function eliminarBandeja() {
+    if (!bandejaSeleccionada || procesandoBandeja) return
+    const bandeja = bandejas.find(b => b.id === bandejaSeleccionada)
+    if (!window.confirm(`¿Eliminar la bandeja «${bandeja?.nombre ?? ''}»?`)) return
+    setProcesandoBandeja(true)
+    setMensajeBandeja('')
+    try {
+      const respuesta = await fetch('/api/reportmaker/bandejas', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: bandejaSeleccionada }),
+      })
+      const datos = await respuesta.json()
+      if (!respuesta.ok) throw new Error(datos.error || 'No se pudo eliminar la bandeja.')
+      setBandejaSeleccionada('')
+      setNombreBandeja('')
+      await cargarBandejas()
+      setMensajeBandeja('Bandeja eliminada.')
+    } catch (error) {
+      setMensajeBandeja(error instanceof Error ? error.message : 'Error al eliminar bandeja.')
+    } finally { setProcesandoBandeja(false) }
+  }
 
   useEffect(() => {
     if (!desde || !hasta || desde > hasta || !negocios.length) {
@@ -222,8 +313,30 @@ export default function EditorReportMaker() {
     !consultando && !exportando
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-xl border bg-white p-5">
+    <div className="space-y-3">
+      {/* REPORTMAKER_COMPACTO_V1 */}
+      <section className="rounded-xl border bg-white p-3 sm:p-4">
+        <h2 className="text-lg font-semibold text-gray-900">Mis bandejas de ReportMaker</h2>
+        <p className="mt-1 text-sm text-gray-600">Guardá y recuperá negocios, columnas, período y filtros AND/OR.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <select aria-label="Bandeja guardada" value={bandejaSeleccionada} onChange={e => aplicarBandeja(e.target.value)}
+            className="w-full rounded-lg border p-2 text-gray-900">
+            <option value="">Seleccionar bandeja guardada</option>
+            {bandejas.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+          </select>
+          <input aria-label="Nombre de la bandeja" value={nombreBandeja} maxLength={60}
+            onChange={e => setNombreBandeja(e.target.value)} placeholder="Nombre de la nueva bandeja"
+            className="w-full rounded-lg border p-2 text-gray-900" />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={guardarBandeja} disabled={procesandoBandeja || !nombreBandeja.trim()}
+            className="rounded-lg bg-red-700 px-4 py-2 text-sm text-white disabled:opacity-50">Guardar nueva bandeja</button>
+          <button type="button" onClick={eliminarBandeja} disabled={procesandoBandeja || !bandejaSeleccionada}
+            className="rounded-lg border border-red-700 px-4 py-2 text-sm text-red-700 disabled:opacity-50">Eliminar seleccionada</button>
+        </div>
+        {mensajeBandeja && <p role="status" className="mt-3 text-sm text-gray-700">{mensajeBandeja}</p>}
+      </section>
+      <section className="rounded-xl border bg-white p-3 sm:p-4">
         <h2 className="text-lg font-semibold text-gray-900">
           1. Seleccionar negocio
         </h2>
@@ -231,11 +344,11 @@ export default function EditorReportMaker() {
           Podés seleccionar uno, dos o todos los negocios.
         </p>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
           {NEGOCIOS.map(negocio => (
             <label
               key={negocio.id}
-              className="flex cursor-pointer gap-3 rounded-lg border p-4"
+              className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2"
             >
               <input
                 type="checkbox"
@@ -255,12 +368,12 @@ export default function EditorReportMaker() {
         </div>
       </section>
 
-      <section className="rounded-xl border bg-white p-5">
+      <section className="rounded-xl border bg-white p-3 sm:p-4">
         <h2 className="text-lg font-semibold text-gray-900">
           2. Seleccionar campos
         </h2>
 
-        <div className="mt-4 space-y-3 text-sm text-gray-800">
+        <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-800">
           <label className="flex items-center gap-2">
             <input
               type="radio"
@@ -293,7 +406,7 @@ export default function EditorReportMaker() {
               className="mt-3 w-full rounded-lg border p-2 text-gray-900"
             />
 
-            <div className="mt-5 space-y-5">
+            <div className="mt-3 space-y-3">
               {CATEGORIAS.map(categoria => {
                 const disponibles = categoria.ids
                   .map(id => CAMPOS.find(c => c.id === id))
@@ -310,7 +423,7 @@ export default function EditorReportMaker() {
                       {categoria.nombre}
                     </h3>
 
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="mt-2 grid gap-x-3 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
                       {disponibles.map(campo => (
                         <label
                           key={campo.id}
@@ -334,11 +447,11 @@ export default function EditorReportMaker() {
               Orden de columnas
             </h3>
 
-            <div className="mt-3 space-y-2">
+            <div className="mt-2 grid gap-1 sm:grid-cols-2">
               {camposSeleccionados.map((campo, indice) => (
                 <div
                   key={campo.id}
-                  className="flex items-center justify-between rounded-lg border p-3"
+                  className="flex items-center justify-between gap-2 rounded-lg border px-2 py-1"
                 >
                   <span className="text-sm text-gray-800">
                     {indice + 1}. {campo.etiqueta}
@@ -349,7 +462,7 @@ export default function EditorReportMaker() {
                       type="button"
                       disabled={indice === 0}
                       onClick={() => moverColumna(indice, -1)}
-                      className="rounded border px-3 py-1 text-gray-900 disabled:opacity-30"
+                      className="rounded border px-2 py-0.5 text-gray-900 disabled:opacity-30"
                     >
                       ↑
                     </button>
@@ -357,7 +470,7 @@ export default function EditorReportMaker() {
                       type="button"
                       disabled={indice === columnas.length - 1}
                       onClick={() => moverColumna(indice, 1)}
-                      className="rounded border px-3 py-1 text-gray-900 disabled:opacity-30"
+                      className="rounded border px-2 py-0.5 text-gray-900 disabled:opacity-30"
                     >
                       ↓
                     </button>
@@ -374,12 +487,12 @@ export default function EditorReportMaker() {
         )}
       </section>
 
-      <section className="rounded-xl border bg-white p-5">
+      <section className="rounded-xl border bg-white p-3 sm:p-4">
         <h2 className="text-lg font-semibold text-gray-900">
           3. Período y filtros
         </h2>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <label className="text-sm text-gray-800">
             Desde
             <input
@@ -416,11 +529,11 @@ export default function EditorReportMaker() {
           + Agregar filtro ({filtros.length}/4)
         </button>
 
-        <div className="mt-4 space-y-3">
+        <div className="mt-2 space-y-2">
           {filtros.map((filtro, indice) => (
             <div
               key={filtro.id}
-              className="grid gap-2 rounded-lg border p-3 sm:grid-cols-4"
+              className="grid gap-2 rounded-lg border p-2 sm:grid-cols-4"
             >
               <select
                 value={filtro.campo}
@@ -585,7 +698,7 @@ export default function EditorReportMaker() {
         </div>
       </section>
 
-      <section className="rounded-xl border bg-white p-5">
+      <section className="rounded-xl border bg-white p-3 sm:p-4">
         <h2 className="text-lg font-semibold text-gray-900">
           4. Vista previa de operaciones
         </h2>
@@ -631,12 +744,12 @@ export default function EditorReportMaker() {
             {busquedaParcial && ' Se alcanzó el límite de exploración; puede haber más resultados.'}
           </p>
         )}
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-3 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead>
               <tr>
                 {camposSeleccionados.map(campo => (
-                  <th key={campo.id} className="whitespace-nowrap border bg-gray-100 px-4 py-3 text-gray-900">
+                  <th key={campo.id} className="whitespace-nowrap border bg-gray-100 px-2 py-2 text-gray-900">
                     {campo.etiqueta}
                   </th>
                 ))}
@@ -646,7 +759,7 @@ export default function EditorReportMaker() {
               {registros.map((registro, indice) => (
                 <tr key={String(registro.id_operacion ?? indice)}>
                   {camposSeleccionados.map(campo => (
-                    <td key={campo.id} className="whitespace-nowrap border px-4 py-3 text-gray-800">
+                    <td key={campo.id} className="whitespace-nowrap border px-2 py-1.5 text-gray-800">
                       {CAMPOS_DISPONIBLES.has(campo.id)
                         ? String(registro[campo.id] ?? '')
                         : <span className="italic text-amber-700">Pendiente</span>}
