@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ChangeEvent, DragEvent, useRef, useState } from 'react'
+import { ChangeEvent, DragEvent, useEffect, useRef, useState } from 'react'
 
 type TipoReporte =
   | 'ITEC'
@@ -107,6 +107,22 @@ function formatearTamano(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+type ContadoresBAF = {
+  actualizados: number
+  sin_cambios: number
+  protegidos: number
+  sin_coincidencia: number
+  no_cargados: number
+}
+
+const CONTADORES_CERO: ContadoresBAF = {
+  actualizados: 0,
+  sin_cambios: 0,
+  protegidos: 0,
+  sin_coincidencia: 0,
+  no_cargados: 0,
+}
+
 export default function ImportarReportesClient() {
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -118,6 +134,88 @@ export default function ImportarReportesClient() {
   const [resultado, setResultado] = useState<ResultadoValidacion | null>(null)
   const [resultadoImportacion, setResultadoImportacion] =
     useState<ResultadoImportacion | null>(null)
+
+  const [consultandoActualizacion, setConsultandoActualizacion] = useState(true)
+  const [registrosFija, setRegistrosFija] = useState(0)
+  const [actualizandoDatos, setActualizandoDatos] = useState(false)
+  const [procesadosActualizacion, setProcesadosActualizacion] = useState(0)
+  const [resultadoActualizacion, setResultadoActualizacion] = useState<ContadoresBAF | null>(null)
+  const [errorActualizacion, setErrorActualizacion] = useState('')
+  const [actualizacionCompletada, setActualizacionCompletada] = useState(false)
+
+  useEffect(() => {
+    let vigente = true
+    async function consultarDisponibilidad() {
+      try {
+        const respuesta = await fetch('/api/reportes/actualizar-datos', { cache: 'no-store' })
+        const datos = await respuesta.json().catch(() => null)
+        if (!respuesta.ok || !datos?.ok) {
+          throw new Error(datos?.error || 'No se pudo consultar Reporte Fija.')
+        }
+        if (vigente) setRegistrosFija(Number(datos.registros_fija ?? 0))
+      } catch (err) {
+        if (vigente) setErrorActualizacion(err instanceof Error ? err.message : 'Error al consultar reportes.')
+      } finally {
+        if (vigente) setConsultandoActualizacion(false)
+      }
+    }
+    void consultarDisponibilidad()
+    return () => { vigente = false }
+  }, [])
+
+  async function actualizarDatos() {
+    if (actualizandoDatos || procesando || consultandoActualizacion || registrosFija === 0) return
+    setActualizandoDatos(true)
+    setActualizacionCompletada(false)
+    setErrorActualizacion('')
+    setProcesadosActualizacion(0)
+    setResultadoActualizacion({ ...CONTADORES_CERO })
+
+    let desdeId = 0
+    let procesados = 0
+    const acumulado = { ...CONTADORES_CERO }
+    try {
+      for (;;) {
+        const respuesta = await fetch('/api/reportes/actualizar-datos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ desde_id: desdeId }),
+        })
+        const datos = await respuesta.json().catch(() => null)
+        if (!respuesta.ok || !datos?.ok) {
+          throw new Error(datos?.error || datos?.mensaje || 'Error al sincronizar ventas BAF.')
+        }
+        const cantidad = Number(datos.registros_procesados)
+        const ultimoId = Number(datos.ultimo_id)
+        if (!Number.isSafeInteger(cantidad) || cantidad < 0 || cantidad > 100 ||
+            !Number.isSafeInteger(ultimoId) || ultimoId < desdeId ||
+            (cantidad > 0 && ultimoId <= desdeId)) {
+          throw new Error('La API devolvió un lote inválido.')
+        }
+        const contadores = datos.sincronizacion_baf ?? {}
+        for (const campo of Object.keys(acumulado) as Array<keyof ContadoresBAF>) {
+          const valor = Number(contadores[campo] ?? 0)
+          if (!Number.isSafeInteger(valor) || valor < 0) {
+            throw new Error('La API devolvió contadores inválidos.')
+          }
+          acumulado[campo] += valor
+        }
+        procesados += cantidad
+        desdeId = ultimoId
+        setProcesadosActualizacion(procesados)
+        setResultadoActualizacion({ ...acumulado })
+        if (datos.finalizado) {
+          setActualizacionCompletada(true)
+          break
+        }
+        if (cantidad === 0) throw new Error('La sincronización no pudo avanzar al siguiente lote.')
+      }
+    } catch (err) {
+      setErrorActualizacion(err instanceof Error ? err.message : 'No se pudo completar la actualización.')
+    } finally {
+      setActualizandoDatos(false)
+    }
+  }
 
   const reporteSeleccionado =
     REPORTES.find((reporte) => reporte.value === tipoReporte) ?? null
@@ -700,6 +798,61 @@ export default function ImportarReportesClient() {
             </div>
           </div>
         )}
+
+        <section className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 sm:p-5">
+          <h2 className="text-base font-bold text-gray-900">Actualización de datos</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Sincroniza Reporte Fija con ventas BAF usando los datos ya importados.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-gray-700">
+              {consultandoActualizacion
+                ? 'Consultando registros disponibles...'
+                : `${registrosFija.toLocaleString('es-AR')} registros de Reporte Fija disponibles`}
+            </span>
+            <button
+              type="button"
+              onClick={actualizarDatos}
+              disabled={consultandoActualizacion || actualizandoDatos || procesando || registrosFija === 0 || Boolean(errorActualizacion && procesadosActualizacion === 0)}
+              className="rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+            >
+              {actualizandoDatos ? 'Actualizando datos...' : 'Actualizar datos'}
+            </button>
+          </div>
+          {(actualizandoDatos || procesadosActualizacion > 0) && (
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-semibold text-gray-800">
+                {procesadosActualizacion.toLocaleString('es-AR')} de {registrosFija.toLocaleString('es-AR')} registros procesados
+              </p>
+              <div className="h-3 overflow-hidden rounded-full bg-blue-100">
+                <div className="h-full bg-blue-600 transition-all"
+                  style={{ width: `${registrosFija > 0 ? Math.min(100, procesadosActualizacion / registrosFija * 100) : 0}%` }} />
+              </div>
+            </div>
+          )}
+          {resultadoActualizacion && (
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+              {([
+                ['Actualizados', resultadoActualizacion.actualizados],
+                ['Sin cambios', resultadoActualizacion.sin_cambios],
+                ['Protegidos', resultadoActualizacion.protegidos],
+                ['Sin coincidencia', resultadoActualizacion.sin_coincidencia],
+                ['No cargados', resultadoActualizacion.no_cargados],
+              ] as const).map(([titulo, valor]) => (
+                <div key={titulo} className="rounded-lg bg-white p-3">
+                  <div className="text-xs font-semibold text-gray-500">{titulo}</div>
+                  <div className="mt-1 text-xl font-bold text-gray-900">{valor}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {actualizacionCompletada && (
+            <p className="mt-4 text-sm font-bold text-green-800">Actualización de Reporte Fija → BAF completada correctamente.</p>
+          )}
+          {errorActualizacion && (
+            <p role="alert" className="mt-4 text-sm font-semibold text-red-700">{errorActualizacion}</p>
+          )}
+        </section>
 
         <div className="mt-6 flex justify-end border-t border-gray-100 pt-5">
           {!resultado ? (
