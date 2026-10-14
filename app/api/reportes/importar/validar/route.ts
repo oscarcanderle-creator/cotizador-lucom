@@ -391,7 +391,7 @@ export async function POST(request: Request) {
             ? 0
             : tipo === 'ACTIVACIONES'
               ? 8
-              : 4
+              : 21
 
     const registrosBaseValidos = registros.filter((fila) => {
       if (limpiar(fila[indiceClave]) === '') {

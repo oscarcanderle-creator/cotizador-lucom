@@ -439,7 +439,7 @@ function transformarFilaCater(
     // D - Nim
     nim: valorONull(fila[3]),
 
-    // E - Bill-Number (clave natural)
+    // E - Bill-Number (dato, puede repetirse)
     bill_number: limpiar(fila[4]),
 
     // F - Cuenta
@@ -650,7 +650,7 @@ export async function POST(request: Request) {
             ? 0
             : tipo === 'ACTIVACIONES'
               ? 8
-              : 4
+              : 21
 
     const filasBaseValidas = registros.filter((fila) => {
       if (limpiar(fila[indiceClave]) === '') {
@@ -684,7 +684,7 @@ export async function POST(request: Request) {
               ? 'NRO. OT'
               : tipo === 'ACTIVACIONES'
                 ? 'Nim'
-                : 'Bill-Number'
+                : 'Cater Sds Id'
 
       return NextResponse.json(
         {
