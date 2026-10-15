@@ -10,6 +10,7 @@ type TipoReporte =
   | 'WFM'
   | 'ACTIVACIONES'
   | 'CATER'
+  | 'DISTRIBUCION_R3'
 
 type PendienteItecFija = { fila: number; sds: string; ot?: string; motivos: string[] }
 
@@ -42,6 +43,8 @@ type ResultadoValidacion = {
     rubro: string
   }>
   mensaje: string
+  series_duplicadas?: string[]
+  filas_sin_serie?: number[]
 }
 
 type ResultadoImportacion = {
@@ -98,6 +101,11 @@ const REPORTES: {
     value: 'CATER',
     label: 'Venta Equipos / CATER',
     descripcion: 'Cambios de terminal realizados en locales.',
+  },
+  {
+    value: 'DISTRIBUCION_R3',
+    label: 'Distribución R3',
+    descripcion: 'Primera carga de SIM en locales Claro exclusivos.',
   },
 ]
 
@@ -269,7 +277,11 @@ export default function ImportarReportesClient() {
       formData.append('tipo', tipoReporte)
       formData.append('archivo', archivo)
 
-      const response = await fetch(tipoReporte === 'ITEC_FIJA' ? '/api/reportes/importar/itec-fija/validar' : '/api/reportes/importar/validar', {
+      const response = await fetch(tipoReporte === 'DISTRIBUCION_R3'
+        ? '/api/reportes/importar/distribucion-r3/validar'
+        : tipoReporte === 'ITEC_FIJA'
+          ? '/api/reportes/importar/itec-fija/validar'
+          : '/api/reportes/importar/validar', {
         method: 'POST',
         body: formData,
       })
@@ -303,7 +315,11 @@ export default function ImportarReportesClient() {
       formData.append('tipo', tipoReporte)
       formData.append('archivo', archivo)
 
-      const response = await fetch(tipoReporte === 'ITEC_FIJA' ? '/api/reportes/importar/itec-fija/confirmar' : '/api/reportes/importar/confirmar', {
+      const response = await fetch(tipoReporte === 'DISTRIBUCION_R3'
+        ? '/api/reportes/importar/distribucion-r3/confirmar'
+        : tipoReporte === 'ITEC_FIJA'
+          ? '/api/reportes/importar/itec-fija/confirmar'
+          : '/api/reportes/importar/confirmar', {
         method: 'POST',
         body: formData,
       })
@@ -409,7 +425,11 @@ export default function ImportarReportesClient() {
 
   const puedeProcesar = Boolean(tipoReporte && archivo && !procesando)
   const puedeConfirmar = Boolean(
-    resultado && !resultadoImportacion && !procesando,
+    resultado && !resultadoImportacion && !procesando &&
+    (tipoReporte !== 'DISTRIBUCION_R3' ||
+      (resultado.ok &&
+        !(resultado.series_duplicadas?.length) &&
+        !(resultado.filas_sin_serie?.length))),
   )
 
   return (
