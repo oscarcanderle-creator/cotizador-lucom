@@ -2407,21 +2407,7 @@ async function compartirPropuesta() {
 
                 </div>
 
-                <div>
 
-                  <span className="text-gray-500">
-
-                    Vigencia:{' '}
-
-                  </span>
-
-                  <strong>
-
-                    solo durante el día de emisión
-
-                  </strong>
-
-                </div>
 
               </div>
 
@@ -3566,21 +3552,7 @@ async function compartirPropuesta() {
 
                 </div>
 
-                <div>
 
-                  <span className="text-gray-500">
-
-                    Vigencia:{' '}
-
-                  </span>
-
-                  <span className="font-medium">
-
-                    {fechaEmision}
-
-                  </span>
-
-                </div>
 
               </div>
 
@@ -3778,21 +3750,7 @@ async function compartirPropuesta() {
 
               </div>
 
-              <div>
 
-                <span className="text-gray-500">
-
-                  Vigencia:{' '}
-
-                </span>
-
-                <span className="font-medium">
-
-                {fechaEmision}
-
-                </span>
-
-              </div>
 
             </div>
 
@@ -4510,9 +4468,11 @@ async function compartirPropuesta() {
 
             </strong>{' '}
 
-            La respuesta “OK” a esta propuesta implica conformidad con los productos, beneficios e importes detallados.
+            La respuesta “OK” a esta propuesta implica la aceptación de los productos, beneficios e importes detallados, calculados mediante la aplicación de los descuentos ofrecidos sobre los precios de lista vigentes al momento de su emisión.
 
-            La propuesta es válida únicamente durante el día de emisión.
+            Los descuentos establecidos, ya sean porcentuales o de importe fijo, se mantendrán durante los períodos expresamente indicados para cada producto o beneficio. Los precios de lista podrán experimentar actualizaciones, sin que ello modifique los descuentos acordados durante su período de vigencia.
+
+            Esta propuesta comercial es válida únicamente durante el día de su emisión. Una vez aceptada dentro de ese plazo, los descuentos y beneficios conservarán las condiciones y los períodos establecidos, independientemente del vencimiento de la propuesta.
 
           </div>
 
