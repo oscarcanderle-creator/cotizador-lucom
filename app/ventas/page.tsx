@@ -1,3 +1,4 @@
+import { buscarClientePorDocumento } from './buscarCliente'
 import { redirect } from 'next/navigation'
 import { createClient } from '../../utils/supabase/server'
 import { createAdminClient } from '../../utils/supabase/admin'
@@ -361,5 +362,6 @@ export default async function VentasPage(){
    return{ok:true,mensaje:mensajeFinal,idOperacion}
   }catch(error){console.error(error);if(operacionCreada)await admin.from('operaciones').delete().eq('id_operacion',idOperacion);else if(serviciosCreados.length)await admin.from('cliente_servicios').delete().in('id',serviciosCreados);return{ok:false,mensaje:error instanceof Error?error.message:'No se pudo guardar la venta.'}}
  }
- return <FormularioVentas nombreUsuario={nombreUsuario} vendedor={vendedor} rol={profile.rol} puedeGestionarVentas={profile.puede_gestionar_ventas===true} origenes={(origenes??[]).map(x=>x.nombre)} zonas={(zonas??[]).map(x=>x.nombre)} tiposDomicilio={(tiposDomicilio??[]).map(x=>x.nombre)} productos={(productos??[]).map(p=>({...p,precio_lista:Number(p.precio_lista??0),descuento_normal:p.descuento_normal==null?null:Number(p.descuento_normal),precio_cliente:p.precio_cliente==null?null:Number(p.precio_cliente)}))} guardarVenta={guardarVenta}/>
+ return <FormularioVentas nombreUsuario={nombreUsuario} vendedor={vendedor} rol={profile.rol} puedeGestionarVentas={profile.puede_gestionar_ventas===true} origenes={(origenes??[]).map(x=>x.nombre)} zonas={(zonas??[]).map(x=>x.nombre)} tiposDomicilio={(tiposDomicilio??[]).map(x=>x.nombre)} productos={(productos??[]).map(p=>({...p,precio_lista:Number(p.precio_lista??0),descuento_normal:p.descuento_normal==null?null:Number(p.descuento_normal),precio_cliente:p.precio_cliente==null?null:Number(p.precio_cliente)}))} guardarVenta={guardarVenta}
+        buscarClientePorDocumento={buscarClientePorDocumento}/>
 }

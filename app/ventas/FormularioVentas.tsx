@@ -5,19 +5,23 @@ import AppHeader from '../../components/AppHeader'
 
 type ProductoCatalogo = { id:number; producto:string; origen:string|null; plan:string; precio_lista:number; descuento_normal:number|null; precio_cliente:number|null; beneficios:string|null }
 type ResultadoGuardado = { ok:boolean; mensaje:string; idOperacion?:string }
-type Props = { nombreUsuario:string; vendedor:string; rol:string; puedeGestionarVentas:boolean; origenes:string[]; zonas:string[]; tiposDomicilio:string[]; productos:ProductoCatalogo[]; guardarVenta:(formData:FormData)=>Promise<ResultadoGuardado> }
+type Props = { nombreUsuario:string; vendedor:string; rol:string; puedeGestionarVentas:boolean; origenes:string[]; zonas:string[]; tiposDomicilio:string[]; productos:ProductoCatalogo[]; guardarVenta:(formData:FormData)=>Promise<ResultadoGuardado>; buscarClientePorDocumento:(tipoDocumento:string,numeroDocumento:string)=>Promise<any> }
 type ServicioNuevo = { id:number; tipo:'BAF'|'PORTA'|'LINEA_NUEVA'; tv:'NO'|'SI'; decos:'0'|'1'|'2' }
 type ServicioExistente = { id:number; tipo:'BAF'|'LINEA_MOVIL'; modalidad:string }
+type ClienteBuscado = { nombre:string|null; apellido:string|null; fecha_nacimiento:string|null; email:string|null; telefono:string|null; telefono_alternativo:string|null }
+type DomicilioBuscado = { id:number; calle_nro:string|null; piso:string|null; dpto:string|null; entre_calles:string|null; barrio:string|null; localidad:string|null; coordenadas:string|null; datos_extras:string|null }
+type OperacionBuscada = { id_operacion:string; fecha_hora:string|null; vendedor:string|null; origen_dato:string|null; operacion_productos?:Array<{id:number;tipo_producto:string|null;producto_snapshot:string|null;plan_snapshot:string|null;gestion_producto_baf?:Array<{estado_claro:string|null;estados_baf?:{nombre:string|null}|null}>;gestion_producto_movil?:Array<{estados_porta?:{nombre:string|null}|null;estados_bboo?:{nombre:string|null}|null}>}> }
+
 
 const companias=['PERSONAL','MOVISTAR','TUENTI']
 const tiposDocumento=['DNI','CUIT','LC','LE']
 const inputClass='w-full min-h-11 border border-gray-300 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-white text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100'
 
-function Campo({label,name,type='text',required=false,placeholder,inputMode,maxLength,pattern}:{label:string;name:string;type?:string;required?:boolean;placeholder?:string;inputMode?:'text'|'numeric'|'tel'|'email';maxLength?:number;pattern?:string}){
- return <label className="block"><span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">{label}{required?' *':''}</span><input className={inputClass} name={name} type={type} required={required} placeholder={placeholder} inputMode={inputMode} maxLength={maxLength} pattern={pattern}/></label>
+function Campo({label,name,type='text',required=false,placeholder,inputMode,maxLength,pattern,defaultValue}:{label:string;name:string;type?:string;required?:boolean;placeholder?:string;inputMode?:'text'|'numeric'|'tel'|'email';maxLength?:number;pattern?:string;defaultValue?:string}){
+ return <label className="block"><span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">{label}{required?' *':''}</span><input className={inputClass} name={name} type={type} required={required} placeholder={placeholder} inputMode={inputMode} maxLength={maxLength} pattern={pattern} defaultValue={defaultValue}/></label>
 }
 
-function CampoTelefono({label,name,required=false}:{label:string;name:string;required?:boolean}){
+function CampoTelefono({label,name,required=false,defaultValue}:{label:string;name:string;required?:boolean;defaultValue?:string}){
  const permitido=/^(?:$|[1-46-9]\d{0,9})$/
  const teclasControl=new Set(['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'])
 
@@ -25,8 +29,9 @@ function CampoTelefono({label,name,required=false}:{label:string;name:string;req
   <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">{label}{required?' *':''}</span>
   <input
    className={inputClass}
-   name={name}
-   type="tel"
+    name={name}
+    defaultValue={defaultValue}
+    type="tel"
    required={required}
    inputMode="numeric"
    maxLength={10}
@@ -83,7 +88,53 @@ function opcionesPlanesMoviles(lista:ProductoCatalogo[]){
  return opciones.sort((a,b)=>(orden.get(a.label)??99)-(orden.get(b.label)??99))
 }
 
-export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestionarVentas,origenes,zonas,tiposDomicilio,productos,guardarVenta}:Props){
+export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestionarVentas,origenes,zonas,tiposDomicilio,productos,guardarVenta,buscarClientePorDocumento}:Props){
+  const [tipoBusqueda,setTipoBusqueda]=useState('DNI')
+  const [documentoBusqueda,setDocumentoBusqueda]=useState('')
+  const [buscandoCliente,setBuscandoCliente]=useState(false)
+  const [mensajeBusqueda,setMensajeBusqueda]=useState('')
+  const [consultaLista,setConsultaLista]=useState(false)
+  const [clienteBuscado,setClienteBuscado]=useState<ClienteBuscado|null>(null)
+  const [domiciliosBuscados,setDomiciliosBuscados]=useState<DomicilioBuscado[]>([])
+  const [domicilioElegido,setDomicilioElegido]=useState('')
+  const [operacionesBuscadas,setOperacionesBuscadas]=useState<OperacionBuscada[]>([])
+  const secuenciaBusqueda=useRef(0)
+  const domicilioActual=domiciliosBuscados.find(d=>String(d.id)===domicilioElegido)
+  function invalidarBusqueda(){
+    secuenciaBusqueda.current++
+    setConsultaLista(false)
+    setBuscandoCliente(false)
+    setClienteBuscado(null)
+    setDomiciliosBuscados([])
+    setOperacionesBuscadas([])
+    setDomicilioElegido('')
+    setMensajeBusqueda('')
+  }
+
+
+  async function consultarDocumento(){
+    const secuencia=++secuenciaBusqueda.current
+    setBuscandoCliente(true)
+    setConsultaLista(false)
+    setMensajeBusqueda('')
+    try {
+      const respuesta=await buscarClientePorDocumento(tipoBusqueda,documentoBusqueda)
+      if(secuencia!==secuenciaBusqueda.current) return
+      setMensajeBusqueda(respuesta.mensaje)
+      if(respuesta.ok){
+        setClienteBuscado(respuesta.cliente??null)
+        setDomiciliosBuscados(respuesta.domicilios??[])
+        setOperacionesBuscadas(respuesta.operaciones??[])
+        setDomicilioElegido('')
+        setConsultaLista(true)
+      }
+    } catch {
+      if(secuencia===secuenciaBusqueda.current) setMensajeBusqueda('No se pudo consultar el cliente. Intentá nuevamente.')
+    } finally {
+      if(secuencia===secuenciaBusqueda.current) setBuscandoCliente(false)
+    }
+  }
+
  const [nuevos,setNuevos]=useState<ServicioNuevo[]>([])
  const [existentes,setExistentes]=useState<ServicioExistente[]>([])
  const [cargaItec,setCargaItec]=useState(false)
@@ -148,7 +199,11 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
  const agregarExistente=()=>setExistentes(a=>[...a,{id:Date.now()+Math.random(),tipo:'BAF',modalidad:'2PLAY'}])
  async function enviar(e:FormEvent<HTMLFormElement>){
   e.preventDefault()
-  const form=e.currentTarget
+   const form=e.currentTarget
+   if(!consultaLista || buscandoCliente){
+    setResultado({ok:false,mensaje:'Primero consultá el documento del cliente.'})
+    return
+   }
 
   if(!form.checkValidity()){
    form.reportValidity()
@@ -176,7 +231,10 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
    const r=await guardarVenta(fd)
    setResultado(r)
    if(r.ok){
-    form.reset()
+     form.reset()
+     invalidarBusqueda()
+     setDocumentoBusqueda('')
+     setTipoBusqueda('DNI')
     setOrigenDato('')
     setNuevos([])
     setExistentes([])
@@ -190,6 +248,82 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
  }
  const tituloProducto=(p:ProductoCatalogo)=>[p.plan,p.origen].filter(Boolean).join(' · ')
  return <main className="min-h-screen bg-gray-100 text-gray-900"><AppHeader rol={rol} usuario={nombreUsuario} actual="VENTAS" puedeGestionarVentas={puedeGestionarVentas}/><form ref={formRef} onSubmit={enviar} className="max-w-6xl mx-auto px-2.5 py-3 sm:px-5 sm:py-5 pb-24">
+   <section className="mb-3 rounded-2xl border border-gray-300 bg-white p-4">
+     <h2 className="mb-2 text-base font-bold">Identificación del cliente</h2>
+     <p className="mb-3 text-sm text-gray-600">Consultá el documento antes de cargar la venta.</p>
+     <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_auto] sm:items-end">
+       <label className="block">
+         <span className="mb-1 block text-xs font-medium">Tipo de documento</span>
+         <select className={inputClass} value={tipoBusqueda}
+           onChange={e=>{setTipoBusqueda(e.target.value);invalidarBusqueda()}}>
+           {tiposDocumento.map(t=><option key={t} value={t}>{t}</option>)}
+         </select>
+       </label>
+       <label className="block">
+         <span className="mb-1 block text-xs font-medium">Número de documento</span>
+         <input className={inputClass} inputMode="numeric" value={documentoBusqueda}
+           onChange={e=>{setDocumentoBusqueda(e.target.value);invalidarBusqueda()}}
+           placeholder="Ingresá el número"/>
+       </label>
+       <button type="button" onClick={consultarDocumento} disabled={buscandoCliente}
+         className="min-h-11 rounded-xl bg-red-600 px-5 font-bold text-white disabled:opacity-50">
+         {buscandoCliente?'Buscando...':'Buscar cliente'}
+       </button>
+     </div>
+     {mensajeBusqueda&&<p className="mt-3 text-sm font-medium">{mensajeBusqueda}</p>}
+     {consultaLista&&<p className="mt-2 text-sm text-green-700">{clienteBuscado?'Cliente encontrado. Revisá los datos antes de continuar.':'Cliente nuevo. Completá sus datos.'}</p>}
+   </section>
+  {consultaLista&&<>
+  {domiciliosBuscados.length>0&&<section className="mb-3 rounded-xl border bg-white p-3">
+    <label className="block text-sm font-semibold">Domicilio para esta venta
+      <select className={inputClass} value={domicilioElegido} onChange={e=>setDomicilioElegido(e.target.value)}>
+        <option value="">Nuevo domicilio / completar manualmente</option>
+        {domiciliosBuscados.map(d=><option key={d.id} value={String(d.id)}>{[d.calle_nro,d.barrio,d.localidad].filter(Boolean).join(' · ')}</option>)}
+      </select>
+    </label>
+    <p className="mt-1 text-xs text-gray-600">Elegí un domicilio anterior solo si corresponde a esta venta. Todos los datos siguen siendo editables.</p>
+  </section>}
+  {clienteBuscado&&<section className="mb-3 rounded-2xl border border-gray-200 bg-white p-3 sm:p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <h3 className="text-sm font-bold text-gray-900 sm:text-base">Antecedentes comerciales</h3>
+      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+        {operacionesBuscadas.length} {operacionesBuscadas.length===1?'operación':'operaciones'} · últimas 10
+      </span>
+    </div>
+    {operacionesBuscadas.length===0?<p className="mt-3 text-sm text-gray-600">No hay operaciones anteriores registradas.</p>:
+    <div className="mt-3 space-y-3">{operacionesBuscadas.map(op=><article key={op.id_operacion} className="overflow-hidden rounded-xl border border-blue-300 bg-blue-100">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-blue-300 bg-blue-200/80 px-3 py-3">
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Operación</div>
+          <div className="break-all font-mono text-xs font-semibold text-gray-900 sm:text-sm">{op.id_operacion}</div>
+        </div>
+        <span className="rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
+          {op.fecha_hora?new Date(op.fecha_hora).toLocaleDateString('es-AR'):'Sin fecha'}
+        </span>
+      </div>
+      <div className="grid gap-2 px-3 py-3 text-xs text-gray-600 sm:grid-cols-2">
+        <div><span className="font-semibold text-gray-700">Vendedor: </span><span className="break-words">{op.vendedor||'Sin dato'}</span></div>
+        <div><span className="font-semibold text-gray-700">Origen: </span>{op.origen_dato||'Sin dato'}</div>
+      </div>
+      {(op.operacion_productos??[]).length>0&&<div className="space-y-2 border-t border-blue-300 px-3 py-3">
+        {(op.operacion_productos??[]).map(prod=>{
+          const tipo=String(prod.tipo_producto??'').toUpperCase()
+          const etiqueta=tipo==='LINEA_NUEVA'?'Línea Nueva':tipo==='PORTA'?'Portabilidad':tipo==='BAF'?'Internet / BAF':(prod.tipo_producto||'Producto').replaceAll('_',' ')
+          const estado=prod.gestion_producto_baf?.[0]?.estados_baf?.nombre||prod.gestion_producto_baf?.[0]?.estado_claro||prod.gestion_producto_movil?.[0]?.estados_porta?.nombre||prod.gestion_producto_movil?.[0]?.estados_bboo?.nombre||'Sin estado informado'
+          return <div key={prod.id} className="rounded-lg border border-blue-100 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="rounded-md bg-red-50 px-2 py-1 text-xs font-semibold text-red-800">{etiqueta}</span>
+              <span className={`rounded-md px-2 py-1 text-xs font-medium ${estado==='Sin estado informado'?'bg-gray-100 text-gray-600':'bg-blue-50 text-blue-800'}`}>Estado: {estado}</span>
+            </div>
+            {(prod.producto_snapshot||prod.plan_snapshot)&&<div className="mt-2 text-sm text-gray-800">
+              {[prod.producto_snapshot,prod.plan_snapshot].filter(Boolean).join(' · ')}
+            </div>}
+          </div>
+        })}
+      </div>}
+    </article>)}</div>}
+    <p className="mt-3 text-xs leading-relaxed text-amber-800">Los estados reflejan la gestión comercial registrada, no necesariamente servicios activos hoy. Revisá posibles operaciones pendientes o repetidas.</p>
+  </section>}
   <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"><b>PLATAFORMA LUCOM</b> · Nueva venta multiproducto. BAF y móviles se registran únicamente en Supabase.</div>
   <section className="mb-3 rounded-2xl border border-green-300 bg-green-50 p-3">
    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -211,10 +345,28 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
    </div>
   </section>
   <section className="mb-3 rounded-xl border bg-white px-3 py-2 text-xs text-gray-500">Usuario <b className="text-gray-800">{nombreUsuario}</b> · Vendedor <b className="text-gray-800">{vendedor}</b></section>
-  <Seccion n="01" titulo="Cliente"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><Campo label="Nombre" name="nombre" required/><Campo label="Apellido" name="apellido" required/><Selector label="Documento" name="tipo_documento" opciones={opts(tiposDocumento)} defaultValue="DNI" required/><Campo label="Número" name="dni" inputMode="numeric" required/><Campo label="Fecha nacimiento" name="fecha_nacimiento" type="date"/><CampoTelefono label="Teléfono" name="telefono" required/><CampoTelefono label="Contacto alternativo" name="telefono_alternativo"/><Campo label="Correo cliente" name="email" type="email" inputMode="email" required/></div></Seccion>
-  <Seccion n="02" titulo="Domicilio"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5"><div className="sm:col-span-2"><Campo label="Calle y Nro" name="domicilio" required/></div><Campo label="Entre calles" name="entre_calles"/><Campo label="Piso" name="piso"/><Campo label="Dpto" name="dpto"/><Campo label="Barrio" name="barrio"/><Campo label="Localidad" name="localidad"
-            required
-          /><Campo label="Coordenadas" name="coordenadas"/><div className="sm:col-span-2"><Campo label="Datos extras" name="datos_extras"/></div></div></Seccion>
+  <Seccion n="01" titulo="Cliente"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+    <Campo label="Nombre" name="nombre" defaultValue={clienteBuscado?.nombre??''} required/>
+    <Campo label="Apellido" name="apellido" defaultValue={clienteBuscado?.apellido??''} required/>
+    <label className="block"><span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">Documento</span><input className={inputClass} value={tipoBusqueda} readOnly/><input type="hidden" name="tipo_documento" value={tipoBusqueda}/></label>
+    <label className="block"><span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">Número</span><input className={inputClass} value={documentoBusqueda.replace(/\D/g,'')} readOnly/><input type="hidden" name="dni" value={documentoBusqueda.replace(/\D/g,'')}/></label>
+    <Campo label="Fecha nacimiento" name="fecha_nacimiento" type="date" defaultValue={clienteBuscado?.fecha_nacimiento??''}/>
+    <CampoTelefono label="Teléfono" name="telefono" defaultValue={clienteBuscado?.telefono??''} required/>
+    <CampoTelefono label="Contacto alternativo" name="telefono_alternativo" defaultValue={clienteBuscado?.telefono_alternativo??''}/>
+    <Campo label="Correo cliente" name="email" type="email" inputMode="email" defaultValue={clienteBuscado?.email??''} required/>
+  </div></Seccion>
+  <div key={domicilioElegido}>
+    <Seccion n="02" titulo="Domicilio"><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+      <div className="sm:col-span-2"><Campo label="Calle y Nro" name="domicilio" defaultValue={domicilioActual?.calle_nro??''} required/></div>
+      <Campo label="Entre calles" name="entre_calles" defaultValue={domicilioActual?.entre_calles??''}/>
+      <Campo label="Piso" name="piso" defaultValue={domicilioActual?.piso??''}/>
+      <Campo label="Dpto" name="dpto" defaultValue={domicilioActual?.dpto??''}/>
+      <Campo label="Barrio" name="barrio" defaultValue={domicilioActual?.barrio??''}/>
+      <Campo label="Localidad" name="localidad" defaultValue={domicilioActual?.localidad??''} required/>
+      <Campo label="Coordenadas" name="coordenadas" defaultValue={domicilioActual?.coordenadas??''}/>
+      <div className="sm:col-span-2"><Campo label="Datos extras" name="datos_extras" defaultValue={domicilioActual?.datos_extras??''}/></div>
+    </div></Seccion>
+  </div>
   <Seccion n="03" titulo="Servicios Existentes que Habilitan Convergencia"><p className="text-sm text-gray-600 mb-3">Registrá solamente servicios Claro que el cliente ya posee. No generan una nueva venta.</p><div className="space-y-3">{existentes.map((s,i)=><div key={s.id} className="rounded-xl border bg-gray-50 p-3"><div className="flex justify-between mb-2"><b className="text-sm">Servicio existente {i+1}</b><button type="button" className="text-xs text-red-600" onClick={()=>setExistentes(a=>a.filter(x=>x.id!==s.id))}>Quitar</button></div><div className="grid sm:grid-cols-3 gap-2">
  <label className="block">
   <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">Tipo *</span>
@@ -271,7 +423,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
     const productoSeleccionado=lista.find(p=>String(p.id)===productoSeleccionadoId)
     const esFwa=s.tipo==='LINEA_NUEVA' && productoSeleccionado ? etiquetaPlanMovil(productoSeleccionado)==='FWA 5G 400G' : false
     const pagoModem=pagosModem[s.id]??''
-    return <div id={`servicio-nuevo-${s.id}`} key={s.id} className="scroll-mt-24 rounded-2xl border border-gray-200 bg-gray-50 p-3"><div className="flex justify-between mb-3"><div><b>{s.tipo==='BAF'?'Internet / BAF':s.tipo==='PORTA'?'Portabilidad':'Línea Nueva'}</b><div className="text-[11px] text-gray-500">Servicio nuevo {i+1}</div></div><button type="button" onClick={()=>{
+    return <div id={`servicio-nuevo-${s.id}`} key={s.id} className="scroll-mt-24 rounded-2xl border border-blue-200 bg-blue-50 p-3"><div className="flex justify-between mb-3"><div><b>{s.tipo==='BAF'?'Internet / BAF':s.tipo==='PORTA'?'Portabilidad':'Línea Nueva'}</b><div className="text-[11px] text-gray-500">Servicio nuevo {i+1}</div></div><button type="button" onClick={()=>{
  const restantes=nuevos.filter(x=>x.id!==s.id)
  setNuevos(restantes)
  if(s.tipo==='PORTA'){
@@ -468,6 +620,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
   {resultado&&<div className={`mb-3 rounded-xl border px-3 py-3 text-sm font-medium ${resultado.ok?'border-green-200 bg-green-50 text-green-700':'border-red-200 bg-red-50 text-red-700'}`}>{resultado.mensaje}{resultado.idOperacion&&<div className="font-mono text-xs mt-1">ID: {resultado.idOperacion}</div>}</div>}
   <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-2.5 sm:sticky sm:bg-gray-100/95"><button type="submit" disabled={guardando} className="mx-auto block w-full max-w-6xl sm:w-auto sm:min-w-56 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl px-6 py-3 disabled:opacity-50">{guardando?'Guardando...':'Guardar venta'}</button></div>
 
+  </>}
   {mostrarConfirmacionItec && (
    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
     <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
@@ -489,5 +642,5 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
   )}
 </form></main>
 }
-function Seccion({n,titulo,children}:{n:string;titulo:string;children:React.ReactNode}){return <section className="mb-3"><div className="flex items-center gap-2 mb-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white">{n}</span><h2 className="font-bold text-sm sm:text-base">{titulo}</h2></div><div className="bg-white border border-gray-200 rounded-2xl p-3 sm:p-4 shadow-sm">{children}</div></section>}
+function Seccion({n,titulo,children}:{n:string;titulo:string;children:React.ReactNode}){return <section className="mb-3"><div className="flex items-center gap-2 mb-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white">{n}</span><h2 className="font-bold text-sm sm:text-base">{titulo}</h2></div><div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 sm:p-4 shadow-sm">{children}</div></section>}
 function BotonProducto({children,onClick,disabled=false,activo=false}:{children:React.ReactNode;onClick:()=>void;disabled?:boolean;activo?:boolean}){return <button type="button" disabled={disabled} onClick={onClick} className={`min-h-14 rounded-2xl border-2 px-4 font-bold transition ${activo?'border-red-600 bg-red-600 text-white hover:bg-red-700':'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'} ${disabled&&!activo?'opacity-40':''}`}>{children}</button>}
