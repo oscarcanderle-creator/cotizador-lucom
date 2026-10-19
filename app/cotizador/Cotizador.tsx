@@ -3630,7 +3630,7 @@ async function compartirPropuesta() {
 
                 </span>
 
-                <span>
+                <span className="break-all">
 
                   {datosCliente.email || '—'}
 
@@ -4468,11 +4468,15 @@ async function compartirPropuesta() {
 
             </strong>{' '}
 
-            La respuesta “OK” a esta propuesta implica la aceptación de los productos, beneficios e importes detallados, calculados mediante la aplicación de los descuentos ofrecidos sobre los precios de lista vigentes al momento de su emisión.
+            La respuesta “OK” a esta propuesta implica la aceptación de los productos, beneficios y descuentos detallados. Los importes resultantes se calculan aplicando los descuentos porcentuales sobre los precios de lista vigentes al momento de emitir esta propuesta.
 
-            Los descuentos establecidos, ya sean porcentuales o de importe fijo, se mantendrán durante los períodos expresamente indicados para cada producto o beneficio. Los precios de lista podrán experimentar actualizaciones, sin que ello modifique los descuentos acordados durante su período de vigencia.
+            <p className="mt-2">
+              Los descuentos porcentuales acordados se mantendrán durante los períodos establecidos. <strong>Los precios finales no son fijos y podrán variar conforme se actualicen los precios de lista.</strong>
+            </p>
 
-            Esta propuesta comercial es válida únicamente durante el día de su emisión. Una vez aceptada dentro de ese plazo, los descuentos y beneficios conservarán las condiciones y los períodos establecidos, independientemente del vencimiento de la propuesta.
+            <p className="mt-2">
+              Esta propuesta es válida únicamente durante el día de su emisión. Una vez aceptada, los descuentos y beneficios conservarán los períodos de vigencia establecidos.
+            </p>
 
           </div>
 
