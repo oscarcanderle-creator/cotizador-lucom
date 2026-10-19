@@ -206,7 +206,7 @@ async function guardarGestionBaf(formData: FormData) {
       orden_trabajo: texto('orden_trabajo'),
       linea_fija: texto('linea_fija'),
       fecha_instalacion: fechaInstalacionDesdeFormulario(formData),
-      ciclo_cuenta: texto('ciclo_cuenta'),
+      ciclo_cuenta: undefined,
       motivo_estado: texto('motivo_estado'),
     }),
     cache: 'no-store',
@@ -422,7 +422,7 @@ async function guardarGestionProducto(
       orden_trabajo: texto('orden_trabajo'),
       linea_fija: texto('linea_fija'),
       fecha_instalacion: fechaInstalacionDesdeFormulario(formData),
-      ciclo_cuenta: texto('ciclo_cuenta'),
+      ciclo_cuenta: undefined,
       motivo_estado: texto('motivo_estado'),
     })
   } else {
@@ -1273,7 +1273,7 @@ export default async function DetalleVentaPage({
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><GestionInputValidado name="sds" tipo="SDS" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Orden Trabajo</label><GestionInputValidado name="orden_trabajo" tipo="OT" defaultValue={gestion?.orden_trabajo ?? ''} placeholder="8 dígitos" className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /><p className="mt-1 text-xs text-gray-500">En Conexión Full con BAF nuevo, esta OT habilita automáticamente PORTA/LN.</p></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Observaciones</label><input name="linea_fija" defaultValue={gestion?.linea_fija ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
-                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Ciclo Cuenta</label><input name="ciclo_cuenta" defaultValue={gestion?.ciclo_cuenta ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Gestión</label><div className="min-h-10 w-full rounded-lg border border-gray-300 bg-gray-200 px-3 py-2 text-sm font-medium text-gray-800 cursor-not-allowed">{fechaArgentina(gestion?.fecha_gestion ?? null)}</div></div>
                               <input type="hidden" name="fecha_instalacion_original" value={gestion?.fecha_instalacion ?? ''} />
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Instalación</label><input type="date" name="fecha_instalacion_fecha" defaultValue={partesFechaInstalacion(gestion?.fecha_instalacion).fecha} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Turno</label><select name="fecha_instalacion_turno" defaultValue={partesFechaInstalacion(gestion?.fecha_instalacion).turno} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar turno</option><option value="Turno Mañana">Turno Mañana</option><option value="Turno Tarde">Turno Tarde</option></select></div>
@@ -1286,7 +1286,7 @@ export default async function DetalleVentaPage({
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                   <div>
                                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Estado Claro</label>
-                                    <div className="min-h-10 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">{mostrar(gestion?.estado_claro)}</div>
+                                    <div className="min-h-10 w-full rounded-lg border border-gray-300 bg-gray-200 px-3 py-2 text-sm font-medium text-gray-800 cursor-not-allowed">{mostrar(gestion?.estado_claro)}</div>
                                   </div>
                                   <div>
                                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Motivo Cierre</label>
@@ -2070,14 +2070,11 @@ export default async function DetalleVentaPage({
 
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Ciclo Cuenta
+                      Fecha Gestión
                     </label>
-                    <input
-                      type="text"
-                      name="ciclo_cuenta"
-                      defaultValue={gestionBaf?.ciclo_cuenta ?? ''}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    />
+                    <div className="min-h-10 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
+                      {fechaArgentina(gestionBaf?.fecha_gestion ?? null)}
+                    </div>
                   </div>
 
                   <input type="hidden" name="fecha_instalacion_original" value={gestionBaf?.fecha_instalacion ?? ''} />

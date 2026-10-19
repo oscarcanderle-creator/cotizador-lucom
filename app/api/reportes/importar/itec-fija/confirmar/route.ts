@@ -19,6 +19,21 @@ const headers = [
   'Provincia','Localidad','Partido','Barrio','Territorio',
   'Supervisor','Gerente Regional','Gerente Nacional','Backoffice',
 ]
+// Interpreta la fecha de ITEC como hora local argentina (UTC-03:00).
+// Acepta d/m/aa, d/m/aaaa y horas de uno o dos dígitos.
+function fechaCreacionItec(valor: unknown): string | null {
+  const m = str(valor).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+  if (!m) return null
+  const dia = Number(m[1]), mes = Number(m[2])
+  const anio = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])
+  const hora = Number(m[4]), minuto = Number(m[5]), segundo = Number(m[6] ?? '0')
+  if (anio < 2000 || mes < 1 || mes > 12 || dia < 1 || dia > 31 || hora > 23 || minuto > 59 || segundo > 59) return null
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia))
+  if (fecha.getUTCFullYear() !== anio || fecha.getUTCMonth() !== mes - 1 || fecha.getUTCDate() !== dia) return null
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${anio}-${pad(mes)}-${pad(dia)}T${pad(hora)}:${pad(minuto)}:${pad(segundo)}-03:00`
+}
+
 function fechaNacimiento(v: string) {
   const t = str(v)
   if (!t || norm(t) === 'NULO') return ''
@@ -63,23 +78,34 @@ export async function POST(request: Request) {
     const registros = filas.filter(f=>f.some(v=>str(v))&&!str(f[0]).startsWith('Filtros aplicados:'))
     for (const [i,f] of registros.entries()) {
       const tipo = norm(f[0])
-      if (tipo === 'PV') {preventasOmitidas++;continue}
-      if (tipo !== 'V') {
-        pendientes.push({fila:i+2,sds:str(f[12]).toUpperCase(),ot:str(f[13]),motivos:[`Tipo de registro no reconocido: ${str(f[0]) || '(vacío)'}. Solo se importan ventas V.`]})
+      if (tipo !== 'V' && tipo !== 'PV') {
+        pendientes.push({fila:i+2,sds:str(f[12]).toUpperCase(),ot:str(f[13]),motivos:[`Tipo de registro no reconocido: ${str(f[0]) || '(vacío)'}. Solo se importan registros V o PV.`]})
         continue
       }
       const sds = str(f[12]).toUpperCase(), ot=str(f[13]), vendedorDni=str(f[9])
+      if (norm(ot) === 'NO ASIGNADA') {
+        pendientes.push({
+          fila:i+2, sds, ot,
+          motivos:['Descartada: OT No Asignada (venta cancelada por mala carga)']
+        })
+        continue
+      }
       if (sds && vistos.has(sds)) {duplicadas++;continue}
       if (sds) vistos.add(sds)
-      const prod = interpretar(sds,str(f[15]))
+      const prod = interpretar(sds,str(f[15])) ??
+         (tipo === 'PV' && /^[0-9]{8}(FAE|TAE)$/.test(sds) && /^(100|300|600)\s*MB$/.test(norm(f[15]).trim())
+           ? {anadir:false,tv:sds.endsWith('TAE'),plan:`${norm(f[15]).trim().match(/^(100|300|600)/)?.[1]} MB`}
+           : null)
       const telefono = str(f[27]).replace(/\s+/g,'')
       const tv = prod?.tv ?? false
       const q = str(f[16]); const decos = tv ? (q ? Number(q)-1 : 0) : 0
       const motivos:string[]=[]
       if (!prod) motivos.push('SDS o plan sin equivalencia')
+       const fechaItec = tipo === 'V' ? fechaCreacionItec(f[2]) : null
+       if (tipo === 'V' && !fechaItec) motivos.push('Fecha de creación ITEC inválida')
       if (!/^[0-9]{8}$/.test(ot)) motivos.push('OT inválida')
       if (!mapa.has(vendedorDni)) motivos.push('Vendedor inexistente o inactivo')
-      if (!['DNI','CUIT'].includes(norm(f[22]))) motivos.push('Documento no admitido')
+      if (!['DNI','CUIT','LC','LE'].includes(norm(f[22]))) motivos.push('Documento no admitido')
       if (!str(f[23]).replace(/\D/g,'')) motivos.push('Documento vacío')
       if (!str(f[19]) || !str(f[20])) motivos.push('Nombre o apellido vacío')
       if (!/^[1-46-9]\d{9}$/.test(telefono)) motivos.push('Teléfono inválido')
@@ -89,7 +115,7 @@ export async function POST(request: Request) {
         motivos.push('Decodificadores inválidos')
       if (motivos.length) {pendientes.push({fila:i+2,sds,ot,motivos});continue}
       const payload = {
-        sds,ot,dni_vendedor:vendedorDni,vendedor_id:mapa.get(vendedorDni),actor_id:user.id,
+        sds,ot,tipo_itec:tipo,fecha_creacion_itec:fechaItec,dni_vendedor:vendedorDni,vendedor_id:mapa.get(vendedorDni),actor_id:user.id,
         tipo_documento:norm(f[22]),dni:str(f[23]).replace(/\D/g,''),
         apellido:str(f[19]),nombre:str(f[20]),fecha_nacimiento:fechaNacimiento(str(f[24])),
         telefono,email:str(f[28]),domicilio:`${str(f[29])} ${str(f[30])}`.trim(),
@@ -105,12 +131,12 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({
       ok:true,importacion_id:0,encontrados:registros.length,validos:creadas,
-      descartados:existentes+duplicadas+pendientes.length+preventasOmitidas,insertados:creadas,
+      descartados:existentes+duplicadas+pendientes.length,insertados:creadas,
       actualizados:0,sin_cambios:existentes,reporte:'ITEC FIJA - Ventas BAF',archivo:archivo.name,
       nuevas:creadas,existentes,duplicados_archivo:duplicadas,
-      preventas_omitidas:preventasOmitidas,
+      preventas_omitidas:0,
       cantidad_pendientes:pendientes.length,pendientes,
-      mensaje:`Importación finalizada: ${creadas} creadas, ${existentes} existentes, ${duplicadas} duplicadas en CSV, ${preventasOmitidas} preventas omitidas, ${pendientes.length} pendientes.`,
+      mensaje:`Importación finalizada: ${creadas} creadas, ${existentes} existentes, ${duplicadas} duplicadas en CSV, ${pendientes.length} pendientes.`,
     })
   } catch (e:unknown) {
     console.error('Importación ITEC FIJA',e)

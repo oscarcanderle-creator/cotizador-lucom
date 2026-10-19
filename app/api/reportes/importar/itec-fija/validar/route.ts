@@ -36,6 +36,21 @@ function interpretarProducto(sds: string, plan: string) {
     requiereInternetExistente2Play: false,
   }
 }
+// Interpreta la fecha de ITEC como hora local argentina (UTC-03:00).
+// Acepta d/m/aa, d/m/aaaa y horas de uno o dos dígitos.
+function fechaCreacionItec(valor: unknown): string | null {
+  const m = str(valor).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+  if (!m) return null
+  const dia = Number(m[1]), mes = Number(m[2])
+  const anio = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])
+  const hora = Number(m[4]), minuto = Number(m[5]), segundo = Number(m[6] ?? '0')
+  if (anio < 2000 || mes < 1 || mes > 12 || dia < 1 || dia > 31 || hora > 23 || minuto > 59 || segundo > 59) return null
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia))
+  if (fecha.getUTCFullYear() !== anio || fecha.getUTCMonth() !== mes - 1 || fecha.getUTCDate() !== dia) return null
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${anio}-${pad(mes)}-${pad(dia)}T${pad(hora)}:${pad(minuto)}:${pad(segundo)}-03:00`
+}
+
 const emailValido = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
 
 export async function POST(request: Request) {
@@ -91,9 +106,8 @@ export async function POST(request: Request) {
     let nuevos = 0, yaExistentes = 0, duplicadosArchivo = 0, preventasOmitidas = 0
     for (const [i,f] of registros.entries()) {
       const tipo = norm(f[0])
-      if (tipo === 'PV') { preventasOmitidas++; continue }
-      if (tipo !== 'V') {
-        pendientes.push({fila:i+2,sds:str(f[12]).toUpperCase(),ot:str(f[13]),motivos:[`Tipo de registro no reconocido: ${str(f[0]) || '(vacío)'}. Solo se importan ventas V.`]})
+      if (tipo !== 'V' && tipo !== 'PV') {
+        pendientes.push({fila:i+2,sds:str(f[12]).toUpperCase(),ot:str(f[13]),motivos:[`Tipo de registro no reconocido: ${str(f[0]) || '(vacío)'}. Solo se importan registros V o PV.`]})
         continue
       }
       const sds = str(f[12]).toUpperCase()
@@ -102,6 +116,13 @@ export async function POST(request: Request) {
       if (sds && existentes.has(sds)) { yaExistentes++; continue }
       const motivos: string[] = []
       const ot = str(f[13])
+      if (norm(ot) === 'NO ASIGNADA') {
+        pendientes.push({
+          fila:i+2, sds, ot,
+          motivos:['Descartada: OT No Asignada (venta cancelada por mala carga)']
+        })
+        continue
+      }
       const ventaConOt = gestionesPorOt.get(ot)
       if (ot && ventaConOt && ventaConOt.sds !== sds) {
         motivos.push(`OT ${ot} ya registrada en PGL (ID ${ventaConOt.id}) con SDS ${ventaConOt.sds || 'sin SDS'}. Revisar posible error de carga.`)
@@ -114,8 +135,12 @@ export async function POST(request: Request) {
       if (!/^[0-9]{8}[A-Z]{3}$/.test(sds)) motivos.push('SDS inválido')
       if (!/^[0-9]{8}$/.test(str(f[13]))) motivos.push('OT inválida')
       if (!mapaVendedores.has(str(f[9]))) motivos.push('DNI de vendedor no encontrado o inactivo')
-      if (!interpretarProducto(sds,str(f[15]))) motivos.push('Servicios / Plan sin equivalencia')
-      if (!['DNI','CUIT'].includes(norm(f[22]))) motivos.push('Tipo de documento no admitido')
+      const producto = interpretarProducto(sds,str(f[15]))
+       const planHistorico = tipo === 'PV' && /^[0-9]{8}(FAE|TAE)$/.test(sds) &&
+         /^(100|300|600)\s*MB$/.test(norm(f[15]))
+       if (!producto && !planHistorico) motivos.push('Servicios / Plan sin equivalencia')
+       if (tipo === 'V' && !fechaCreacionItec(f[2])) motivos.push('Fecha de creación ITEC inválida')
+      if (!['DNI','CUIT','LC','LE'].includes(norm(f[22]))) motivos.push('Tipo de documento no admitido')
       if (!str(f[23]).replace(/\D/g,'')) motivos.push('Documento del cliente vacío')
       if (!str(f[19]) || !str(f[20])) motivos.push('Nombre o apellido vacío')
       if (!/^[1-46-9]\d{9}$/.test(str(f[27]).replace(/\s+/g,''))) motivos.push('Teléfono inválido')
@@ -123,7 +148,7 @@ export async function POST(request: Request) {
       if (!str(f[29]) || !str(f[30])) motivos.push('Calle o altura vacía')
       if (!str(f[36])) motivos.push('Localidad vacía')
       const decos = str(f[16])
-      const tv = interpretarProducto(sds,str(f[15]))?.tv ?? false
+      const tv = producto?.tv ?? (planHistorico && sds.endsWith('TAE'))
       if (tv && decos && (!/^\d+$/.test(decos) || Number(decos)<1 || Number(decos)>3))
         motivos.push('Cantidad de decodificadores inválida')
       // Si SDS termina en FAE, la columna Q no determina TV ni invalida la venta.
@@ -134,9 +159,9 @@ export async function POST(request: Request) {
       ok:true,tipo:'ITEC_FIJA',reporte:'ITEC FIJA (solo validación)',
       archivo:archivo.name,filas_archivo:hoja.cantidadFilas,columnas:hoja.cantidadColumnas,
       registros_encontrados:registros.length,registros_validos:nuevos,
-      registros_descartados:pendientes.length+yaExistentes+duplicadosArchivo+preventasOmitidas,
+      registros_descartados:pendientes.length+yaExistentes+duplicadosArchivo,
       nuevas:nuevos,existentes:yaExistentes,duplicados_archivo:duplicadosArchivo,
-      preventas_omitidas:preventasOmitidas,
+      preventas_omitidas:0,
       pendientes, cantidad_pendientes:pendientes.length,
       mensaje:'Validación finalizada. No se creó ni modificó ninguna venta.',
     })

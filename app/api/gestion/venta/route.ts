@@ -409,7 +409,7 @@ export async function POST(request: Request) {
         orden_trabajo: ot,
         linea_fija: body.linea_fija ?? null,
         fecha_instalacion: body.fecha_instalacion ?? null,
-        ciclo_cuenta: body.ciclo_cuenta ?? null,
+        ciclo_cuenta: body.ciclo_cuenta !== undefined ? body.ciclo_cuenta : (anteriorProducto?.ciclo_cuenta ?? null),
         motivo_estado: body.motivo_estado ?? null,
         estado_baf_id: body.estado_baf_id ?? null,
         updated_at: ahora,
@@ -1283,7 +1283,7 @@ export async function POST(request: Request) {
       p_orden_trabajo: body.orden_trabajo ?? null,
       p_linea_fija: body.linea_fija ?? null,
       p_fecha_instalacion: body.fecha_instalacion ?? null,
-      p_ciclo_cuenta: body.ciclo_cuenta ?? null,
+      p_ciclo_cuenta: body.ciclo_cuenta !== undefined ? body.ciclo_cuenta : (anterior?.ciclo_cuenta ?? null),
       p_motivo_estado: body.motivo_estado ?? null,
     })
 
