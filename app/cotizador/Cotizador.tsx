@@ -432,37 +432,9 @@ export default function Cotizador({
 
    */
 
-  const [lineas, setLineas] =
+  const [lineas, setLineas] = useState<LineaUI[]>([])
 
-    useState<LineaUI[]>(
-
-      cotizadorAnonimo
-
-        ? []
-
-        : [
-
-            {
-
-              id: 1,
-
-              tipo: 'LINEA NUEVA',
-
-              plan: '7 Gigas',
-
-              cantidad: 1,
-
-              portabilidades: [],
-
-            },
-
-          ]
-
-    )
-
-  const [nextLineaId, setNextLineaId] =
-
-    useState(cotizadorAnonimo ? 1 : 2)
+  const [nextLineaId, setNextLineaId] = useState(1)
 
   /*
 
@@ -474,31 +446,9 @@ export default function Cotizador({
 
    */
 
-  const [serviciosInternet, setServiciosInternet] =
+  const [serviciosInternet, setServiciosInternet] = useState<InternetUI[]>([])
 
-    useState<InternetUI[]>(
-
-      cotizadorAnonimo
-
-        ? [
-
-            {
-
-              id: 1,
-
-              plan: '200 MB',
-
-            },
-
-          ]
-
-        : []
-
-    )
-
-  const [nextInternetId, setNextInternetId] =
-
-    useState(cotizadorAnonimo ? 2 : 1)
+  const [nextInternetId, setNextInternetId] = useState(1)
 
   /*
 
@@ -1671,32 +1621,11 @@ function limpiarCotizacion() {
   setCantidadLineasActuales(1)
   setClienteTieneBAF(false)
 
-  setLineas(
-    cotizadorAnonimo
-      ? []
-      : [
-          {
-            id: 1,
-            tipo: 'LINEA NUEVA',
-            plan: '7 Gigas',
-            cantidad: 1,
-            portabilidades: [],
-          },
-        ]
-  )
-  setNextLineaId(cotizadorAnonimo ? 1 : 2)
+  setLineas([])
+  setNextLineaId(1)
 
-  setServiciosInternet(
-    cotizadorAnonimo
-      ? [
-          {
-            id: 1,
-            plan: '200 MB',
-          },
-        ]
-      : []
-  )
-  setNextInternetId(cotizadorAnonimo ? 2 : 1)
+  setServiciosInternet([])
+  setNextInternetId(1)
 
   setTvActivo(false)
   setCantidadDecosAdicionales(0)
