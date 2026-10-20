@@ -1269,11 +1269,11 @@ export default async function DetalleVentaPage({
                           {esBaf ? (
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Estado BAF</label><select name="estado_baf_id" defaultValue={gestion?.estado_baf_id ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Sin estado</option>{(estadosBaf ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
-                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">CIA Celular</label><select name="cia_celular" defaultValue={gestion?.cia_celular ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar compañía</option><option>CLARO</option><option>PERSONAL</option><option>MOVISTAR</option><option>TUENTI</option></select></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Gestión</label><div className="min-h-10 w-full rounded-lg border border-gray-300 bg-gray-200 px-3 py-2 text-sm font-medium text-gray-800 cursor-not-allowed">{fechaArgentina(gestion?.fecha_gestion ?? null)}</div></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><GestionInputValidado name="sds" tipo="SDS" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Orden Trabajo</label><GestionInputValidado name="orden_trabajo" tipo="OT" defaultValue={gestion?.orden_trabajo ?? ''} placeholder="8 dígitos" className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /><p className="mt-1 text-xs text-gray-500">En Conexión Full con BAF nuevo, esta OT habilita automáticamente PORTA/LN.</p></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Observaciones</label><input name="linea_fija" defaultValue={gestion?.linea_fija ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
-                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Gestión</label><div className="min-h-10 w-full rounded-lg border border-gray-300 bg-gray-200 px-3 py-2 text-sm font-medium text-gray-800 cursor-not-allowed">{fechaArgentina(gestion?.fecha_gestion ?? null)}</div></div>
+                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">CIA Celular</label><select name="cia_celular" defaultValue={gestion?.cia_celular ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar compañía</option><option>CLARO</option><option>PERSONAL</option><option>MOVISTAR</option><option>TUENTI</option></select></div>
                               <input type="hidden" name="fecha_instalacion_original" value={gestion?.fecha_instalacion ?? ''} />
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha Instalación</label><input type="date" name="fecha_instalacion_fecha" defaultValue={partesFechaInstalacion(gestion?.fecha_instalacion).fecha} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Turno</label><select name="fecha_instalacion_turno" defaultValue={partesFechaInstalacion(gestion?.fecha_instalacion).turno} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar turno</option><option value="Turno Mañana">Turno Mañana</option><option value="Turno Tarde">Turno Tarde</option></select></div>
@@ -1992,20 +1992,11 @@ export default async function DetalleVentaPage({
 
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      CIA Celular
+                      Fecha Gestión
                     </label>
-                    <select
-                      name="cia_celular"
-                      defaultValue={gestionBaf?.cia_celular ?? ''}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                    >
-                      <option value="">Seleccionar compañía</option>
-                      <option value="CLARO">CLARO</option>
-                      <option value="PERSONAL">PERSONAL</option>
-                      <option value="MOVISTAR">MOVISTAR</option>
-                      <option value="TUENTI">TUENTI</option>
-                    </select>
-                  </div>
+                    <div className="min-h-10 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
+                      {fechaArgentina(gestionBaf?.fecha_gestion ?? null)}
+                    </div>
 
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -2070,11 +2061,20 @@ export default async function DetalleVentaPage({
 
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Fecha Gestión
+                      CIA Celular
                     </label>
-                    <div className="min-h-10 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700">
-                      {fechaArgentina(gestionBaf?.fecha_gestion ?? null)}
-                    </div>
+                    <select
+                      name="cia_celular"
+                      defaultValue={gestionBaf?.cia_celular ?? ''}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      <option value="">Seleccionar compañía</option>
+                      <option value="CLARO">CLARO</option>
+                      <option value="PERSONAL">PERSONAL</option>
+                      <option value="MOVISTAR">MOVISTAR</option>
+                      <option value="TUENTI">TUENTI</option>
+                    </select>
+                  </div>
                   </div>
 
                   <input type="hidden" name="fecha_instalacion_original" value={gestionBaf?.fecha_instalacion ?? ''} />
