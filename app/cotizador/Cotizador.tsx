@@ -630,17 +630,34 @@ export default function Cotizador({
 
     useMemo(() => {
 
-      return productos.filter(
-
-        (p) =>
-
-          p.producto ===
-
-          'Internet Fibra optica'
-
+      const planes = productos.filter(
+        (p) => p.producto === 'Internet Fibra optica'
       )
 
-    }, [productos])
+      if (negocio !== 'PYME') return planes
+
+      const ordenPyme = [
+        '200MB',
+        '500MB',
+        '800MB',
+        'BAFE 200MB',
+        'BAFE 500MB',
+        'BAFE 800MB',
+      ]
+
+      const posicion = (plan: string) => {
+        const normalizado = plan.toUpperCase().replace(/\s+/g, '')
+        const indice = ordenPyme.findIndex(
+          (nombre) => nombre.replace(/\s+/g, '') === normalizado
+        )
+        return indice === -1 ? ordenPyme.length : indice
+      }
+
+      return [...planes].sort(
+        (a, b) => posicion(a.plan) - posicion(b.plan)
+      )
+
+    }, [productos, negocio])
 
   /*
 
