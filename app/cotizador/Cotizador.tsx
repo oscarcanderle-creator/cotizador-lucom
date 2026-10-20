@@ -596,8 +596,6 @@ export default function Cotizador({
 
     if (
 
-      serviciosInternet.length > 0 &&
-
       cantidadDecosAdicionales > 2
 
     ) {
@@ -3287,15 +3285,7 @@ async function compartirPropuesta() {
 
                     </option>
 
-                    {serviciosInternet.length === 0 && (
 
-                      <option value="3">
-
-                        3 adicionales
-
-                      </option>
-
-                    )}
 
                   </select>
 
@@ -3325,11 +3315,7 @@ async function compartirPropuesta() {
 
                   <div className="text-xs text-gray-400 mt-1">
 
-                    {serviciosInternet.length > 0
-
-                      ? 'Internet + TV: máximo 1 incluido + 2 adicionales.'
-
-                      : 'Añadir TV: máximo 1 incluido + 3 adicionales. Solo aplica a servicios 2Play.'}
+                    Máximo 3 decodificadores: 1 incluido sin cargo y hasta 2 adicionales.
 
                   </div>
 
