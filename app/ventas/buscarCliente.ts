@@ -95,7 +95,7 @@ export async function buscarClientePorDocumento(
       admin
         .from('operaciones')
         .select(
-          'id_operacion,fecha_hora,vendedor,origen_dato,operacion_productos(id,tipo_producto,producto_snapshot,plan_snapshot,gestion_producto_baf(estado_claro,fecha_gestion,fecha_cierre,estados_baf(codigo,nombre)),gestion_producto_movil(fecha_carga_stl,fecha_porta,estados_porta(codigo,nombre),estados_bboo(codigo,nombre)))'
+          'id_operacion,fecha_hora,vendedor,origen_dato,domicilio_id,operacion_productos(id,tipo_producto,producto_snapshot,plan_snapshot,gestion_producto_baf(estado_claro,motivo_estado,fecha_gestion,fecha_cierre,estados_baf(codigo,nombre)),gestion_producto_movil(fecha_carga_stl,fecha_porta,estados_porta(codigo,nombre),estados_bboo(codigo,nombre)))'
         )
         .eq('cliente_id', cliente.id)
         .order('fecha_hora', { ascending: false })
@@ -105,13 +105,48 @@ export async function buscarClientePorDocumento(
     if (errorDomicilios) throw errorDomicilios
     if (errorOperaciones) throw errorOperaciones
 
+    // Relacionar cada operación con el domicilio que tenía registrado.
+    const domiciliosPorId = new Map(
+      (domicilios ?? []).map(d => [d.id, d])
+    )
+
+    const idsHistoricos = (operaciones ?? [])
+      .map(op => op.id_operacion)
+      .filter(id => id.startsWith('HIST-'))
+
+    const estadosHistoricos = new Map<string, string>()
+
+    if (idsHistoricos.length > 0) {
+      const { data: historicos, error: errorHistoricos } = await admin
+        .from('migracion_historica_registros')
+        .select('operacion_id,estado_original')
+        .in('operacion_id', idsHistoricos)
+
+      if (errorHistoricos) throw errorHistoricos
+
+      for (const registro of historicos ?? []) {
+        if (registro.operacion_id && registro.estado_original?.trim()) {
+          estadosHistoricos.set(
+            registro.operacion_id,
+            registro.estado_original.trim()
+          )
+        }
+      }
+    }
+
+    const operacionesConDomicilio = (operaciones ?? []).map(op => ({
+      ...op,
+      domicilio_venta: domiciliosPorId.get(op.domicilio_id) ?? null,
+      estado_historico: estadosHistoricos.get(op.id_operacion) ?? null
+    }))
+
     return {
       ok: true,
       encontrado: true,
       mensaje: 'Cliente encontrado.',
       cliente,
       domicilios: domicilios ?? [],
-      operaciones: operaciones ?? []
+      operaciones: operacionesConDomicilio
     }
 
   } catch (error) {

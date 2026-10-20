@@ -10,7 +10,7 @@ type ServicioNuevo = { id:number; tipo:'BAF'|'PORTA'|'LINEA_NUEVA'; tv:'NO'|'SI'
 type ServicioExistente = { id:number; tipo:'BAF'|'LINEA_MOVIL'; modalidad:string }
 type ClienteBuscado = { nombre:string|null; apellido:string|null; fecha_nacimiento:string|null; email:string|null; telefono:string|null; telefono_alternativo:string|null }
 type DomicilioBuscado = { id:number; calle_nro:string|null; piso:string|null; dpto:string|null; entre_calles:string|null; barrio:string|null; localidad:string|null; coordenadas:string|null; datos_extras:string|null }
-type OperacionBuscada = { id_operacion:string; fecha_hora:string|null; vendedor:string|null; origen_dato:string|null; operacion_productos?:Array<{id:number;tipo_producto:string|null;producto_snapshot:string|null;plan_snapshot:string|null;gestion_producto_baf?:Array<{estado_claro:string|null;estados_baf?:{nombre:string|null}|null}>;gestion_producto_movil?:Array<{estados_porta?:{nombre:string|null}|null;estados_bboo?:{nombre:string|null}|null}>}> }
+type OperacionBuscada = { domicilio_venta?:DomicilioBuscado|null; estado_historico?:string|null; id_operacion:string; fecha_hora:string|null; vendedor:string|null; origen_dato:string|null; operacion_productos?:Array<{id:number;tipo_producto:string|null;producto_snapshot:string|null;plan_snapshot:string|null;gestion_producto_baf?:({estado_claro:string|null;motivo_estado?:string|null;estados_baf?:{nombre:string|null}|null})|Array<{estado_claro:string|null;motivo_estado?:string|null;estados_baf?:{nombre:string|null}|null}>;gestion_producto_movil?:Array<{estados_porta?:{nombre:string|null}|null;estados_bboo?:{nombre:string|null}|null}>}> }
 
 
 const companias=['PERSONAL','MOVISTAR','TUENTI']
@@ -123,9 +123,13 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
       setMensajeBusqueda(respuesta.mensaje)
       if(respuesta.ok){
         setClienteBuscado(respuesta.cliente??null)
-        setDomiciliosBuscados(respuesta.domicilios??[])
+        const domicilios:DomicilioBuscado[] = respuesta.domicilios??[]
+        setDomiciliosBuscados(domicilios)
         setOperacionesBuscadas(respuesta.operaciones??[])
-        setDomicilioElegido('')
+        const predeterminado = domicilios.find(
+          d => Boolean(d.calle_nro?.trim())
+        )
+        setDomicilioElegido(predeterminado ? String(predeterminado.id) : '')
         setConsultaLista(true)
       }
     } catch {
@@ -274,10 +278,10 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
      {consultaLista&&<p className="mt-2 text-sm text-green-700">{clienteBuscado?'Cliente encontrado. Revisá los datos antes de continuar.':'Cliente nuevo. Completá sus datos.'}</p>}
    </section>
   {consultaLista&&<>
-  {domiciliosBuscados.length>0&&<section className="mb-3 rounded-xl border bg-white p-3">
-    <label className="block text-sm font-semibold">Domicilio para esta venta
-      <select className={inputClass} value={domicilioElegido} onChange={e=>setDomicilioElegido(e.target.value)}>
-        <option value="">Nuevo domicilio / completar manualmente</option>
+  {domiciliosBuscados.length>0&&<section className="mb-3 rounded-xl border-2 border-blue-400 bg-blue-50 p-4">
+    <label className="block text-sm font-bold text-blue-950">📍 Domicilio para esta venta
+      <select className={`${inputClass} border-2 border-blue-400 bg-white font-semibold shadow-sm`} value={domicilioElegido} onChange={e=>setDomicilioElegido(e.target.value)}>
+        <option value="">+ Cargar nuevo domicilio / completar manualmente</option>
         {domiciliosBuscados.map(d=><option key={d.id} value={String(d.id)}>{[d.calle_nro,d.barrio,d.localidad].filter(Boolean).join(' · ')}</option>)}
       </select>
     </label>
@@ -304,19 +308,48 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
       <div className="grid gap-2 px-3 py-3 text-xs text-gray-600 sm:grid-cols-2">
         <div><span className="font-semibold text-gray-700">Vendedor: </span><span className="break-words">{op.vendedor||'Sin dato'}</span></div>
         <div><span className="font-semibold text-gray-700">Origen: </span>{op.origen_dato||'Sin dato'}</div>
+        <div className="sm:col-span-2 rounded-lg border border-blue-200 bg-white px-3 py-2">
+          <span className="font-bold text-gray-800">📍 Domicilio de la venta: </span>
+          <span className="break-words text-gray-800">
+            {op.domicilio_venta
+              ? [
+                  op.domicilio_venta.calle_nro,
+                  op.domicilio_venta.piso && `Piso ${op.domicilio_venta.piso}`,
+                  op.domicilio_venta.dpto && `Dpto ${op.domicilio_venta.dpto}`,
+                  op.domicilio_venta.barrio,
+                  op.domicilio_venta.localidad
+                ].filter(Boolean).join(' · ') || 'Sin domicilio registrado'
+              : 'Sin domicilio registrado'}
+          </span>
+        </div>
       </div>
       {(op.operacion_productos??[]).length>0&&<div className="space-y-2 border-t border-blue-300 px-3 py-3">
         {(op.operacion_productos??[]).map(prod=>{
           const tipo=String(prod.tipo_producto??'').toUpperCase()
           const etiqueta=tipo==='LINEA_NUEVA'?'Línea Nueva':tipo==='PORTA'?'Portabilidad':tipo==='BAF'?'Internet / BAF':(prod.tipo_producto||'Producto').replaceAll('_',' ')
-          const estado=prod.gestion_producto_baf?.[0]?.estados_baf?.nombre||prod.gestion_producto_baf?.[0]?.estado_claro||prod.gestion_producto_movil?.[0]?.estados_porta?.nombre||prod.gestion_producto_movil?.[0]?.estados_bboo?.nombre||'Sin estado informado'
+          const gestionBafRaw = prod.gestion_producto_baf
+          const gestionBaf = Array.isArray(gestionBafRaw)
+            ? gestionBafRaw[0]
+            : gestionBafRaw
+          const estadoOperativo=gestionBaf?.estados_baf?.nombre
+            ||gestionBaf?.estado_claro
+            ||prod.gestion_producto_movil?.[0]?.estados_porta?.nombre
+            ||prod.gestion_producto_movil?.[0]?.estados_bboo?.nombre
+          const esHistorico=!estadoOperativo&&Boolean(op.estado_historico)
+          const estado=estadoOperativo
+            ||(op.estado_historico ? `Histórico: ${op.estado_historico}` : 'Estado no asignado')
+          const observacion=gestionBaf?.motivo_estado
           return <div key={prod.id} className="rounded-lg border border-blue-100 bg-white p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="rounded-md bg-red-50 px-2 py-1 text-xs font-semibold text-red-800">{etiqueta}</span>
-              <span className={`rounded-md px-2 py-1 text-xs font-medium ${estado==='Sin estado informado'?'bg-gray-100 text-gray-600':'bg-blue-50 text-blue-800'}`}>Estado: {estado}</span>
+              <span className={`rounded-md px-2 py-1 text-xs font-medium ${estado==='Estado no asignado'?'bg-gray-100 text-gray-600':esHistorico?'bg-amber-100 text-amber-900':'bg-blue-50 text-blue-800'}`}>Estado: {estado}</span>
             </div>
             {(prod.producto_snapshot||prod.plan_snapshot)&&<div className="mt-2 text-sm text-gray-800">
               {[prod.producto_snapshot,prod.plan_snapshot].filter(Boolean).join(' · ')}
+            </div>}
+            {observacion&&<div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+              <span className="font-semibold">Observación de gestión: </span>
+              <span className="whitespace-pre-wrap break-words">{observacion}</span>
             </div>}
           </div>
         })}
