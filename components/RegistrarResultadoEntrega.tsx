@@ -115,10 +115,38 @@ export default function RegistrarResultadoEntrega({ intentoId, codigoGestion, mo
         {motivos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
       </select>
     </label>}
-    <label className="block text-sm font-semibold text-slate-700">Fotografía {modo === 'ENTREGADO' ? '(obligatoria)' : '(opcional)'}
-      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" disabled={enviando} onChange={e => setFoto(e.target.files?.[0] ?? null)} className="mt-2 block w-full text-sm text-slate-700" />
-      <span className="mt-1 block text-xs font-normal text-slate-500">Fotografiá el chip o sobre en el lugar donde quedó depositado, o el comprobante de recepción. Máximo 8 MB.</span>
-    </label>
+    <div className="space-y-2">
+      <p className="text-sm font-semibold text-slate-700">
+        Fotografía {modo === 'ENTREGADO' ? '(obligatoria)' : '(opcional)'}
+      </p>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+        capture="environment"
+        disabled={enviando}
+        onChange={e => setFoto(e.target.files?.[0] ?? null)}
+        className="sr-only"
+        aria-label="Seleccionar fotografía de la entrega"
+      />
+      <button
+        type="button"
+        disabled={enviando}
+        onClick={() => fileRef.current?.click()}
+        className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-700 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+      >
+        <span aria-hidden="true">📷</span>
+        {foto ? 'Volver a tomar fotografía' : 'Tomar fotografía'}
+      </button>
+      {foto && (
+        <p role="status" className="rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-800">
+          ✓ Fotografía seleccionada: {foto.name}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">
+        Fotografiá el chip o sobre en el lugar donde quedó depositado, o el comprobante de recepción. Máximo 8 MB.
+      </p>
+    </div>
     <label className="block text-sm font-semibold text-slate-700">Observaciones {modalidad === 'COMERCIO' && modo === 'ENTREGADO' ? '(obligatorias)' : '(opcionales)'}
       <textarea value={observacion} onChange={e => setObservacion(e.target.value)} disabled={enviando} rows={3} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900" placeholder="Detalle de la visita, indicaciones o autorización del cliente..." />
     </label>

@@ -943,7 +943,7 @@ if (
     },
     {
       key: 'HISTORIAL',
-      label: 'Historial',
+      label: 'Entregas',
       cantidad: historial.length,
     },
   ]
@@ -993,7 +993,9 @@ if (
                 href={`/logistica?bandeja=${bandeja.key}`}
                 className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
                   activa
-                    ? 'border-gray-900 bg-gray-900 text-white'
+                    ? bandeja.key === 'HISTORIAL'
+                      ? 'border-green-700 bg-green-700 text-white'
+                      : 'border-gray-900 bg-gray-900 text-white'
                     : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
                 }`}
               >
@@ -1387,6 +1389,14 @@ if (
                             </form>
                           )}
                       </div>
+                    </div>
+                    <div className="mt-4 border-t border-gray-200 pt-4">
+                      <a
+                        href={`/logistica/entrega/${gestion.id}`}
+                        className="inline-flex rounded-lg border border-red-600 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+                      >
+                        Ver detalle y comprobantes
+                      </a>
                     </div>
                   </section>
                 )

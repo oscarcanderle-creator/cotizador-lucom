@@ -33,6 +33,10 @@ create index if not exists evidencias_entrega_usuario_idx on public.evidencias_e
 alter table public.evidencias_entrega enable row level security;
 revoke all on public.evidencias_entrega from anon, authenticated;
 revoke all on sequence public.evidencias_entrega_id_seq from anon, authenticated;
+
+-- Permisos explícitos para el servidor (Supabase Data API).
+grant select, insert on table public.evidencias_entrega to service_role;
+grant usage on sequence public.evidencias_entrega_id_seq to service_role;
 -- El servidor escribe y lee mediante service-role tras verificar la asignación.
 -- El bucket es privado; no se crean políticas de lectura públicas.
 
@@ -55,6 +59,10 @@ begin
   return new;
 end;
 $$;
+
+-- Restringir la ejecución directa de la función del trigger.
+revoke all on function public.exigir_evidencia_resultado_entrega()
+from public, anon, authenticated;
 
 -- No sustituimos registrar_resultado_entrega: conservamos su lógica y auditoría.
 drop trigger if exists exigir_evidencia_resultado_entrega_trg on public.lote_despacho_gestiones;

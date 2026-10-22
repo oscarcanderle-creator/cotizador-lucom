@@ -8,6 +8,7 @@ import GestionBloqueoControls from '../../../components/GestionBloqueoControls'
 import GestionInputValidado from '../../../components/GestionInputValidado'
 import GestionProductoForm from '../../../components/GestionProductoForm'
 import GestionLogisticaChip from '../../../components/GestionLogisticaChip'
+import ComprobanteEntregaVenta from '../../../components/ComprobanteEntregaVenta'
 import DocumentacionDni from '../../../components/DocumentacionDni'
 import EditorDatosVenta from '../../../components/EditorDatosVenta'
 import ResolverCaminantePSR from '../../../components/ResolverCaminantePSR'
@@ -802,6 +803,61 @@ export default async function DetalleVentaPage({
     medioLogisticoActual = medioLogistico
   }
 
+  // Comprobante de entrega: consulta de solo lectura.
+  // Nunca exponer enlaces de Storage a roles no autorizados.
+  let comprobanteEntrega: {
+    fecha: string | null
+    fotoUrl: string | null
+    tieneFoto: boolean
+  } | null = null
+
+  const puedeVerComprobante = ['BBOO', 'ADMIN', 'SUPERVISOR'].includes(
+    String(profile.rol ?? '')
+  )
+
+  if (
+    puedeVerComprobante &&
+    gestionEntregaActual &&
+    String(estadoLogisticoActual?.codigo ?? '').trim().toUpperCase() === 'ENTREGADO'
+  ) {
+    const { data: ultimoEntregado, error: intentoError } = await admin
+      .from('lote_despacho_gestiones')
+      .select('id,fecha_resultado')
+      .eq('gestion_entrega_id', gestionEntregaActual.id)
+      .eq('resultado', 'ENTREGADO')
+      .not('fecha_resultado', 'is', null)
+      .order('fecha_resultado', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (intentoError) {
+      console.error('Error consultando comprobante de entrega:', intentoError)
+    }
+
+    if (ultimoEntregado) {
+      const { data: evidencia, error: evidenciaError } = await admin
+        .from('evidencias_entrega')
+        .select('foto_path')
+        .eq('intento_id', ultimoEntregado.id)
+        .maybeSingle()
+
+      if (evidenciaError) {
+        console.error('Error consultando evidencia de entrega:', evidenciaError)
+      }
+
+      const fotoPath = evidencia?.foto_path ?? null
+      const fotoUrl = fotoPath
+        ? `/api/logistica/comprobante?intento_id=${ultimoEntregado.id}`
+        : null
+
+      comprobanteEntrega = {
+        fecha: ultimoEntregado.fecha_resultado,
+        fotoUrl,
+        tieneFoto: Boolean(fotoPath),
+      }
+    }
+  }
+
   // ================================================================
   // NUEVA ARQUITECTURA MULTIPRODUCTO
   // Si la operación posee operacion_productos, esta rama es la fuente de verdad.
@@ -1063,6 +1119,9 @@ export default async function DetalleVentaPage({
                     </div>
                   </div>
                 </div>
+              {comprobanteEntrega && (
+                  <ComprobanteEntregaVenta {...comprobanteEntrega} />
+                )}
               </section>
             )}
 
@@ -1765,6 +1824,9 @@ export default async function DetalleVentaPage({
                   </div>
                 </div>
               </div>
+            {comprobanteEntrega && (
+                  <ComprobanteEntregaVenta {...comprobanteEntrega} />
+                )}
             </section>
           )}
 
