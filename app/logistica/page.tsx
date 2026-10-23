@@ -471,7 +471,7 @@ export default async function LogisticaPage({
     const normalizar = (valor: unknown) =>
       String(valor ?? '')
         .normalize('NFD')
-        .replace(/[^\\x00-\\x7F]/g, '')
+        .replace(/[\u0300-\u036f]/g, '')
         .toUpperCase()
         .trim()
 
