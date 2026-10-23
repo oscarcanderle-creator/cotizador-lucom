@@ -159,7 +159,13 @@ export default async function ConsultarEntregaQR({ params }: { params: Promise<{
                   <article key={intento.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-2">
                       <div>
-                        <h3 className="font-bold text-slate-900">Intento #{intento.id}</h3>
+                        <h3 className="font-bold text-slate-900">
+                          {intento.resultado === 'ENTREGADO'
+                            ? 'Entrega realizada'
+                            : intento.resultado === 'NO_ENTREGADO'
+                              ? 'Visita sin entrega'
+                              : 'Visita de distribución'}
+                        </h3>
                         <p className="text-xs text-slate-500">
                           {fechaArgentina(intento.fecha_resultado)}
                         </p>

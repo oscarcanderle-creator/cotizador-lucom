@@ -50,6 +50,7 @@ const CAMPOS = [
   ['fecha_lista_entrega', 'Fecha lista para entrega'],
   ['fecha_primera_distribucion', 'Fecha primera distribución'],
   ['fecha_reingreso', 'Fecha reingreso'],
+  ['fecha_entrega', 'Fecha de Entrega'],
 ] as const
 
 const vacio: Filtro = {
@@ -70,7 +71,7 @@ function condiciones(campo: string) {
     ]
   }
 
-  if (['fecha_carga_stl', 'fecha_porta', 'fecha_legajo_enviado', 'fecha_lista_entrega', 'fecha_primera_distribucion', 'fecha_reingreso'].includes(campo)) {
+  if (['fecha_carga_stl', 'fecha_porta', 'fecha_legajo_enviado', 'fecha_lista_entrega', 'fecha_primera_distribucion', 'fecha_reingreso', 'fecha_entrega'].includes(campo)) {
     return [
       ['es', 'es'],
       ['antes', 'antes de'],
@@ -178,7 +179,7 @@ export default function FiltrosAvanzadosVentas({
       <div className="space-y-2">
         {filtros.map((filtro, indice) => {
           const requiereValor = !['vacio', 'no_vacio'].includes(filtro.condicion)
-          const esFecha = ['fecha_carga_stl', 'fecha_porta', 'fecha_legajo_enviado', 'fecha_lista_entrega', 'fecha_primera_distribucion', 'fecha_reingreso'].includes(filtro.campo)
+          const esFecha = ['fecha_carga_stl', 'fecha_porta', 'fecha_legajo_enviado', 'fecha_lista_entrega', 'fecha_primera_distribucion', 'fecha_reingreso', 'fecha_entrega'].includes(filtro.campo)
           const opciones = opcionesValor(filtro.campo)
 
           return (

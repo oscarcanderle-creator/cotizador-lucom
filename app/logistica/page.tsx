@@ -328,6 +328,12 @@ async function prepararReintentoGestionEntrega(formData: FormData) {
 
 type SearchParams = Promise<{
   bandeja?: string
+  transporte?: string
+  fecha_desde?: string
+  fecha_hasta?: string
+  buscar?: string
+  estado?: string
+  pagina?: string
 }>
 
 function grupoMedio(nombre: unknown) {
@@ -434,6 +440,84 @@ export default async function LogisticaPage({
     ? bandejaSolicitada
     : 'PARA_PREPARAR'
 
+  const transporteActivo = 'TODOS'
+
+  const fechaDesde = String(params?.fecha_desde ?? '')
+  const fechaHasta = String(params?.fecha_hasta ?? '')
+
+
+  const buscar = String(params?.buscar ?? '').trim()
+
+
+
+  const estadoActivo = 'TODOS'
+
+  function coincideBusqueda(operacion: any, codigoGE?: unknown) {
+    if (!buscar) return true
+
+    const cliente = operacion?.cliente
+    const valores = [
+      cliente?.nombre,
+      cliente?.apellido,
+      `${cliente?.nombre ?? ''} ${cliente?.apellido ?? ''}`,
+      cliente?.dni,
+      operacion?.id_operacion,
+      codigoGE,
+    ]
+
+    const normalizar = (valor: unknown) =>
+      String(valor ?? '')
+        .normalize('NFD')
+        .replace(/[^\\x00-\\x7F]/g, '')
+        .toUpperCase()
+        .trim()
+
+    const termino = normalizar(buscar)
+
+    // Los códigos completos GE e HIST se buscan por coincidencia exacta.
+    if (/^(GE-|HIST-)/i.test(termino)) {
+      return (
+        normalizar(codigoGE) === termino ||
+        normalizar(operacion?.id_operacion) === termino
+      )
+    }
+
+    return valores.some((valor) => normalizar(valor).includes(termino))
+  }
+
+  function coincideFecha(fecha: unknown) {
+    if (!fechaDesde && !fechaHasta) return true
+    if (!fecha) return false
+
+    const instante = new Date(String(fecha))
+    if (Number.isNaN(instante.getTime())) return false
+
+    const partes = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(instante)
+
+    const obtener = (tipo: string) =>
+      partes.find((parte) => parte.type === tipo)?.value ?? ''
+
+    const dia = `${obtener('year')}-${obtener('month')}-${obtener('day')}`
+
+    return (!fechaDesde || dia >= fechaDesde) &&
+           (!fechaHasta || dia <= fechaHasta)
+  }
+
+  function coincideTransporte(medioNombre: unknown) {
+    if (transporteActivo === 'TODOS') return true
+
+    const grupo = grupoMedio(medioNombre)
+
+    return transporteActivo === 'CADETERIA'
+      ? grupo === 'CADETERIA'
+      : grupo === 'LUCOM TERRENO'
+  }
+
   // Diagnóstico temporal: mide cada consulta sin registrar datos personales.
   async function medirConsulta<T>(nombre: string, consulta: PromiseLike<T>): Promise<T> {
     const inicio = performance.now()
@@ -444,8 +528,47 @@ export default async function LogisticaPage({
     }
   }
 
+  const cargarPreparacion = bandejaActiva === 'PARA_PREPARAR'
+
+  const operacionesElegiblesResultado = cargarPreparacion
+    ? await medirConsulta(
+        'operaciones elegibles para preparar',
+        admin.rpc('logistica_operaciones_para_preparar')
+      )
+    : { data: [], error: null }
+
+  if (operacionesElegiblesResultado.error) {
+    throw new Error(
+      `No se pudieron identificar las operaciones para preparar: ${operacionesElegiblesResultado.error.message}`
+    )
+  }
+
+  const idsOperacionesElegibles = (operacionesElegiblesResultado.data ?? [])
+    .map((fila: any) => String(fila.operacion_id))
+
+  console.info('[Logistica] Operaciones elegibles:', idsOperacionesElegibles.length)
+
+  const productosResultado = cargarPreparacion && idsOperacionesElegibles.length > 0
+    ? await medirConsulta('productos móviles filtrados',
+        consultarTodasLasFilas(() => admin
+          .from('operacion_productos')
+          .select('id, operacion_id, tipo_producto, orden')
+          .eq('activo', true)
+          .in('tipo_producto', ['PORTA', 'LINEA_NUEVA'])
+          .in('operacion_id', idsOperacionesElegibles)
+          .order('orden', { ascending: true })
+          .order('id', { ascending: true }))
+      )
+    : { data: [], error: null }
+
+  if (productosResultado.error) {
+    throw new Error(`No se pudieron consultar los productos móviles: ${productosResultado.error.message}`)
+  }
+
+  const idsProductosElegibles = (productosResultado.data ?? [])
+    .map((producto: any) => Number(producto.id))
+
   const [
-    productosResultado,
     gestionesMovilesResultado,
     estadosBbooResultado,
     mediosResultado,
@@ -455,29 +578,23 @@ export default async function LogisticaPage({
     loteGestionesResultado,
     cadetesResultado,
   ] = await Promise.all([
-    medirConsulta('productos móviles',
-    consultarTodasLasFilas(() => admin
-      .from('operacion_productos')
-      .select('id, operacion_id, tipo_producto, orden')
-      .eq('activo', true)
-      .in('tipo_producto', ['PORTA', 'LINEA_NUEVA'])
-      .order('orden', { ascending: true })
-      .order('id', { ascending: true }))
-    ),
-
-    medirConsulta('gestión móvil',
-    consultarTodasLasFilas(() => admin
-      .from('gestion_producto_movil')
-      .select(`
-        producto_operacion_id,
-        fecha_carga_stl,
-        sim,
-        estado_bboo_id,
-        medio_despacho_chip_id,
-        numero_seguimiento
-      `)
-      .order('producto_operacion_id', { ascending: true }))
-    ),
+    cargarPreparacion && idsProductosElegibles.length > 0
+      ? medirConsulta('gestiones móviles filtradas',
+          consultarTodasLasFilas(() => admin
+            .from('gestion_producto_movil')
+            .select(`
+              producto_operacion_id,
+              fecha_carga_stl,
+              sds,
+              sim,
+              estado_bboo_id,
+              medio_despacho_chip_id,
+              numero_seguimiento
+            `)
+            .in('producto_operacion_id', idsProductosElegibles)
+            .order('producto_operacion_id', { ascending: true }))
+        )
+      : Promise.resolve({ data: [], error: null }),
 
     medirConsulta('estados BBOO',
     admin
@@ -555,6 +672,12 @@ export default async function LogisticaPage({
     )
   ])
 
+  console.info('[Logistica] Cantidades consultadas:', {
+    productosMoviles: productosResultado.data?.length ?? 0,
+    gestionesMoviles: gestionesMovilesResultado.data?.length ?? 0,
+    gestionesEntrega: gestionesEntregaResultado.data?.length ?? 0,
+  })
+
   // Consultar únicamente operaciones relacionadas con productos móviles activos
   // o con una Gestión de Entrega (incluye historial de entregas).
   const idsOperaciones = [...new Set([
@@ -581,6 +704,7 @@ export default async function LogisticaPage({
         cliente:clientes (
           nombre,
           apellido,
+          dni,
           telefono
         ),
         domicilio:domicilios (
@@ -756,8 +880,8 @@ if (
       ({ gestion }) => Boolean(gestion?.fecha_carga_stl)
     )
 
-    const todosConSim = preparaciones.every(
-      ({ gestion }) => String(gestion?.sim ?? '').trim() !== ''
+    const todosConSds = preparaciones.every(
+      ({ gestion }) => String(gestion?.sds ?? '').trim() !== ''
     )
 
     const todosConMedioValido = preparaciones.every(({ medio }) => {
@@ -785,7 +909,7 @@ if (
 
     if (
       !todosCargados ||
-      !todosConSim ||
+      !todosConSds ||
       !todosConMedioValido ||
       !mismoMedio
     ) {
@@ -795,6 +919,10 @@ if (
     const operacion = operacionPorId.get(operacionId)
     if (!operacion) continue
 
+    if (!coincideTransporte(preparaciones[0]?.medio?.nombre)) continue
+    if (!coincideFecha(operacion.fecha_hora)) continue
+    if (!coincideBusqueda(operacion)) continue
+
     paraPreparar.push({
       operacion,
       productos: preparaciones,
@@ -802,7 +930,22 @@ if (
     })
   }
 
-  const gestionesCompletas = gestionesEntrega.map((gestion: any) => {
+  const gestionesCompletas = gestionesEntrega
+    .filter((gestion: any) =>
+      coincideTransporte(
+        medioPorId.get(Number(gestion.medio_despacho_chip_id))?.nombre
+      ) &&
+      (['ENTREGADO', 'NO_ENTREGADO'].includes(
+        String(estadoEntregaPorId.get(Number(gestion.estado_entrega_id))?.codigo ?? '').toUpperCase()
+      ) || coincideFecha(gestion.created_at))
+    )
+    .filter((gestion: any) =>
+      coincideBusqueda(
+        operacionPorId.get(String(gestion.operacion_id)),
+        gestion.codigo_gestion
+      )
+    )
+    .map((gestion: any) => {
     const estado = estadoEntregaPorId.get(Number(gestion.estado_entrega_id))
     const medio = medioPorId.get(Number(gestion.medio_despacho_chip_id))
     const operacion = operacionPorId.get(String(gestion.operacion_id))
@@ -814,6 +957,7 @@ if (
       operacion,
     }
   })
+
 
   const enPreparacion = gestionesCompletas.filter(
     (gestion: any) =>
@@ -849,8 +993,18 @@ if (
     (gestion: any) => !gestionesComprometidasEnLote.has(Number(gestion.id))
   )
 
+  // Mapa completo para reconstruir lotes sin recortar sus integrantes
+  // por los filtros de búsqueda, transporte o fecha.
   const gestionesCompletasPorId = new Map(
-    gestionesCompletas.map((gestion: any) => [Number(gestion.id), gestion])
+    gestionesEntrega.map((gestion: any) => [
+      Number(gestion.id),
+      {
+        ...gestion,
+        estado: estadoEntregaPorId.get(Number(gestion.estado_entrega_id)),
+        medio: medioPorId.get(Number(gestion.medio_despacho_chip_id)),
+        operacion: operacionPorId.get(String(gestion.operacion_id)),
+      },
+    ])
   )
   const relacionesPorLote = new Map<number, any[]>()
   for (const relacion of loteGestiones) {
@@ -861,7 +1015,13 @@ if (
   }
 
   const lotesAbiertos = lotesDespacho
-    .filter((lote: any) => String(lote.estado ?? '').toUpperCase() === 'ABIERTO')
+    .filter((lote: any) =>
+      String(lote.estado ?? '').toUpperCase() === 'ABIERTO' &&
+      coincideTransporte(
+        medioPorId.get(Number(lote.medio_despacho_chip_id))?.nombre
+      ) &&
+      coincideFecha(lote.created_at)
+    )
     .map((lote: any) => {
       const relaciones = relacionesPorLote.get(Number(lote.id)) ?? []
 
@@ -877,6 +1037,12 @@ if (
         gestiones,
       }
     })
+    .filter((lote: any) =>
+      !buscar ||
+      lote.gestiones.some((gestion: any) =>
+        coincideBusqueda(gestion.operacion, gestion.codigo_gestion)
+      )
+    )
 
   const gestionesSeleccionablesLote = listas.map((gestion: any) => {
     const operacion = gestion.operacion
@@ -909,17 +1075,32 @@ if (
     )
   )
 
+  // Último resultado registrado por Gestión de Entrega.
+  const fechaResultadoPorGestion = new Map<number, string>()
+
+  for (const relacion of loteGestiones) {
+    const id = Number(relacion.gestion_entrega_id)
+    const fecha = String(relacion.fecha_resultado ?? '')
+    if (!id || !fecha || !relacion.resultado) continue
+
+    const anterior = fechaResultadoPorGestion.get(id)
+    if (!anterior || fecha > anterior) {
+      fechaResultadoPorGestion.set(id, fecha)
+    }
+  }
+
   const historial = gestionesCompletas.filter((gestion: any) =>
     ['ENTREGADO', 'NO_ENTREGADO'].includes(
       String(gestion.estado?.codigo ?? '').toUpperCase()
-    )
+    ) &&
+    coincideFecha(fechaResultadoPorGestion.get(Number(gestion.id)))
   )
 
   const bandejas = [
     {
       key: 'PARA_PREPARAR',
       label: 'Para preparar',
-      cantidad: paraPreparar.length,
+      cantidad: cargarPreparacion ? paraPreparar.length : null,
     },
     {
       key: 'EN_PREPARACION',
@@ -948,7 +1129,7 @@ if (
     },
   ]
 
-  const registrosGE =
+  const registrosGEBase =
     bandejaActiva === 'EN_PREPARACION'
       ? enPreparacion
       : bandejaActiva === 'LISTAS'
@@ -958,6 +1139,50 @@ if (
         : bandejaActiva === 'REINGRESOS'
           ? reingresos
           : historial
+
+  const registrosGE = registrosGEBase.filter((gestion: any) =>
+    estadoActivo === 'TODOS' ||
+    String(gestion.estado?.codigo ?? '').toUpperCase() === estadoActivo
+  )
+
+  // Paginación de registros visibles, después de aplicar los filtros.
+  const TAMANO_PAGINA = 25
+
+  const registrosPaginables =
+    bandejaActiva === 'PARA_PREPARAR'
+      ? paraPreparar
+      : bandejaActiva === 'LISTAS'
+        ? gestionesSeleccionablesLote
+        : registrosGE
+
+  const totalRegistros = registrosPaginables.length
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(totalRegistros / TAMANO_PAGINA)
+  )
+
+  const paginaSolicitada = Number(params?.pagina ?? 1)
+  const paginaActual =
+    Number.isSafeInteger(paginaSolicitada) && paginaSolicitada > 0
+      ? Math.min(paginaSolicitada, totalPaginas)
+      : 1
+
+  const inicioPagina = (paginaActual - 1) * TAMANO_PAGINA
+  const finPagina = inicioPagina + TAMANO_PAGINA
+
+  const registrosPagina = registrosPaginables.slice(
+    inicioPagina,
+    finPagina
+  )
+
+  const parametrosPagina = (pagina: number) =>
+    new URLSearchParams({
+      bandeja: bandejaActiva,
+      ...(buscar ? { buscar } : {}),
+      ...(fechaDesde ? { fecha_desde: fechaDesde } : {}),
+      ...(fechaHasta ? { fecha_hasta: fechaHasta } : {}),
+      pagina: String(pagina),
+    }).toString()
 
   const nombreUsuario =
     profile.nombre?.trim() ||
@@ -990,7 +1215,12 @@ if (
             return (
               <a
                 key={bandeja.key}
-                href={`/logistica?bandeja=${bandeja.key}`}
+                href={`/logistica?${new URLSearchParams({
+                  bandeja: bandeja.key,
+                  ...(buscar ? { buscar } : {}),
+                  ...(fechaDesde ? { fecha_desde: fechaDesde } : {}),
+                  ...(fechaHasta ? { fecha_hasta: fechaHasta } : {}),
+                }).toString()}`}
                 className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
                   activa
                     ? bandeja.key === 'HISTORIAL'
@@ -1007,11 +1237,113 @@ if (
                       : 'bg-gray-100 text-gray-600'
                   }`}
                 >
-                  {bandeja.cantidad}
+                  {bandeja.cantidad ?? '—'}
                 </span>
               </a>
             )
           })}
+        </div>
+
+        <form method="GET" action="/logistica" className="mb-6 rounded-2xl border border-gray-200 bg-white p-4">
+          <input type="hidden" name="bandeja" value={bandejaActiva} />
+
+          <div className="mb-4">
+            <label
+              htmlFor="filtro-busqueda"
+              className="mb-1 block text-sm font-semibold text-gray-700"
+            >
+              Buscar cliente, DNI, operación o GE
+            </label>
+            <input
+              id="filtro-busqueda"
+              type="search"
+              name="buscar"
+              defaultValue={buscar}
+              placeholder="Nombre, apellido, DNI, ID operación o GE"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+            />
+          </div>
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label htmlFor="fecha-desde" className="mb-1 block text-sm font-semibold text-gray-700">
+                Desde
+              </label>
+              <input
+                id="fecha-desde"
+                type="date"
+                name="fecha_desde"
+                defaultValue={fechaDesde}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="fecha-hasta" className="mb-1 block text-sm font-semibold text-gray-700">
+                Hasta
+              </label>
+              <input
+                id="fecha-hasta"
+                type="date"
+                name="fecha_hasta"
+                defaultValue={fechaHasta}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+            >
+              Aplicar filtros
+            </button>
+
+            <a
+              href={`/logistica?bandeja=${bandejaActiva}`}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+            >
+              Limpiar
+            </a>
+          </div>
+        </form>
+
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <p className="text-sm text-gray-700">
+            {totalRegistros === 0
+              ? 'Sin registros'
+              : `Mostrando ${inicioPagina + 1}–${Math.min(finPagina, totalRegistros)} de ${totalRegistros} registros`}
+          </p>
+
+          <div className="flex items-center gap-3">
+            {paginaActual > 1 ? (
+              <a
+                href={`/logistica?${parametrosPagina(paginaActual - 1)}`}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+              >
+                Anterior
+              </a>
+            ) : (
+              <span className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-400">
+                Anterior
+              </span>
+            )}
+
+            <span className="text-sm font-semibold text-gray-700">
+              Página {paginaActual} de {totalPaginas}
+            </span>
+
+            {paginaActual < totalPaginas ? (
+              <a
+                href={`/logistica?${parametrosPagina(paginaActual + 1)}`}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+              >
+                Siguiente
+              </a>
+            ) : (
+              <span className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-400">
+                Siguiente
+              </span>
+            )}
+          </div>
         </div>
 
         {bandejaActiva === 'PARA_PREPARAR' ? (
@@ -1027,7 +1359,7 @@ if (
               </div>
             ) : (
               <SeleccionarImpresiones
-                registros={paraPreparar.map((registro: any) => {
+                registros={registrosPagina.map((registro: any) => {
                   const operacion = registro.operacion
                   const cliente = Array.isArray(operacion?.cliente) ? operacion.cliente[0] : operacion?.cliente
                   const domicilio = Array.isArray(operacion?.domicilio) ? operacion.domicilio[0] : operacion?.domicilio
@@ -1060,7 +1392,7 @@ if (
 
               <div className="space-y-6">
                 {GRUPOS_DESPACHO.filter(grupo => grupo.codigo !== 'OTROS' || gestionesSeleccionablesLote.some((g: any) => grupoMedio(g.medio_nombre) === 'OTROS')).map(grupo => {
-                  const gestionesGrupo = gestionesSeleccionablesLote.filter((g: any) => grupoMedio(g.medio_nombre) === grupo.codigo)
+                  const gestionesGrupo = registrosPagina.filter((g: any) => grupoMedio(g.medio_nombre) === grupo.codigo)
                   return (
                     <div key={grupo.codigo} className="space-y-3">
                       <div className="flex items-center justify-between rounded-xl bg-gray-900 px-4 py-3 text-white">
@@ -1246,7 +1578,7 @@ if (
               </div>
             ) : (
               GRUPOS_DESPACHO.filter(grupo => grupo.codigo !== 'OTROS' || registrosGE.some((g: any) => grupoMedio(g.medio?.nombre) === 'OTROS')).map(grupo => {
-                const gestionesGrupo = registrosGE.filter((g: any) => grupoMedio(g.medio?.nombre) === grupo.codigo)
+                const gestionesGrupo = registrosPagina.filter((g: any) => grupoMedio(g.medio?.nombre) === grupo.codigo)
                 return (
                   <div key={grupo.codigo} className="space-y-4">
                     <div className="flex items-center justify-between rounded-xl bg-gray-900 px-5 py-4 text-white">

@@ -688,11 +688,24 @@ export async function POST(request: Request) {
         const codigoBboo = normalizarEstado(estadoBbooResult.data?.codigo)
         const nombreBboo = normalizarEstado(estadoBbooResult.data?.nombre)
 
-        if (
-          (codigoBboo === 'CARGADO STL' || nombreBboo === 'CARGADO STL') &&
-          !fechaCargaStlEfectiva
-        ) {
-          fechaCargaStlEfectiva = ahora
+        const esCargadoStl =
+          codigoBboo === 'CARGADO STL' || nombreBboo === 'CARGADO STL'
+
+        if (esCargadoStl) {
+          const sdsEfectiva = String(
+            body.sds ?? anteriorProducto?.sds ?? ''
+          ).trim()
+
+          if (!sdsEfectiva) {
+            return NextResponse.json(
+              { error: 'Para registrar CARGADO STL es obligatorio informar la SDS.' },
+              { status: 400 }
+            )
+          }
+
+          if (!fechaCargaStlEfectiva) {
+            fechaCargaStlEfectiva = ahora
+          }
         }
 
         if (
@@ -709,7 +722,7 @@ export async function POST(request: Request) {
         fecha_carga_stl: fechaCargaStlEfectiva,
         sim: simEfectivo,
         plan_cargado: body.plan_cargado ?? null,
-        sds: body.sds ?? null,
+        sds: body.sds ?? anteriorProducto?.sds ?? null,
         spn: anteriorProducto?.spn ?? null,
         pin_lnva_nro: pinEfectivo,
         documentacion_dni: body.documentacion_dni ?? null,

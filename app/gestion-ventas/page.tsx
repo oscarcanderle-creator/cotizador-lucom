@@ -354,6 +354,70 @@ export default async function GestionVentasPage({
       ? filtrosLogisticos[0].valor
       : null
 
+  // Buscar gestiones entregadas por fecha, paginando resultados.
+  async function buscarGestionesPorFechaEntrega(
+    condicion: string,
+    valor: string,
+    valor2: string
+  ): Promise<string[]> {
+    const inicioDia = (dia: string) => `${dia}T03:00:00.000Z`
+
+    const diaSiguiente = (dia: string) => {
+      const fecha = new Date(`${dia}T12:00:00.000Z`)
+      if (Number.isNaN(fecha.getTime())) return ''
+      fecha.setUTCDate(fecha.getUTCDate() + 1)
+      return fecha.toISOString().slice(0, 10)
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return []
+
+    const ids = new Set<string>()
+    const tamanoPagina = 500
+
+    for (let desde = 0; ; desde += tamanoPagina) {
+      let consulta = admin
+        .from('lote_despacho_gestiones')
+        .select('id, gestion_entrega_id')
+        .eq('resultado', 'ENTREGADO')
+        .not('fecha_resultado', 'is', null)
+        .order('id', { ascending: true })
+
+      if (condicion === 'es') {
+        consulta = consulta
+          .gte('fecha_resultado', inicioDia(valor))
+          .lt('fecha_resultado', inicioDia(diaSiguiente(valor)))
+      } else if (condicion === 'antes') {
+        consulta = consulta.lt('fecha_resultado', inicioDia(valor))
+      } else if (condicion === 'despues') {
+        consulta = consulta.gte('fecha_resultado', inicioDia(diaSiguiente(valor)))
+      } else if (condicion === 'entre') {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(valor2) || valor2 < valor) return []
+        consulta = consulta
+          .gte('fecha_resultado', inicioDia(valor))
+          .lt('fecha_resultado', inicioDia(diaSiguiente(valor2)))
+      } else {
+        return []
+      }
+
+      const { data, error } = await consulta.range(
+        desde,
+        desde + tamanoPagina - 1
+      )
+
+      if (error) {
+        throw new Error(`Error buscando entregas por fecha: ${error.message}`)
+      }
+
+      for (const fila of data ?? []) {
+        ids.add(String(fila.gestion_entrega_id))
+      }
+
+      if ((data ?? []).length < tamanoPagina) break
+    }
+
+    return [...ids]
+  }
+
   let idsFiltrados: string[] | null = null
 
   if (filtroEstadoLogistico !== null) {
@@ -385,6 +449,51 @@ export default async function GestionVentasPage({
     }
   }
 
+  // Prefiltrar operaciones cuando Fecha de Entrega es el único
+  // filtro avanzado. Las combinaciones AND/OR siguen su lógica habitual.
+  const filtroFechaEntrega =
+    filtrosLogisticos.length === 1 &&
+    filtrosLogisticos[0].campo === 'fecha_entrega'
+      ? filtrosLogisticos[0]
+      : null
+
+  if (
+    filtroFechaEntrega &&
+    ['es', 'antes', 'despues', 'entre'].includes(filtroFechaEntrega.condicion)
+  ) {
+    const valor2 = String((params as any).f1_value2 ?? '').trim()
+
+    const gestionesIds = await buscarGestionesPorFechaEntrega(
+      filtroFechaEntrega.condicion,
+      filtroFechaEntrega.valor,
+      valor2
+    )
+
+    const operacionesEntregadas = new Set<string>()
+
+    // Consultar en lotes para evitar URLs excesivas.
+    for (let i = 0; i < gestionesIds.length; i += 100) {
+      const lote = gestionesIds.slice(i, i + 100)
+
+      const { data, error } = await admin
+        .from('gestiones_entrega')
+        .select('operacion_id')
+        .in('id', lote)
+
+      if (error) {
+        throw new Error(
+          `Error relacionando entregas con operaciones: ${error.message}`
+        )
+      }
+
+      for (const gestion of data ?? []) {
+        operacionesEntregadas.add(String(gestion.operacion_id))
+      }
+    }
+
+    idsFiltrados = [...operacionesEntregadas]
+  }
+
   // Búsqueda histórica: primero localizar clientes en toda la base de datos.
   // Sin DNI/Teléfono se conserva la carga habitual de las últimas 500 operaciones.
   const busquedaHistorica = Boolean(filtroDni || filtroTelefono)
@@ -408,45 +517,96 @@ export default async function GestionVentasPage({
     ))
   }
 
-  let consultaOperaciones = admin
-    .from('operaciones')
-    .select(`
-      id_operacion,
-      tipo,
-      fecha_hora,
-      vendedor,
-      origen_dato,
-      obs,
-      cliente_id,
-      grupo_operacion
-    `)
-    .in('tipo', ['BAF', 'PORTA'])
-    .order('fecha_hora', { ascending: false })
-    .limit(busquedaHistorica ? 1000 : 500)
+  const busquedaPorFechaEntrega = Boolean(
+    filtroFechaEntrega &&
+    ['es', 'antes', 'despues', 'entre'].includes(filtroFechaEntrega.condicion)
+  )
 
-  if (busquedaIdHistorico) {
-    consultaOperaciones = consultaOperaciones
-      .ilike('id_operacion', q)
+  const columnasOperaciones = `
+    id_operacion,
+    tipo,
+    fecha_hora,
+    vendedor,
+    origen_dato,
+    obs,
+    cliente_id,
+    grupo_operacion
+  `
+
+  const construirConsultaOperaciones = () => {
+    let consulta = admin
+      .from('operaciones')
+      .select(columnasOperaciones)
+      .in('tipo', ['BAF', 'PORTA'])
+      .order('fecha_hora', { ascending: false })
+
+    if (busquedaIdHistorico) {
+      consulta = consulta.ilike('id_operacion', q)
+    }
+
+    if (clientesHistoricos !== null) {
+      consulta = clientesHistoricos.length
+        ? consulta.in('cliente_id', clientesHistoricos)
+        : consulta.eq('cliente_id', -1)
+    }
+
+    if (idsFiltrados !== null) {
+      consulta = consulta.in(
+        'id_operacion',
+        idsFiltrados.length ? idsFiltrados : ['__SIN_COINCIDENCIAS__']
+      )
+    }
+
+    return consulta
   }
 
-  if (clientesHistoricos !== null) {
-    // Un conjunto vacío nunca debe volver a la consulta sin filtro.
-    consultaOperaciones = clientesHistoricos.length
-      ? consultaOperaciones.in('cliente_id', clientesHistoricos)
-      : consultaOperaciones.eq('cliente_id', -1)
-  }
+  let operacionesBase: any[] = []
 
-  if (idsFiltrados !== null) {
-    consultaOperaciones = consultaOperaciones.in(
-      'id_operacion',
-      idsFiltrados.length ? idsFiltrados : ['__SIN_COINCIDENCIAS__']
+  if (busquedaPorFechaEntrega && idsFiltrados !== null) {
+    // Evitar URLs excesivas al consultar identificadores históricos.
+    const ids = idsFiltrados
+
+    for (let i = 0; i < ids.length; i += 100) {
+      const lote = ids.slice(i, i + 100)
+
+      let consulta = admin
+        .from('operaciones')
+        .select(columnasOperaciones)
+        .in('tipo', ['BAF', 'PORTA'])
+        .in('id_operacion', lote)
+
+      if (busquedaIdHistorico) {
+        consulta = consulta.ilike('id_operacion', q)
+      }
+
+      if (clientesHistoricos !== null) {
+        consulta = clientesHistoricos.length
+          ? consulta.in('cliente_id', clientesHistoricos)
+          : consulta.eq('cliente_id', -1)
+      }
+
+      const { data, error } = await consulta
+
+      if (error) {
+        throw new Error(`No se pudieron cargar las ventas históricas: ${error.message}`)
+      }
+
+      operacionesBase.push(...(data ?? []))
+    }
+
+    operacionesBase.sort(
+      (a: any, b: any) =>
+        String(b.fecha_hora ?? '').localeCompare(String(a.fecha_hora ?? ''))
     )
-  }
+  } else {
+    const { data, error } = await construirConsultaOperaciones()
+      .limit(busquedaHistorica ? 1000 : 500)
 
-  const { data: operacionesBase, error } = await consultaOperaciones
+    if (error) {
+      throw new Error(`No se pudieron cargar las ventas: ${error.message}`)
+    }
 
-  if (error) {
-    throw new Error(`No se pudieron cargar las ventas: ${error.message}`)
+    operacionesBase = data ?? []
   }
 
   medirEtapa('consulta de operaciones')
@@ -1007,6 +1167,63 @@ export default async function GestionVentasPage({
     }
   }
 
+  // Fecha efectiva de entrega: último resultado ENTREGADO por gestión.
+  const idsGestionesEntrega = gestionesEntregaDatos.map(
+    (gestion: any) => String(gestion.id)
+  )
+
+  const resultadosEntrega = idsGestionesEntrega.length
+    ? await consultarPorLotes(
+        'lote_despacho_gestiones',
+        'gestion_entrega_id, fecha_resultado',
+        'gestion_entrega_id',
+        idsGestionesEntrega,
+        (consulta: any) => consulta
+          .eq('resultado', 'ENTREGADO')
+          .not('fecha_resultado', 'is', null)
+      )
+    : { data: [], error: null }
+
+  if (resultadosEntrega.error) {
+    throw new Error(
+      `No se pudieron consultar las fechas de entrega: ${resultadosEntrega.error.message}`
+    )
+  }
+
+  const fechaEntregaPorGestion = new Map<string, string>()
+
+  for (const intento of resultadosEntrega.data ?? []) {
+    const id = String(intento.gestion_entrega_id)
+    const fecha = String(intento.fecha_resultado ?? '')
+    const anterior = fechaEntregaPorGestion.get(id)
+
+    if (fecha && (!anterior || fecha > anterior)) {
+      fechaEntregaPorGestion.set(id, fecha)
+    }
+  }
+
+  // Conservar la última entrega exitosa de cada operación,
+  // aunque corresponda a una gestión logística anterior.
+  const fechaEntregaPorOperacion = new Map<string, string>()
+
+  for (const entrega of gestionesEntregaDatos) {
+    const operacionId = String(entrega.operacion_id ?? '')
+    const fecha = fechaEntregaPorGestion.get(String(entrega.id))
+
+    if (!operacionId || !fecha) continue
+
+    const anterior = fechaEntregaPorOperacion.get(operacionId)
+
+    if (!anterior || fecha > anterior) {
+      fechaEntregaPorOperacion.set(operacionId, fecha)
+    }
+  }
+
+  for (const [operacionId, entrega] of entregaPorOperacion) {
+    entrega.fecha_entrega =
+      fechaEntregaPorOperacion.get(operacionId) ?? null
+  }
+
   medirEtapa('gestiones y estados logísticos')
 
   // Normalizar vendedor para operaciones actuales e históricas.
@@ -1384,6 +1601,12 @@ export default async function GestionVentasPage({
         return String(entrega?.fecha_primera_distribucion ?? '')
       case 'fecha_reingreso':
         return String(entrega?.fecha_reingreso ?? '')
+      case 'fecha_entrega':
+        return String(
+          fechaEntregaPorOperacion.get(String(operacion.id_operacion ?? operacion.id ?? ''))
+          ?? entrega?.fecha_entrega
+          ?? ''
+        )
       default:
         return ''
     }
@@ -1392,10 +1615,12 @@ export default async function GestionVentasPage({
     'legajo_enviado', 'fecha_legajo_enviado', 'estado_logistico',
     'codigo_gestion_entrega', 'fecha_lista_entrega',
     'fecha_primera_distribucion', 'fecha_reingreso',
+    'fecha_entrega',
   ])
   const camposFechaLogistica = new Set([
     'fecha_legajo_enviado', 'fecha_lista_entrega',
     'fecha_primera_distribucion', 'fecha_reingreso',
+    'fecha_entrega',
   ])
 
   const valorCampoAvanzado = (operacion: any, campo: string) => {
