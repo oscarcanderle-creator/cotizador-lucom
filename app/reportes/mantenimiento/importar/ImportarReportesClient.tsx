@@ -214,6 +214,12 @@ export default function ImportarReportesClient() {
         setResultadoActualizacion({ ...acumulado })
         if (datos.finalizado) {
           setActualizacionCompletada(true)
+          setTipoReporte('')
+          setArchivo(null)
+          setError('')
+          setResultado(null)
+          setResultadoImportacion(null)
+          if (inputRef.current) inputRef.current.value = ''
           break
         }
         if (cantidad === 0) throw new Error('La sincronización no pudo avanzar al siguiente lote.')
@@ -819,6 +825,7 @@ export default function ImportarReportesClient() {
           </div>
         )}
 
+        {!actualizacionCompletada && (
         <section className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 sm:p-5">
           <h2 className="text-base font-bold text-gray-900">Actualización de datos</h2>
           <p className="mt-1 text-sm text-gray-600">
@@ -866,13 +873,17 @@ export default function ImportarReportesClient() {
               ))}
             </div>
           )}
-          {actualizacionCompletada && (
-            <p className="mt-4 text-sm font-bold text-green-800">Actualización de Reporte Fija → BAF completada correctamente.</p>
-          )}
           {errorActualizacion && (
             <p role="alert" className="mt-4 text-sm font-semibold text-red-700">{errorActualizacion}</p>
           )}
         </section>
+        )}
+
+        {actualizacionCompletada && (
+          <p role="status" className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-800">
+            Actualización de datos completada correctamente. Ya podés importar otro archivo.
+          </p>
+        )}
 
         <div className="mt-6 flex justify-end border-t border-gray-100 pt-5">
           {!resultado ? (
