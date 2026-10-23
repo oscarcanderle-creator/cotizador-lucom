@@ -440,7 +440,10 @@ export default async function LogisticaPage({
     ? bandejaSolicitada
     : 'PARA_PREPARAR'
 
-  const transporteActivo = 'TODOS'
+  const transporteSolicitado = String(params?.transporte ?? 'TODOS').trim().toUpperCase()
+  const transporteActivo = ['CADETERIA', 'LUCOM TERRENO'].includes(transporteSolicitado)
+    ? transporteSolicitado
+    : 'TODOS'
 
   const fechaDesde = String(params?.fecha_desde ?? '')
   const fechaHasta = String(params?.fecha_hasta ?? '')
@@ -1178,6 +1181,7 @@ if (
   const parametrosPagina = (pagina: number) =>
     new URLSearchParams({
       bandeja: bandejaActiva,
+      transporte: transporteActivo,
       ...(buscar ? { buscar } : {}),
       ...(fechaDesde ? { fecha_desde: fechaDesde } : {}),
       ...(fechaHasta ? { fecha_hasta: fechaHasta } : {}),
@@ -1217,6 +1221,7 @@ if (
                 key={bandeja.key}
                 href={`/logistica?${new URLSearchParams({
                   bandeja: bandeja.key,
+                  transporte: transporteActivo,
                   ...(buscar ? { buscar } : {}),
                   ...(fechaDesde ? { fecha_desde: fechaDesde } : {}),
                   ...(fechaHasta ? { fecha_hasta: fechaHasta } : {}),
@@ -1264,6 +1269,21 @@ if (
             />
           </div>
           <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label htmlFor="filtro-transporte" className="mb-1 block text-sm font-semibold text-gray-700">
+                Medio de despacho
+              </label>
+              <select
+                id="filtro-transporte"
+                name="transporte"
+                defaultValue={transporteActivo}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+              >
+                <option value="TODOS">Todos</option>
+                <option value="CADETERIA">Cadetería</option>
+                <option value="LUCOM TERRENO">Lucom Terreno</option>
+              </select>
+            </div>
             <div>
               <label htmlFor="fecha-desde" className="mb-1 block text-sm font-semibold text-gray-700">
                 Desde
