@@ -45,7 +45,7 @@ function normalizarCodigo(valor: FormDataEntryValue | null) {
     .replace(/^_+|_+$/g, '')
 }
 
-const AMBITOS = ['DEUDA', 'COBERTURA'] as const
+const AMBITOS = ['DEUDA', 'COBERTURA', 'RELLAMADO'] as const
 const TIPOS_ESTADO = ['GESTIONADO', 'NO_GESTIONADO'] as const
 
 export default async function Page() {
@@ -213,6 +213,7 @@ export default async function Page() {
               >
                 <option value="DEUDA">DEUDA</option>
                 <option value="COBERTURA">COBERTURA</option>
+                <option value="RELLAMADO">RELLAMADO</option>
               </select>
             </div>
 
@@ -291,6 +292,7 @@ export default async function Page() {
                   >
                     <option value="DEUDA">DEUDA</option>
                     <option value="COBERTURA">COBERTURA</option>
+                <option value="RELLAMADO">RELLAMADO</option>
                   </select>
                 </div>
 

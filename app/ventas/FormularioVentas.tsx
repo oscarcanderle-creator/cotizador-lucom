@@ -542,7 +542,22 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
       }}
       required
      />
+     {esFwa ? (
+     <div>
+       <label className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 mb-1">
+         Tipo SIM
+       </label>
+       <input
+         type="text"
+         value="SIMCARD"
+         readOnly
+         className={`${inputClass} bg-gray-100 font-semibold`}
+       />
+       <input type="hidden" name={`nuevo_sim_${i}`} value="SIMCARD" />
+     </div>
+   ) : (
      <Selector label="Tipo SIM" name={`nuevo_sim_${i}`} opciones={opts(['ESIM','SIMCARD'])} required/>
+   )}
 
     </div>
 

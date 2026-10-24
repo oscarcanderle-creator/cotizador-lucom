@@ -191,7 +191,23 @@ export async function POST(request: Request) {
           ['modalidad_plan','tv','cantidad_decos','horario_contacto'], x.detalle, pid)
 
       if (tipo === 'PORTA' || tipo === 'LINEA_NUEVA') {
-        const tipoSim = norm(x.detalle?.tipo_sim)
+        const { data: productoSim, error: errorProductoSim } = await c.admin
+          .from('productos')
+          .select('producto,plan')
+          .eq('id', Number(x.producto_id || original.producto_id))
+          .single()
+        if (errorProductoSim) throw errorProductoSim
+
+        const textoPlan = norm(
+          `${productoSim?.producto ?? ''} ${productoSim?.plan ?? ''}`
+        )
+        const esFwa =
+          tipo === 'LINEA_NUEVA' &&
+          textoPlan.includes('FWA') &&
+          textoPlan.includes('5G') &&
+          /400\s*G/.test(textoPlan)
+
+        const tipoSim = esFwa ? 'SIMCARD' : norm(x.detalle?.tipo_sim)
 
         if (tipoSim && !['SIMCARD', 'ESIM'].includes(tipoSim)) {
           throw new Error('Tipo de SIM inválido. Debe ser SIMCARD o ESIM.')

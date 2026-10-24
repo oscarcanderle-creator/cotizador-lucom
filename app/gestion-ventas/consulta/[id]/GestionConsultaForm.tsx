@@ -252,8 +252,7 @@ export default function GestionConsultaForm({
                 {estadosConsulta
                   .filter(
                     (estado) =>
-                      estado.ambito !== 'DEUDA' &&
-                      estado.ambito !== 'COBERTURA' &&
+                      estado.ambito === 'RELLAMADO' &&
                       (estado.activo ||
                         estado.id === edit.estado_consulta_id)
                   )

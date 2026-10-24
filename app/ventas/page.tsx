@@ -152,7 +152,7 @@ export default async function VentasPage(){
       if(s.pagoModem==='EFECTIVO'&&Number(s.cuotasModem)!==1)throw new Error('El pago en efectivo del Módem FWA 5G debe registrarse en un solo pago.')
       if(s.pagoModem==='TARJETA'&&Number(s.cuotasModem)>60)throw new Error('La cantidad de cuotas con tarjeta no es válida.')
      }
-     const {error}=await admin.from('operacion_producto_movil').insert({producto_operacion_id:op.id,numero_linea:s.tipo==='PORTA'?s.nim:null,nim:s.tipo==='PORTA'?s.nim:null,compania_actual:s.tipo==='PORTA'?s.compania:null,modalidad_actual:s.tipo==='PORTA'?s.modalidadActual:null,tipo_sim:s.sim||null,linea_titular:s.tipo==='PORTA'?s.lineaTitular:false,es_fwa:esFwa,forma_pago_modem:esFwa?s.pagoModem:null,cuotas_modem:esFwa?s.cuotasModem:null,precio_modem_snapshot:esFwa?precioModemActual:null});if(error)throw error;const {error:eg}=await admin.from('gestion_producto_movil').insert({producto_operacion_id:op.id,responsable_id:null});if(eg)throw eg
+     const {error}=await admin.from('operacion_producto_movil').insert({producto_operacion_id:op.id,numero_linea:s.tipo==='PORTA'?s.nim:null,nim:s.tipo==='PORTA'?s.nim:null,compania_actual:s.tipo==='PORTA'?s.compania:null,modalidad_actual:s.tipo==='PORTA'?s.modalidadActual:null,tipo_sim:esFwa?'SIMCARD':s.sim||null,linea_titular:s.tipo==='PORTA'?s.lineaTitular:false,es_fwa:esFwa,forma_pago_modem:esFwa?s.pagoModem:null,cuotas_modem:esFwa?s.cuotasModem:null,precio_modem_snapshot:esFwa?precioModemActual:null});if(error)throw error;const {error:eg}=await admin.from('gestion_producto_movil').insert({producto_operacion_id:op.id,responsable_id:null});if(eg)throw eg
 
      productosMovilesCreados.push({
        indice:i,

@@ -220,13 +220,6 @@ export default async function GestionVentasPage({
 }: {
   searchParams: SearchParams
 }) {
-  const diagnosticoInicio = performance.now()
-  let diagnosticoAnterior = diagnosticoInicio
-  const medirEtapa = (nombre: string) => {
-    const ahora = performance.now()
-    console.info(`[GestionVentas] ${nombre}: ${(ahora - diagnosticoAnterior).toFixed(0)} ms; acumulado ${(ahora - diagnosticoInicio).toFixed(0)} ms`)
-    diagnosticoAnterior = ahora
-  }
 
   const supabase = await createClient()
 
@@ -264,7 +257,6 @@ export default async function GestionVentasPage({
    * Esto evita que RLS o las relaciones embebidas oculten Cliente,
    * datos PORTA/LN y demás información necesaria en el listado.
    */
-  medirEtapa('autenticación y permisos')
 
   const admin = createAdminClient()
 
@@ -277,13 +269,25 @@ export default async function GestionVentasPage({
           ? 'SUPERVISOR'
           : 'ADMIN'
 
-  const { data: vistaConfigurada, error: errorVista } = await admin
+  const [
+    { data: vistaConfigurada, error: errorVista },
+    { data: bandejasResultado, error: errorBandejas },
+  ] = await Promise.all([
+    admin
     .from('vistas_gestion_ventas')
     .select('campo, etiqueta, visible, orden, ancho')
     .eq('rol', rolVista)
     .eq('visible', true)
     .order('orden', { ascending: true })
     .order('campo', { ascending: true })
+,
+    admin
+    .from('bandejas_gestion_ventas')
+    .select('id, nombre, filtros')
+    .eq('usuario_id', user.id)
+    .order('nombre', { ascending: true })
+
+  ])
 
   if (errorVista) {
     throw new Error(
@@ -291,7 +295,6 @@ export default async function GestionVentasPage({
     )
   }
 
-  medirEtapa('configuración de vista')
 
   const columnasPredeterminadas = [
     { campo: 'fecha_ingreso', etiqueta: 'Fecha Ingreso', ancho: 125, orden: 1 },
@@ -326,17 +329,11 @@ export default async function GestionVentasPage({
   const filtroEstado = String(params?.estado ?? '').trim()
   const bandejaActiva = String(params?.bandeja ?? '').trim()
 
-  const { data: bandejasResultado, error: errorBandejas } = await admin
-    .from('bandejas_gestion_ventas')
-    .select('id, nombre, filtros')
-    .eq('usuario_id', user.id)
-    .order('nombre', { ascending: true })
 
   if (errorBandejas) {
     throw new Error(`No se pudieron cargar las bandejas: ${errorBandejas.message}`)
   }
 
-  medirEtapa('bandejas y parámetros')
 
   // Optimización: recuperar por ID las operaciones de un filtro logístico simple.
   const filtrosLogisticos = [1, 2, 3, 4]
@@ -560,6 +557,35 @@ export default async function GestionVentasPage({
     return consulta
   }
 
+  const consultasPendientes = esVendedorGestor
+    ? admin
+        .from('consultas')
+        .select(`
+          id,
+          marca_temporal,
+          tipo_consulta_id,
+          vendedor_id,
+          responsable_id,
+          cliente_id,
+          cliente,
+          dni,
+          telefono,
+          tipo_domicilio,
+          domicilio,
+          entrecalles,
+          localidad,
+          observaciones,
+          estado_consulta_id,
+          estado_deuda_id,
+          estado_cobertura_id,
+          fecha_estado,
+          fecha_gestion,
+          operacion_id
+        `)
+        .order('marca_temporal', { ascending: false })
+    : { data: [], error: null }
+
+
   let operacionesBase: any[] = []
 
   if (busquedaPorFechaEntrega && idsFiltrados !== null) {
@@ -609,46 +635,17 @@ export default async function GestionVentasPage({
     operacionesBase = data ?? []
   }
 
-  medirEtapa('consulta de operaciones')
 
-  const { data: consultasBase, error: errorConsultas } = esVendedorGestor
-    ? await admin
-        .from('consultas')
-        .select(`
-          id,
-          marca_temporal,
-          tipo_consulta_id,
-          vendedor_id,
-          responsable_id,
-          cliente_id,
-          cliente,
-          dni,
-          telefono,
-          tipo_domicilio,
-          domicilio,
-          entrecalles,
-          localidad,
-          observaciones,
-          estado_consulta_id,
-          estado_deuda_id,
-          estado_cobertura_id,
-          fecha_estado,
-          fecha_gestion,
-          operacion_id
-        `)
-        .order('marca_temporal', { ascending: false })
-    : { data: [], error: null }
+  const { data: consultasBase, error: errorConsultas } = await consultasPendientes
 
   if (errorConsultas) {
     throw new Error(`No se pudieron cargar las consultas: ${errorConsultas.message}`)
   }
 
-  medirEtapa('consulta de consultas')
 
   const consultas = consultasBase ?? []
 
   const operaciones = operacionesBase ?? []
-  console.info(`[GestionVentas] operaciones recuperadas: ${operaciones.length}`)
   const idsOperaciones = operaciones.map((o: any) => o.id_operacion)
   const idsClientes = Array.from(
     new Set(
@@ -668,7 +665,14 @@ export default async function GestionVentasPage({
   ) {
     const datos: any[] = []
     const tamanoLote = 100
-    const concurrencia = 3
+    const tablasConCincoLotes = [
+      'operacion_productos',
+      'operaciones_baf',
+      'operaciones_porta',
+      'gestion_baf',
+      'gestion_porta',
+    ]
+    const concurrencia = tablasConCincoLotes.includes(tabla) ? 5 : 3
 
     // Ejecutar hasta tres lotes simultáneamente por tabla, conservando
     // el orden de las respuestas y la misma configuración de filtros.
@@ -691,13 +695,21 @@ export default async function GestionVentasPage({
         if (resultado.error) return { data: null, error: resultado.error }
         datos.push(...(resultado.data ?? []))
       }
+
     }
+
 
     return { data: datos, error: null }
   }
 
   // Iniciar logística en paralelo con las consultas de datos asociados.
   // Se espera el resultado más adelante, antes de construir el mapa de entregas.
+  const estadosEntregaPendientes = Promise.resolve(
+    admin
+      .from('estados_entrega')
+      .select('id, codigo, nombre')
+  )
+
   const entregasPendientes = idsOperaciones.length > 0
     ? consultarPorLotes(
         'gestiones_entrega',
@@ -707,7 +719,6 @@ export default async function GestionVentasPage({
       )
     : Promise.resolve({ data: [], error: null })
 
-  medirEtapa('preparación de lotes')
 
   const [
     clientesResultado,
@@ -805,7 +816,6 @@ export default async function GestionVentasPage({
       .order('orden', { ascending: true }),
   ])
 
-  medirEtapa('consultas paralelas de datos asociados')
 
   if (clientesResultado.error) {
     throw new Error(
@@ -878,18 +888,54 @@ export default async function GestionVentasPage({
   const productosNuevos = productosNuevosResultado.data ?? []
   const idsProductosNuevos = productosNuevos.map((p: any) => p.id)
 
-  medirEtapa('procesamiento inicial')
+  const habilitacionesMoviles = new Map<number, any>()
 
-  // Documentación DNI vigente asociada a productos móviles.
-  // DNI OK = PDF completo, o Frente + Dorso.
-  const { data: documentosDniResultado, error: errorDocumentosDni } =
+  const productosMovilesParaEvaluar = productosNuevos.filter(
+    (producto: any) =>
+      ['PORTA', 'LINEA_NUEVA'].includes(String(producto.tipo_producto))
+  )
+
+  const habilitacionesPendientes =
+    productosMovilesParaEvaluar.length > 0
+      ? Promise.resolve(
+          admin.rpc('evaluar_habilitaciones_productos_moviles', {
+            p_producto_operacion_ids: productosMovilesParaEvaluar.map(
+              (producto: any) => producto.id
+            ),
+          })
+        )
+      : Promise.resolve({ data: [], error: null })
+
+
+  // Documentación DNI y datos multiproducto independientes.
+  const documentosDniPendientes =
     idsProductosNuevos.length > 0
-      ? await admin
+      ? admin
           .from('documentos_producto_movil')
           .select('producto_operacion_id,tipo_documento')
           .in('producto_operacion_id', idsProductosNuevos)
           .is('eliminado_at', null)
       : { data: [], error: null }
+
+
+  const [detalleBafNuevoResultado, detalleMovilNuevoResultado, gestionBafNuevaResultado, gestionMovilNuevaResultado, documentosDniRespuesta] = await Promise.all([
+    idsProductosNuevos.length > 0
+      ? admin.from('operacion_producto_baf').select('*').in('producto_operacion_id', idsProductosNuevos)
+      : Promise.resolve({ data: [], error: null }),
+    idsProductosNuevos.length > 0
+      ? admin.from('operacion_producto_movil').select('*').in('producto_operacion_id', idsProductosNuevos)
+      : Promise.resolve({ data: [], error: null }),
+    idsProductosNuevos.length > 0
+      ? admin.from('gestion_producto_baf').select('*').in('producto_operacion_id', idsProductosNuevos)
+      : Promise.resolve({ data: [], error: null }),
+    idsProductosNuevos.length > 0
+      ? admin.from('gestion_producto_movil').select('*').in('producto_operacion_id', idsProductosNuevos)
+      : Promise.resolve({ data: [], error: null }),
+    documentosDniPendientes,
+  ])
+
+
+  const { data: documentosDniResultado, error: errorDocumentosDni } = documentosDniRespuesta
 
   if (errorDocumentosDni) {
     throw new Error(
@@ -897,7 +943,6 @@ export default async function GestionVentasPage({
     )
   }
 
-  medirEtapa('documentación DNI')
 
   const tiposDniPorProducto = new Map<number, Set<string>>()
   for (const documento of documentosDniResultado ?? []) {
@@ -914,24 +959,10 @@ export default async function GestionVentasPage({
     return completo || frenteYDorso ? 'DNI OK' : 'DNI INCOMPLETO'
   }
 
-  medirEtapa('procesamiento DNI')
 
-  const [detalleBafNuevoResultado, detalleMovilNuevoResultado, gestionBafNuevaResultado, gestionMovilNuevaResultado] = await Promise.all([
-    idsProductosNuevos.length > 0
-      ? admin.from('operacion_producto_baf').select('*').in('producto_operacion_id', idsProductosNuevos)
-      : Promise.resolve({ data: [], error: null }),
-    idsProductosNuevos.length > 0
-      ? admin.from('operacion_producto_movil').select('*').in('producto_operacion_id', idsProductosNuevos)
-      : Promise.resolve({ data: [], error: null }),
-    idsProductosNuevos.length > 0
-      ? admin.from('gestion_producto_baf').select('*').in('producto_operacion_id', idsProductosNuevos)
-      : Promise.resolve({ data: [], error: null }),
-    idsProductosNuevos.length > 0
-      ? admin.from('gestion_producto_movil').select('*').in('producto_operacion_id', idsProductosNuevos)
-      : Promise.resolve({ data: [], error: null }),
-  ])
 
-  medirEtapa('detalle y gestión multiproducto')
+
+
 
   for (const resultado of [detalleBafNuevoResultado, detalleMovilNuevoResultado, gestionBafNuevaResultado, gestionMovilNuevaResultado]) {
     if (resultado.error) throw new Error(`No se pudo cargar la arquitectura multiproducto: ${resultado.error.message}`)
@@ -988,7 +1019,6 @@ export default async function GestionVentasPage({
       : Promise.resolve({ data: [], error: null }),
   ])
 
-  medirEtapa('consultas de estados')
 
   if (estadosBafResultado.error) {
     throw new Error(
@@ -1067,38 +1097,23 @@ export default async function GestionVentasPage({
   const gestionBafNuevaPorProducto = new Map((gestionBafNuevaResultado.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
   const gestionMovilNuevaPorProducto = new Map((gestionMovilNuevaResultado.data ?? []).map((x: any) => [x.producto_operacion_id, x]))
 
-  medirEtapa('construcción de índices')
 
-  const habilitacionesMoviles = new Map<number, any>()
+  const { data: habilitacionesResultado, error: errorHabilitaciones } =
+    await habilitacionesPendientes
 
-  const productosMovilesParaEvaluar = productosNuevos.filter(
-    (producto: any) =>
-      ['PORTA', 'LINEA_NUEVA'].includes(String(producto.tipo_producto))
-  )
-
-  if (productosMovilesParaEvaluar.length > 0) {
-    const { data: habilitacionesResultado, error: errorHabilitaciones } =
-      await admin.rpc('evaluar_habilitaciones_productos_moviles', {
-        p_producto_operacion_ids: productosMovilesParaEvaluar.map(
-          (producto: any) => producto.id
-        ),
-      })
-
-    if (errorHabilitaciones) {
-      throw new Error(
-        `No se pudieron evaluar las habilitaciones móviles: ${errorHabilitaciones.message}`
-      )
-    }
-
-    for (const habilitacion of habilitacionesResultado ?? []) {
-      habilitacionesMoviles.set(
-        Number(habilitacion.producto_operacion_id),
-        habilitacion
-      )
-    }
+  if (errorHabilitaciones) {
+    throw new Error(
+      `No se pudieron evaluar las habilitaciones móviles: ${errorHabilitaciones.message}`
+    )
   }
 
-  medirEtapa('RPC de habilitaciones')
+  for (const habilitacion of habilitacionesResultado ?? []) {
+    habilitacionesMoviles.set(
+      Number(habilitacion.producto_operacion_id),
+      habilitacion
+    )
+  }
+
 
   const productosPorOperacion = new Map<string, any[]>()
   for (const producto of productosNuevos) {
@@ -1136,7 +1151,6 @@ export default async function GestionVentasPage({
     productosPorOperacion.set(producto.operacion_id, lista)
   }
 
-  medirEtapa('construcción de productos')
 
   // Datos logísticos de entregas. Se toma la gestión más reciente por operación.
   // Consultas paginadas para no perder registros por el límite de PostgREST.
@@ -1151,9 +1165,8 @@ export default async function GestionVentasPage({
     if (fecha !== 0) return fecha
     return Number(b.id) - Number(a.id)
   })
-  const { data: estadosEntregaDatos, error: errorEstadosEntrega } = await admin
-    .from('estados_entrega')
-    .select('id, codigo, nombre')
+  const { data: estadosEntregaDatos, error: errorEstadosEntrega } =
+    await estadosEntregaPendientes
   if (errorEstadosEntrega) throw new Error(`No se pudieron cargar los estados logísticos: ${errorEstadosEntrega.message}`)
   const estadosEntregaPorId = new Map((estadosEntregaDatos ?? []).map((e: any) => [Number(e.id), e]))
   const entregaPorOperacion = new Map<string, any>()
@@ -1224,7 +1237,6 @@ export default async function GestionVentasPage({
       fechaEntregaPorOperacion.get(operacionId) ?? null
   }
 
-  medirEtapa('gestiones y estados logísticos')
 
   // Normalizar vendedor para operaciones actuales e históricas.
   const nombreVendedor = (valor: unknown): string => {
@@ -1512,7 +1524,6 @@ export default async function GestionVentasPage({
     conector: 'AND' | 'OR'
   }
 
-  medirEtapa('construcción de registros y opciones')
 
   const filtrosAvanzados: FiltroAvanzado[] = [1, 2, 3, 4]
     .map((numero) => {
@@ -2140,7 +2151,6 @@ export default async function GestionVentasPage({
     return fechaB - fechaA
   })
 
-  medirEtapa('filtros y preparación de render')
 
   return (
     <main className="min-h-screen bg-gray-50">

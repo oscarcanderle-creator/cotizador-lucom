@@ -169,11 +169,20 @@ export default function EditorDatosVenta({operacionId,sesionToken}:{operacionId:
       {(data.productos??[]).map((p:any)=>{
         const id=Number(p.id),tipo=N(p.tipo_producto),detalle:any=tipo==="BAF"?bafMap.get(id):movMap.get(id)
         const catalogo=catalogoVisible(data.catalogo??[],tipo)
+        const productoSeleccionado=(data.catalogo??[]).find((c:any)=>Number(c.id)===Number(p.producto_id))
+        const esFwa=tipo==="LINEA_NUEVA" && etiquetaPlanMovil(productoSeleccionado)==="FWA 5G 400G"
         return <section key={id} className="rounded-xl bg-white p-4">
           <h3 className="mb-3 font-semibold">{tipo==="BAF"?"Internet":tipo==="PORTA"?"Portabilidad":"Línea Nueva"} #{p.orden}</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="sm:col-span-2"><span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Producto / Plan contratado</span>
-              <select className={input} value={p.producto_id??""} onChange={e=>setProd(id,"producto_id",Number(e.target.value))}>
+              <select className={input} value={p.producto_id??""} onChange={e=>{
+                const productoId=Number(e.target.value)
+                const elegido=(data.catalogo??[]).find((c:any)=>Number(c.id)===productoId)
+                setProd(id,"producto_id",productoId)
+                if(tipo==="LINEA_NUEVA" && etiquetaPlanMovil(elegido)==="FWA 5G 400G"){
+                  setDetalle(tipo,id,"tipo_sim","SIMCARD")
+                }
+              }}>
                 {catalogo.map((c:any)=><option key={c.producto.id} value={c.producto.id}>{c.label}</option>)}
               </select></label>
             {(tipo==="BAF"
@@ -197,12 +206,19 @@ export default function EditorDatosVenta({operacionId,sesionToken}:{operacionId:
                 {campo==="tipo_sim" ? (
                   <select
                     className={input}
-                    value={N(detalle?.[campo])}
+                    value={esFwa ? "SIMCARD" : N(detalle?.[campo])}
+                    disabled={esFwa}
                     onChange={e=>setDetalle(tipo,id,campo,e.target.value)}
                   >
-                    <option value="">Seleccionar...</option>
-                    <option value="SIMCARD">SIMCARD</option>
-                    <option value="ESIM">eSIM</option>
+                    {esFwa ? (
+                      <option value="SIMCARD">SIMCARD</option>
+                    ) : (
+                      <>
+                        <option value="">Seleccionar...</option>
+                        <option value="SIMCARD">SIMCARD</option>
+                        <option value="ESIM">eSIM</option>
+                      </>
+                    )}
                   </select>
                 ) : (campo==="tv" || campo==="linea_titular") ? (
                   <select
