@@ -93,6 +93,39 @@ async function tomarConsulta(formData: FormData) {
   revalidatePath(`/gestion-ventas/consulta/${consultaId}`)
   revalidatePath('/gestion-ventas')
 
+  const { data: consultaVinculada, error: errorVinculo } = await supabase
+    .from('consultas')
+    .select('operacion_id, responsable_id, tipos_consulta(codigo)')
+    .eq('id', consultaId)
+    .single()
+
+  if (errorVinculo) {
+    throw new Error(
+      `No se pudo verificar la consulta asignada: ${errorVinculo.message}`
+    )
+  }
+
+  const tipoVinculado = consultaVinculada?.tipos_consulta as
+    | { codigo: string }
+    | { codigo: string }[]
+    | null
+
+  const codigoTipo = Array.isArray(tipoVinculado)
+    ? tipoVinculado[0]?.codigo
+    : tipoVinculado?.codigo
+
+  if (
+    codigoTipo === 'RELLAMADO_VENTA_GESTION' &&
+    consultaVinculada?.operacion_id &&
+    consultaVinculada.responsable_id === user.id
+  ) {
+    const operacionId = encodeURIComponent(
+      String(consultaVinculada.operacion_id)
+    )
+
+    redirect(`/gestion-ventas/${operacionId}?consulta=${consultaId}`)
+  }
+
   redirect(`/gestion-ventas/consulta/${consultaId}`)
 }
 

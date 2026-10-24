@@ -1,3 +1,4 @@
+import GestionConsultaForm from '../consulta/[id]/GestionConsultaForm'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
@@ -21,6 +22,7 @@ type Params = Promise<{
 type SearchParams = Promise<{
   editar?: string
   lock?: string
+  consulta?: string
 }>
 
 function mostrar(valor: unknown) {
@@ -719,6 +721,80 @@ export default async function DetalleVentaPage({
   const op: any = operacion
 
   const query = await searchParams
+  const consultaIdSolicitada = Number(query?.consulta ?? 0)
+  const consultaIdValida =
+    Number.isSafeInteger(consultaIdSolicitada) &&
+    consultaIdSolicitada > 0
+      ? consultaIdSolicitada
+      : null
+
+  let consultaRellamado: any = null
+
+  if (consultaIdValida !== null) {
+    const { data: consulta, error: errorConsulta } = await admin
+      .from('consultas')
+      .select('*')
+      .eq('id', consultaIdValida)
+      .eq('operacion_id', id)
+      .maybeSingle()
+
+    if (errorConsulta) {
+      throw new Error(
+        `No se pudo verificar el rellamado: ${errorConsulta.message}`
+      )
+    }
+
+    if (!consulta) notFound()
+
+    const { data: tipoConsulta, error: errorTipo } = await admin
+      .from('tipos_consulta')
+      .select('codigo')
+      .eq('id', consulta.tipo_consulta_id)
+      .maybeSingle()
+
+    if (errorTipo) {
+      throw new Error(
+        `No se pudo verificar el tipo de consulta: ${errorTipo.message}`
+      )
+    }
+
+    if (tipoConsulta?.codigo !== 'RELLAMADO_VENTA_GESTION') {
+      notFound()
+    }
+
+    if (
+      profile.rol !== 'VENDEDOR' ||
+      profile.puede_gestionar_ventas !== true ||
+      consulta.responsable_id !== user.id
+    ) {
+      notFound()
+    }
+
+    consultaRellamado = consulta
+  }
+
+  let estadosRellamado: Array<{
+    id: number
+    nombre: string
+    ambito: string | null
+    activo: boolean
+  }> = []
+
+  if (consultaRellamado) {
+    const { data, error: errorEstados } = await admin
+      .from('estados_consulta')
+      .select('id, nombre, ambito, activo')
+      .order('orden', { ascending: true })
+
+    if (errorEstados) {
+      throw new Error(
+        `No se pudieron cargar los estados del rellamado: ${errorEstados.message}`
+      )
+    }
+
+    estadosRellamado = data ?? []
+  }
+
   const sesionTokenSolicitado = String(query?.lock ?? '').trim() || null
   const solicitaEdicion = query?.editar === '1' && !!sesionTokenSolicitado
   const recursoClave =
@@ -1041,6 +1117,26 @@ export default async function DetalleVentaPage({
             </div>
           </div>
 
+
+          {consultaRellamado && (
+            <section className="mb-6 rounded-2xl border-2 border-blue-300 bg-blue-50 p-5">
+              <div className="mb-4">
+                <h2 className="text-lg font-bold text-gray-900">
+                  Rellamado de venta en gestión
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Consulta #{consultaRellamado.id}. Su calificación es independiente
+                  del estado comercial de esta venta.
+                </p>
+              </div>
+
+              <GestionConsultaForm
+                consulta={consultaRellamado}
+                tipoCodigo="RELLAMADO_VENTA_GESTION"
+                estadosConsulta={estadosRellamado}
+              />
+            </section>
+          )}
 
           <GestionBloqueoControls
             tipoRecurso="VENTA"
@@ -1721,6 +1817,26 @@ export default async function DetalleVentaPage({
             </a>
           </div>
         </div>
+
+        {consultaRellamado && (
+          <section className="mb-6 rounded-2xl border-2 border-blue-300 bg-blue-50 p-5">
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-gray-900">
+                Rellamado de venta en gestión
+              </h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Consulta #{consultaRellamado.id}. Su calificación es independiente
+                del estado comercial de esta venta.
+              </p>
+            </div>
+
+            <GestionConsultaForm
+              consulta={consultaRellamado}
+              tipoCodigo="RELLAMADO_VENTA_GESTION"
+              estadosConsulta={estadosRellamado}
+            />
+          </section>
+        )}
 
         <GestionBloqueoControls
           tipoRecurso="VENTA"

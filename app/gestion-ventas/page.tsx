@@ -2423,9 +2423,14 @@ export default async function GestionVentasPage({
                   <td className="px-2 py-3 text-right">
                     {esConsultaFila ? (
                       <a
-                        href={`/gestion-ventas/consulta/${encodeURIComponent(
-                          String(operacion.id)
-                        )}`}
+                        href={
+                          operacion.tipo_codigo === 'RELLAMADO_VENTA_GESTION' &&
+                          operacion.original?.responsable_id === user.id &&
+                          operacion.operacion_vinculada &&
+                          operacion.operacion_vinculada !== '-'
+                            ? `/gestion-ventas/${encodeURIComponent(String(operacion.operacion_vinculada))}?consulta=${encodeURIComponent(String(operacion.id))}`
+                            : `/gestion-ventas/consulta/${encodeURIComponent(String(operacion.id))}`
+                        }
                         className="whitespace-nowrap font-semibold text-amber-700 hover:text-amber-800"
                       >
                         Gestionar
@@ -2493,9 +2498,14 @@ export default async function GestionVentasPage({
               <div className="mt-4 border-t border-gray-100 pt-3 text-right">
                 {operacion.clase === 'CONSULTA' ? (
                   <a
-                    href={`/gestion-ventas/consulta/${encodeURIComponent(
-                      String(operacion.id)
-                    )}`}
+                    href={
+                      operacion.tipo_codigo === 'RELLAMADO_VENTA_GESTION' &&
+                      operacion.original?.responsable_id === user.id &&
+                      operacion.operacion_vinculada &&
+                      operacion.operacion_vinculada !== '-'
+                        ? `/gestion-ventas/${encodeURIComponent(String(operacion.operacion_vinculada))}?consulta=${encodeURIComponent(String(operacion.id))}`
+                        : `/gestion-ventas/consulta/${encodeURIComponent(String(operacion.id))}`
+                    }
                     className="text-sm font-semibold text-amber-700 hover:text-amber-800"
                   >
                     Gestionar
