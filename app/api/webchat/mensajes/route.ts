@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
       .eq('conversacion_id', conversacionId)
       .gte('enviado_en', desde)
       .order('enviado_en', { ascending: false })
+      .order('id', { ascending: false })
       .limit(100)
 
     if (error) throw error
@@ -172,28 +173,31 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json().catch(() => null)
     const conversacionId = obtenerId(body?.conversacion_id)
+    const ultimoMensajeId = obtenerId(body?.ultimo_mensaje_id)
 
-    if (!conversacionId) {
+    if (!conversacionId || !ultimoMensajeId) {
       return NextResponse.json(
-        { error: 'Conversación inválida' },
+        { error: 'Confirmación de lectura inválida' },
         { status: 400 }
       )
     }
 
     const { admin, user } = sesion
 
-    const { data, error } = await admin
-      .from('chat_participantes')
-      .update({ ultima_lectura_en: new Date().toISOString() })
-      .eq('conversacion_id', conversacionId)
-      .eq('usuario_id', user.id)
-      .select('conversacion_id')
+    const { data: confirmado, error } = await admin.rpc(
+      'chat_confirmar_lectura',
+      {
+        p_usuario_id: user.id,
+        p_conversacion_id: conversacionId,
+        p_ultimo_mensaje_id: ultimoMensajeId,
+      }
+    )
 
     if (error) throw error
 
-    if (!data?.length) {
+    if (confirmado !== true) {
       return NextResponse.json(
-        { error: 'Acceso no autorizado' },
+        { error: 'Lectura no autorizada o mensaje inválido' },
         { status: 403 }
       )
     }

@@ -92,8 +92,12 @@ export default function WebchatPGL() {
       solicitud !== solicitudMensajesRef.current
     ) return false
 
-    setMensajes(datos.mensajes ?? [])
-    return true
+    const recibidos: Mensaje[] = datos.mensajes ?? []
+    setMensajes(recibidos)
+
+    return {
+      ultimoMensajeId: recibidos.at(-1)?.id ?? null,
+    }
   }, [])
 
   useEffect(() => {
@@ -137,12 +141,24 @@ export default function WebchatPGL() {
       contenedor.scrollTop = contenedor.scrollHeight
     }
   }, [mensajes, conversacionId, abierto])
-  const marcarLeida = useCallback(async (id: number) => {
+  const marcarLeida = useCallback(async (
+    id: number,
+    ultimoMensajeId: number | null
+  ) => {
+    if (
+      !chatAbiertoRef.current ||
+      conversacionActivaRef.current !== id ||
+      ultimoMensajeId === null
+    ) return
+
     try {
       const respuesta = await fetch('/api/webchat/mensajes', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversacion_id: id }),
+        body: JSON.stringify({
+          conversacion_id: id,
+          ultimo_mensaje_id: ultimoMensajeId,
+        }),
       })
 
       if (respuesta.ok) {
@@ -171,7 +187,10 @@ export default function WebchatPGL() {
             cargada &&
             conversacionActivaRef.current === conversacionId
           ) {
-            await marcarLeida(conversacionId)
+            await marcarLeida(
+              conversacionId,
+              cargada.ultimoMensajeId
+            )
           }
         })()
       } else {
@@ -211,7 +230,10 @@ export default function WebchatPGL() {
       chatAbiertoRef.current &&
       conversacionActivaRef.current === datos.conversacion_id
     ) {
-      await marcarLeida(datos.conversacion_id)
+      await marcarLeida(
+        datos.conversacion_id,
+        cargada.ultimoMensajeId
+      )
     }
   }
 
@@ -411,7 +433,10 @@ export default function WebchatPGL() {
                             chatAbiertoRef.current &&
                             conversacionActivaRef.current === conversacion.id
                           ) {
-                            await marcarLeida(conversacion.id)
+                            await marcarLeida(
+                              conversacion.id,
+                              cargada.ultimoMensajeId
+                            )
                           }
                         }}
                         className="w-full rounded-xl px-3 py-3 text-left text-sm hover:bg-gray-100"
