@@ -84,7 +84,7 @@ export default function WebchatPGL() {
   }, [cargarContactos])
 
   useEffect(() => {
-    if (!habilitado) return
+    if (!habilitado || abierto) return
 
     void cargarConversaciones()
 
@@ -93,20 +93,7 @@ export default function WebchatPGL() {
     }, 10000)
 
     return () => window.clearInterval(intervalo)
-  }, [habilitado, cargarConversaciones])
-
-  useEffect(() => {
-    if (!abierto) return
-
-    void cargarConversaciones()
-
-    const intervalo = window.setInterval(() => {
-      void cargarConversaciones()
-      if (conversacionId) void cargarMensajes(conversacionId)
-    }, 5000)
-
-    return () => window.clearInterval(intervalo)
-  }, [abierto, conversacionId, cargarConversaciones, cargarMensajes])
+  }, [habilitado, abierto, cargarConversaciones])
 
   useEffect(() => {
     finalRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -127,6 +114,26 @@ export default function WebchatPGL() {
       console.error('Webchat: error al marcar lectura', error)
     }
   }, [cargarConversaciones])
+
+  useEffect(() => {
+    if (!abierto) return
+
+    void cargarConversaciones()
+
+    const intervalo = window.setInterval(() => {
+      if (conversacionId) {
+        void (async () => {
+          await cargarMensajes(conversacionId)
+          await marcarLeida(conversacionId)
+        })()
+      } else {
+        void cargarConversaciones()
+      }
+    }, 5000)
+
+    return () => window.clearInterval(intervalo)
+  }, [abierto, conversacionId, cargarConversaciones, cargarMensajes, marcarLeida])
+
 
   async function abrirConversacion(contacto: Contacto) {
     setError('')

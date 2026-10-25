@@ -91,30 +91,26 @@ export async function GET() {
       }
     })
 
-    const desde = new Date(
-      Date.now() - 30 * 24 * 60 * 60 * 1000
-    ).toISOString()
+    const { data: conteos, error: conteosError } = await admin
+      .rpc('chat_contar_no_leidos', {
+        p_usuario_id: user.id,
+      })
 
-    const { data: mensajes, error: mensajesError } = await admin
-      .from('chat_mensajes')
-      .select('conversacion_id, remitente_id, enviado_en')
-      .in('conversacion_id', ids)
-      .gte('enviado_en', desde)
-      .order('enviado_en', { ascending: false })
-      .limit(10000)
+    if (conteosError) throw conteosError
 
-    if (mensajesError) throw mensajesError
+    const noLeidosPorConversacion = new Map(
+      (conteos ?? []).map((fila: {
+        conversacion_id: number
+        no_leidos: number
+      }) => [
+        Number(fila.conversacion_id),
+        Number(fila.no_leidos),
+      ])
+    )
 
     const conNoLeidos = resultado.map((conversacion) => ({
       ...conversacion,
-      no_leidos: (mensajes ?? []).filter((mensaje) =>
-        mensaje.conversacion_id === conversacion.id &&
-        mensaje.remitente_id !== user.id &&
-        (
-          !conversacion.ultima_lectura_en ||
-          mensaje.enviado_en > conversacion.ultima_lectura_en
-        )
-      ).length,
+      no_leidos: noLeidosPorConversacion.get(conversacion.id) ?? 0,
     }))
 
     conNoLeidos.sort((a, b) =>

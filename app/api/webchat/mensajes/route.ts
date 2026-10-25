@@ -13,9 +13,10 @@ function obtenerId(valor: unknown): number | null {
 }
 
 async function verificarParticipacion(
-  admin: Awaited<ReturnType<typeof autenticarWebchat>> extends never
-    ? never
-    : any,
+  admin: Extract<
+    Awaited<ReturnType<typeof autenticarWebchat>>,
+    { admin: unknown }
+  >['admin'],
   conversacionId: number,
   usuarioId: string
 ) {
