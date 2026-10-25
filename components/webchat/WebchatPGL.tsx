@@ -39,6 +39,13 @@ export default function WebchatPGL() {
   const [error, setError] = useState('')
   const [usuarioId, setUsuarioId] = useState('')
   const finalRef = useRef<HTMLDivElement>(null)
+  const mensajesContenedorRef = useRef<HTMLDivElement>(null)
+  const ultimoMensajeIdRef = useRef<number | null>(null)
+  const conversacionAnteriorRef = useRef<number | null>(null)
+  const cercaDelFinalRef = useRef(true)
+  const chatAbiertoRef = useRef(false)
+  const conversacionActivaRef = useRef<number | null>(null)
+  const solicitudMensajesRef = useRef(0)
 
   const cargarContactos = useCallback(async () => {
     const respuesta = await fetch('/api/webchat/usuarios', {
@@ -68,15 +75,25 @@ export default function WebchatPGL() {
   }, [])
 
   const cargarMensajes = useCallback(async (id: number) => {
+    const solicitud = ++solicitudMensajesRef.current
+
     const respuesta = await fetch(
       `/api/webchat/mensajes?conversacion_id=${id}`,
       { cache: 'no-store' }
     )
 
-    if (!respuesta.ok) return
+    if (!respuesta.ok) return false
 
     const datos = await respuesta.json()
+
+    if (
+      !chatAbiertoRef.current ||
+      conversacionActivaRef.current !== id ||
+      solicitud !== solicitudMensajesRef.current
+    ) return false
+
     setMensajes(datos.mensajes ?? [])
+    return true
   }, [])
 
   useEffect(() => {
@@ -96,9 +113,30 @@ export default function WebchatPGL() {
   }, [habilitado, abierto, cargarConversaciones])
 
   useEffect(() => {
-    finalRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [mensajes])
+    if (!abierto || !conversacionId) return
 
+    const contenedor = mensajesContenedorRef.current
+    if (!contenedor) return
+
+    const ultimoId = mensajes.at(-1)?.id ?? null
+    const cambioConversacion =
+      conversacionAnteriorRef.current !== conversacionId
+
+    if (cambioConversacion) {
+      conversacionAnteriorRef.current = conversacionId
+      ultimoMensajeIdRef.current = ultimoId
+      contenedor.scrollTop = contenedor.scrollHeight
+      return
+    }
+
+    if (ultimoId === ultimoMensajeIdRef.current) return
+
+    ultimoMensajeIdRef.current = ultimoId
+
+    if (cercaDelFinalRef.current) {
+      contenedor.scrollTop = contenedor.scrollHeight
+    }
+  }, [mensajes, conversacionId, abierto])
   const marcarLeida = useCallback(async (id: number) => {
     try {
       const respuesta = await fetch('/api/webchat/mensajes', {
@@ -120,11 +158,21 @@ export default function WebchatPGL() {
 
     void cargarConversaciones()
 
+    if (conversacionId) {
+      void cargarMensajes(conversacionId)
+    }
+
     const intervalo = window.setInterval(() => {
       if (conversacionId) {
         void (async () => {
-          await cargarMensajes(conversacionId)
-          await marcarLeida(conversacionId)
+          const cargada = await cargarMensajes(conversacionId)
+
+          if (
+            cargada &&
+            conversacionActivaRef.current === conversacionId
+          ) {
+            await marcarLeida(conversacionId)
+          }
         })()
       } else {
         void cargarConversaciones()
@@ -150,10 +198,21 @@ export default function WebchatPGL() {
     }
 
     const datos = await respuesta.json()
+    conversacionActivaRef.current = datos.conversacion_id
+    conversacionAnteriorRef.current = null
+    cercaDelFinalRef.current = true
+    setMensajes([])
     setDestinatario(contacto)
     setConversacionId(datos.conversacion_id)
-    await cargarMensajes(datos.conversacion_id)
-    await marcarLeida(datos.conversacion_id)
+    const cargada = await cargarMensajes(datos.conversacion_id)
+
+    if (
+      cargada &&
+      chatAbiertoRef.current &&
+      conversacionActivaRef.current === datos.conversacion_id
+    ) {
+      await marcarLeida(datos.conversacion_id)
+    }
   }
 
   async function enviarMensaje(evento: React.FormEvent<HTMLFormElement>) {
@@ -213,7 +272,11 @@ export default function WebchatPGL() {
 
             <button
               type="button"
-              onClick={() => setAbierto(false)}
+              onClick={() => {
+                chatAbiertoRef.current = false
+                solicitudMensajesRef.current += 1
+                setAbierto(false)
+              }}
               className="rounded-lg px-3 py-1 text-xl hover:bg-white/20"
               aria-label="Cerrar chat"
             >
@@ -227,6 +290,8 @@ export default function WebchatPGL() {
                 <button
                   type="button"
                   onClick={() => {
+                    conversacionActivaRef.current = null
+                    solicitudMensajesRef.current += 1
                     setConversacionId(null)
                     setDestinatario(null)
                     setMensajes([])
@@ -247,7 +312,18 @@ export default function WebchatPGL() {
                 </div>
               </div>
 
-              <div className="flex-1 space-y-3 overflow-y-auto bg-gray-50 p-4">
+              <div
+                  ref={mensajesContenedorRef}
+                  onScroll={(evento) => {
+                    const elemento = evento.currentTarget
+                    const distancia =
+                      elemento.scrollHeight -
+                      elemento.scrollTop -
+                      elemento.clientHeight
+                    cercaDelFinalRef.current = distancia < 180
+                  }}
+                  className="flex-1 space-y-3 overflow-y-auto bg-gray-50 p-4"
+                >
                 {mensajes.map((mensaje) => {
                   const propio = mensaje.remitente_id === usuarioId
 
@@ -322,9 +398,21 @@ export default function WebchatPGL() {
                         type="button"
                         onClick={async () => {
                           setDestinatario(conversacion.destinatario)
+                          conversacionActivaRef.current = conversacion.id
+                          conversacionAnteriorRef.current = null
+                          cercaDelFinalRef.current = true
+                          solicitudMensajesRef.current += 1
+                          setMensajes([])
                           setConversacionId(conversacion.id)
-                          await cargarMensajes(conversacion.id)
-                          await marcarLeida(conversacion.id)
+                          const cargada = await cargarMensajes(conversacion.id)
+
+                          if (
+                            cargada &&
+                            chatAbiertoRef.current &&
+                            conversacionActivaRef.current === conversacion.id
+                          ) {
+                            await marcarLeida(conversacion.id)
+                          }
                         }}
                         className="w-full rounded-xl px-3 py-3 text-left text-sm hover:bg-gray-100"
                       >
@@ -378,7 +466,16 @@ export default function WebchatPGL() {
         )}
         <button
           type="button"
-          onClick={() => setAbierto(!abierto)}
+          onClick={() => {
+            const nuevoEstado = !abierto
+            chatAbiertoRef.current = nuevoEstado
+
+            if (!nuevoEstado) {
+              solicitudMensajesRef.current += 1
+            }
+
+            setAbierto(nuevoEstado)
+          }}
           className="flex h-14 w-14 items-center justify-center rounded-full bg-[#c8102e] text-2xl text-white shadow-xl transition hover:scale-105"
           aria-label={abierto ? 'Cerrar Webchat' : 'Abrir Webchat'}
           title="Webchat PGL"
