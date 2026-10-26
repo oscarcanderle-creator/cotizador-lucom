@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 
 type Contacto = {
   id: string
@@ -26,6 +27,7 @@ type Mensaje = {
 }
 
 export default function WebchatPGL() {
+  const pathname = usePathname()
   const [habilitado, setHabilitado] = useState(false)
   const [abierto, setAbierto] = useState(false)
   const [contactos, setContactos] = useState<Contacto[]>([])
@@ -46,6 +48,8 @@ export default function WebchatPGL() {
   const chatAbiertoRef = useRef(false)
   const conversacionActivaRef = useRef<number | null>(null)
   const solicitudMensajesRef = useRef(0)
+  const lecturasConfirmadasRef = useRef<Map<number, number>>(new Map())
+  const lecturasPendientesRef = useRef<Set<number>>(new Set())
 
   const cargarContactos = useCallback(async () => {
     const respuesta = await fetch('/api/webchat/usuarios', {
@@ -101,8 +105,12 @@ export default function WebchatPGL() {
   }, [])
 
   useEffect(() => {
+    if (pathname === '/login') {
+      setHabilitado(false)
+      return
+    }
     void cargarContactos()
-  }, [cargarContactos])
+  }, [pathname, cargarContactos])
 
   useEffect(() => {
     if (!habilitado || abierto) return
@@ -151,6 +159,15 @@ export default function WebchatPGL() {
       ultimoMensajeId === null
     ) return
 
+    const confirmado = lecturasConfirmadasRef.current.get(id) ?? 0
+
+    if (
+      ultimoMensajeId <= confirmado ||
+      lecturasPendientesRef.current.has(id)
+    ) return
+
+    lecturasPendientesRef.current.add(id)
+
     try {
       const respuesta = await fetch('/api/webchat/mensajes', {
         method: 'PATCH',
@@ -162,10 +179,20 @@ export default function WebchatPGL() {
       })
 
       if (respuesta.ok) {
+        lecturasConfirmadasRef.current.set(
+          id,
+          Math.max(
+            lecturasConfirmadasRef.current.get(id) ?? 0,
+            ultimoMensajeId
+          )
+        )
+
         await cargarConversaciones()
       }
     } catch (error) {
       console.error('Webchat: error al marcar lectura', error)
+    } finally {
+      lecturasPendientesRef.current.delete(id)
     }
   }, [cargarConversaciones])
 
