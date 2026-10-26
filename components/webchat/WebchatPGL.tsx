@@ -40,6 +40,8 @@ export default function WebchatPGL() {
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState('')
   const [usuarioId, setUsuarioId] = useState('')
+  const [usuariosConectados, setUsuariosConectados] =
+    useState<string[]>([])
   const finalRef = useRef<HTMLDivElement>(null)
   const mensajesContenedorRef = useRef<HTMLDivElement>(null)
   const ultimoMensajeIdRef = useRef<number | null>(null)
@@ -111,6 +113,57 @@ export default function WebchatPGL() {
     }
     void cargarContactos()
   }, [pathname, cargarContactos])
+
+  useEffect(() => {
+    if (!habilitado || !usuarioId) return
+
+    let cancelado = false
+
+    async function actualizarPresencia() {
+      if (document.visibilityState !== 'visible') return
+
+      try {
+        await fetch('/api/webchat/presencia', {
+          method: 'POST',
+          cache: 'no-store',
+        })
+
+        const respuesta = await fetch('/api/webchat/presencia', {
+          cache: 'no-store',
+        })
+
+        if (!respuesta.ok) return
+
+        const datos = await respuesta.json()
+
+        if (!cancelado) {
+          setUsuariosConectados(datos.conectados ?? [])
+        }
+      } catch (error) {
+        console.error('Webchat: error de presencia', error)
+      }
+    }
+
+    void actualizarPresencia()
+
+    const intervalo = window.setInterval(() => {
+      void actualizarPresencia()
+    }, 20000)
+
+    const alVolver = () => {
+      if (document.visibilityState === 'visible') {
+        void actualizarPresencia()
+      }
+    }
+
+    document.addEventListener('visibilitychange', alVolver)
+
+    return () => {
+      cancelado = true
+      window.clearInterval(intervalo)
+      document.removeEventListener('visibilitychange', alVolver)
+    }
+  }, [habilitado, usuarioId])
 
   useEffect(() => {
     if (!habilitado || abierto) return
@@ -356,7 +409,18 @@ export default function WebchatPGL() {
                     {destinatario?.nombre ?? 'Conversación'}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {destinatario?.rol ?? ''}
+                    <span className={
+                      destinatario &&
+                      usuariosConectados.includes(destinatario.id)
+                        ? 'text-green-600'
+                        : 'text-gray-500'
+                    }>
+                      {destinatario &&
+                      usuariosConectados.includes(destinatario.id)
+                        ? '● En línea'
+                        : '● Desconectado'}
+                    </span>
+                    {' · '}{destinatario?.rol ?? ''}
                   </div>
                 </div>
               </div>
@@ -468,7 +532,24 @@ export default function WebchatPGL() {
                         }}
                         className="w-full rounded-xl px-3 py-3 text-left text-sm hover:bg-gray-100"
                       >
-                        {conversacion.destinatario?.nombre ?? 'Usuario'}
+                        <div>
+                          {conversacion.destinatario?.nombre ?? 'Usuario'}
+                        </div>
+                        <div className={
+                          conversacion.destinatario &&
+                          usuariosConectados.includes(
+                            conversacion.destinatario.id
+                          )
+                            ? 'text-xs text-green-600'
+                            : 'text-xs text-gray-500'
+                        }>
+                          {conversacion.destinatario &&
+                          usuariosConectados.includes(
+                            conversacion.destinatario.id
+                          )
+                            ? '● En línea'
+                            : '● Desconectado'}
+                        </div>
                       </button>
                     ))}
                   </>
@@ -494,6 +575,15 @@ export default function WebchatPGL() {
                       </div>
                       <div className="text-xs text-gray-500">
                         {contacto.es_gestor ? 'Gestor' : contacto.rol}
+                      </div>
+                      <div className={
+                        usuariosConectados.includes(contacto.id)
+                          ? 'text-xs text-green-600'
+                          : 'text-xs text-gray-500'
+                      }>
+                        {usuariosConectados.includes(contacto.id)
+                          ? '● En línea'
+                          : '● Desconectado'}
                       </div>
                     </div>
                   </button>
