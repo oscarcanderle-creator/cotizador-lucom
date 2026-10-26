@@ -476,11 +476,27 @@ export default function WebchatPGL() {
     }
   }
 
-  const contactosFiltrados = contactos.filter((contacto) =>
-    `${contacto.nombre ?? ''} ${contacto.vendedor ?? ''} ${contacto.rol}`
-      .toLowerCase()
-      .includes(busqueda.toLowerCase())
-  )
+  const contactosFiltrados = contactos
+    .filter((contacto) =>
+      `${contacto.nombre ?? ''} ${contacto.vendedor ?? ''} ${contacto.rol}`
+        .toLowerCase()
+        .includes(busqueda.toLowerCase())
+    )
+    .sort((a, b) => {
+      const aConectado = usuariosConectados.includes(a.id)
+      const bConectado = usuariosConectados.includes(b.id)
+
+      if (aConectado !== bConectado) {
+        return aConectado ? -1 : 1
+      }
+
+      const nombreA = a.nombre ?? a.vendedor ?? ''
+      const nombreB = b.nombre ?? b.vendedor ?? ''
+
+      return nombreA.localeCompare(nombreB, 'es', {
+        sensitivity: 'base',
+      })
+    })
 
   const totalNoLeidos = conversaciones.reduce(
     (total, conversacion) => total + (conversacion.no_leidos ?? 0),
