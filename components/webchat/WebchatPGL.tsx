@@ -28,6 +28,8 @@ type Mensaje = {
 
 export default function WebchatPGL() {
   const pathname = usePathname()
+  const [sonidoActivo, setSonidoActivo] = useState(false)
+  const audioContextRef = useRef<AudioContext | null>(null)
   const [habilitado, setHabilitado] = useState(false)
   const [abierto, setAbierto] = useState(false)
   const [contactos, setContactos] = useState<Contacto[]>([])
@@ -52,6 +54,105 @@ export default function WebchatPGL() {
   const solicitudMensajesRef = useRef(0)
   const lecturasConfirmadasRef = useRef<Map<number, number>>(new Map())
   const lecturasPendientesRef = useRef<Set<number>>(new Set())
+  const solicitudConversacionesRef = useRef(0)
+  const noLeidosAnterioresRef = useRef<Map<number, number> | null>(null)
+  const notificacionPendienteRef = useRef(false)
+
+  useEffect(() => {
+    setSonidoActivo(
+      window.localStorage.getItem('webchat-pgl-sonido') !== 'false'
+    )
+  }, [])
+
+  useEffect(() => {
+    if (!sonidoActivo || !habilitado) return
+
+    const habilitarAudio = () => {
+      try {
+        const contexto = audioContextRef.current ?? new AudioContext()
+        audioContextRef.current = contexto
+
+        if (contexto.state === 'suspended') {
+          void contexto.resume().catch((error) => {
+            console.error('Webchat: no se pudo habilitar audio', error)
+          })
+        }
+      } catch (error) {
+        console.error('Webchat: audio no disponible', error)
+      }
+    }
+
+    document.addEventListener('pointerdown', habilitarAudio)
+    document.addEventListener('keydown', habilitarAudio)
+
+    return () => {
+      document.removeEventListener('pointerdown', habilitarAudio)
+      document.removeEventListener('keydown', habilitarAudio)
+    }
+  }, [sonidoActivo, habilitado])
+
+  const reproducirSonido = useCallback(() => {
+    try {
+      const contexto = audioContextRef.current ?? new AudioContext()
+      audioContextRef.current = contexto
+
+      if (contexto.state !== 'running') return
+
+      const inicio = contexto.currentTime
+
+      const tocarNota = (frecuencia: number, demora: number) => {
+        const oscilador = contexto.createOscillator()
+        const volumen = contexto.createGain()
+        const tiempo = inicio + demora
+
+        oscilador.type = 'sine'
+        oscilador.frequency.setValueAtTime(frecuencia, tiempo)
+
+        volumen.gain.setValueAtTime(0.0001, tiempo)
+        volumen.gain.exponentialRampToValueAtTime(
+          0.30, tiempo + 0.025
+        )
+        volumen.gain.setValueAtTime(0.30, tiempo + 0.15)
+        volumen.gain.exponentialRampToValueAtTime(
+          0.0001, tiempo + 0.25
+        )
+
+        oscilador.connect(volumen)
+        volumen.connect(contexto.destination)
+
+        oscilador.start(tiempo)
+        oscilador.stop(tiempo + 0.26)
+      }
+
+      tocarNota(740, 0)
+      tocarNota(988, 0.30)
+    } catch (error) {
+      console.error('Webchat: no se pudo reproducir sonido', error)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!notificacionPendienteRef.current) return
+
+    notificacionPendienteRef.current = false
+
+    if (sonidoActivo) reproducirSonido()
+  }, [conversaciones, sonidoActivo, reproducirSonido])
+
+  const cambiarSonido = () => {
+    const nuevoEstado = !sonidoActivo
+    setSonidoActivo(nuevoEstado)
+    window.localStorage.setItem(
+      'webchat-pgl-sonido',
+      String(nuevoEstado)
+    )
+
+    if (nuevoEstado) {
+      const contexto = audioContextRef.current ?? new AudioContext()
+      audioContextRef.current = contexto
+      void contexto.resume()
+    }
+  }
 
   const cargarContactos = useCallback(async () => {
     const respuesta = await fetch('/api/webchat/usuarios', {
@@ -70,6 +171,8 @@ export default function WebchatPGL() {
   }, [])
 
   const cargarConversaciones = useCallback(async () => {
+    const solicitud = ++solicitudConversacionesRef.current
+
     const respuesta = await fetch('/api/webchat/conversaciones', {
       cache: 'no-store',
     })
@@ -77,7 +180,33 @@ export default function WebchatPGL() {
     if (!respuesta.ok) return
 
     const datos = await respuesta.json()
-    setConversaciones(datos.conversaciones ?? [])
+
+    if (solicitud !== solicitudConversacionesRef.current) return
+
+    const nuevas: Conversacion[] = datos.conversaciones ?? []
+
+    const anteriores = noLeidosAnterioresRef.current
+    const actuales = new Map(
+      nuevas.map((c) => [c.id, c.no_leidos ?? 0])
+    )
+
+    if (anteriores !== null) {
+      const hayNuevos = nuevas.some((c) => {
+        const anterior = anteriores.get(c.id) ?? 0
+        return (
+          (c.no_leidos ?? 0) > anterior &&
+          !(chatAbiertoRef.current &&
+            conversacionActivaRef.current === c.id)
+        )
+      })
+
+      if (hayNuevos) {
+        notificacionPendienteRef.current = true
+      }
+    }
+
+    noLeidosAnterioresRef.current = actuales
+    setConversaciones(nuevas)
   }, [])
 
   const cargarMensajes = useCallback(async (id: number) => {
@@ -372,6 +501,16 @@ export default function WebchatPGL() {
               </div>
             </div>
 
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={cambiarSonido}
+                className="rounded-lg px-2 py-1 text-lg hover:bg-white/20"
+                title={sonidoActivo ? 'Silenciar notificaciones' : 'Activar sonido'}
+                aria-label={sonidoActivo ? 'Silenciar notificaciones' : 'Activar sonido'}
+              >
+                {sonidoActivo ? '🔊' : '🔇'}
+              </button>
             <button
               type="button"
               onClick={() => {
@@ -384,6 +523,7 @@ export default function WebchatPGL() {
             >
               ×
             </button>
+            </div>
           </header>
 
           {conversacionId ? (
