@@ -1195,6 +1195,8 @@ export default function Cotizador({
     } else if (tipo === 'MOVISTAR') {
 
       prefijoRegla = 'BENEFICIO_PORTA_MOVISTAR'
+    } else if (tipo === 'TUENTI') {
+      prefijoRegla = 'BENEFICIO_PORTA_TUENTI'
 
     } else {
 
