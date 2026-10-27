@@ -94,6 +94,37 @@ export default async function AdminReglasPage({
     throw new Error(error.message)
   }
 
+  const ordenReglas = [...(reglas ?? [])]
+
+  const posicionMovistar = ordenReglas.findLastIndex(
+    (regla) => regla.codigo.startsWith('BENEFICIO_PORTA_MOVISTAR_')
+  )
+
+  if (posicionMovistar !== -1) {
+    const reglasTuenti = ordenReglas.filter(
+      (regla) => regla.codigo.startsWith('BENEFICIO_PORTA_TUENTI_')
+    )
+
+    const ordenParametros = ['GB', 'MESES', 'PLAN_MIN']
+
+    reglasTuenti.sort(
+      (a, b) =>
+        ordenParametros.indexOf(a.codigo.replace('BENEFICIO_PORTA_TUENTI_', '')) -
+        ordenParametros.indexOf(b.codigo.replace('BENEFICIO_PORTA_TUENTI_', ''))
+    )
+
+    const restantes = ordenReglas.filter(
+      (regla) => !regla.codigo.startsWith('BENEFICIO_PORTA_TUENTI_')
+    )
+
+    const insertarDespues = restantes.findLastIndex(
+      (regla) => regla.codigo.startsWith('BENEFICIO_PORTA_MOVISTAR_')
+    )
+
+    restantes.splice(insertarDespues + 1, 0, ...reglasTuenti)
+    ordenReglas.splice(0, ordenReglas.length, ...restantes)
+  }
+
   async function actualizarRegla(
     formData: FormData
   ) {
@@ -225,7 +256,7 @@ export default async function AdminReglasPage({
 
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
 
-          {reglas?.map(
+          {ordenReglas.map(
             (regla, index) => {
 
               const unidad =
