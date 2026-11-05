@@ -248,8 +248,7 @@ export function calcularCotizacion(
    */
 
   const clienteNoClaro =
-    !clienteTieneBAF &&
-    !clienteTieneLineasClaro
+    !clienteTieneBAF
 
   const conexionFullClienteNuevo =
     clienteNoClaro &&
