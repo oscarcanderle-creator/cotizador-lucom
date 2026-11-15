@@ -98,6 +98,19 @@ export default async function AdminPage() {
             </div>
           </a>
 
+            {/* PUNTOS DE VENTA */}
+            <a
+              href="/admin/puntos-venta"
+              className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
+            >
+              <div className="text-lg font-semibold text-gray-900">
+                Puntos de Venta
+              </div>
+              <div className="text-sm text-gray-500 mt-2">
+                Administrá establecimientos, asesores y equivalencias de los reportes Claro.
+              </div>
+            </a>
+
           {/* ABM ORIGEN DEL DATO */}
           <a
             href="/admin/origenes"
