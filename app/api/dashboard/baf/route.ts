@@ -7,11 +7,13 @@ type Categoria = '2PLAY' | '3PLAY' | 'AÑADIR TV' | 'SIN CLASIFICAR'
 const INDICADORES: Indicador[] = ['ingresadas', 'cargadas', 'finalizadas', 'canceladas']
 const CATEGORIAS: Categoria[] = ['2PLAY', '3PLAY', 'AÑADIR TV', 'SIN CLASIFICAR']
 const LOTE = 500
-type Canal = 'CALL LUCOM' | 'LUCOM TERRENO' | 'DISTRIBUCIÓN' | 'LUCOM BOT-IA' | 'REFERIDOS' | 'SIN CLASIFICAR'
-const REFERIDOS = new Set(['N1', 'C1', 'T1', 'P1', 'J1', 'F1', 'B1'])
+type Canal = 'CALL LUCOM' | 'LUCOM TERRENO' | 'DISTRIBUCIÓN' | 'LUCOM BOT-IA' | 'REFERIDOS' | 'REDES LUCOM' | 'SIN CLASIFICAR'
+const REFERIDOS = new Set(['N1', 'C1', 'T1', 'P1', 'J1', 'F1', 'B1', 'R1'])
 function canalComercial(vendedor: string | null, origen: string | null, obs: string | null): Canal {
   const sigla = extraerSigla(vendedor)
   const o = String(origen ?? '').trim().toUpperCase().replace(/\s+/g, ' ')
+  const v = String(vendedor ?? '').trim().toUpperCase().replace(/\s+/g, ' ')
+  if (['REDES LUCOM', 'BOT TREBLE', 'TREBLE', 'CRM LUCOM'].includes(o) || v === 'L CHATBOT360') return 'REDES LUCOM'
   if (sigla === 'L1') {
     if (o === 'BOT DRIVE LC' || o === 'BOT IA LC') return 'LUCOM BOT-IA'
     if (o === 'PSR' && !!String(obs ?? '').trim()) return 'DISTRIBUCIÓN'
