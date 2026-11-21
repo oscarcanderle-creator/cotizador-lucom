@@ -31,6 +31,8 @@ async function crearPlan(formData: FormData) {
 
   const nombre = String(formData.get('nombre') ?? '').trim()
   const orden = Number(formData.get('orden') ?? 0)
+  const disponible_porta = formData.get('disponible_porta') === 'on'
+  const disponible_linea_nueva = formData.get('disponible_linea_nueva') === 'on'
 
   if (!nombre || !Number.isFinite(orden)) {
     throw new Error('Datos de plan inválidos.')
@@ -40,6 +42,8 @@ async function crearPlan(formData: FormData) {
     nombre,
     orden,
     activo: true,
+    disponible_porta,
+    disponible_linea_nueva,
   })
 
   if (error) throw new Error(`No se pudo crear el plan: ${error.message}`)
@@ -54,6 +58,8 @@ async function actualizarPlan(formData: FormData) {
   const nombre = String(formData.get('nombre') ?? '').trim()
   const orden = Number(formData.get('orden') ?? 0)
   const activo = formData.get('activo') === 'on'
+  const disponible_porta = formData.get('disponible_porta') === 'on'
+  const disponible_linea_nueva = formData.get('disponible_linea_nueva') === 'on'
 
   if (!Number.isFinite(id) || !nombre || !Number.isFinite(orden)) {
     throw new Error('Datos de plan inválidos.')
@@ -61,7 +67,7 @@ async function actualizarPlan(formData: FormData) {
 
   const { error } = await supabase
     .from('catalogo_planes_porta')
-    .update({ nombre, orden, activo })
+    .update({ nombre, orden, activo, disponible_porta, disponible_linea_nueva })
     .eq('id', id)
 
   if (error) throw new Error(`No se pudo actualizar el plan: ${error.message}`)
@@ -73,7 +79,7 @@ export default async function PlanesPortaPage() {
 
   const { data: planes, error } = await supabase
     .from('catalogo_planes_porta')
-    .select('id, nombre, orden, activo')
+    .select('id, nombre, orden, activo, disponible_porta, disponible_linea_nueva')
     .order('orden', { ascending: true })
     .order('nombre', { ascending: true })
 
@@ -87,7 +93,7 @@ export default async function PlanesPortaPage() {
     <main className="min-h-screen bg-gray-50">
       <AppHeader rol={profile.rol} usuario={nombreUsuario} actual="ADMIN" />
 
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:p-8">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:p-8">
         <div className="mb-6">
           <a href="/admin" className="text-sm font-semibold text-red-600 hover:text-red-700">
             ← Volver a ADMIN
@@ -96,13 +102,13 @@ export default async function PlanesPortaPage() {
             Planes PORTA / Línea Nueva
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Administrá los planes que se ofrecen y cargan en Portabilidad y Línea Nueva.
+            Configurá la disponibilidad de cada registro para Portabilidad y Línea Nueva. Los cambios todavía no restringen el formulario de ventas.
           </p>
         </div>
 
         <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-gray-900">Nuevo plan</h2>
-          <form action={crearPlan} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px_auto]">
+          <form action={crearPlan} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_100px_auto_auto_auto]">
             <input
               name="nombre"
               required
@@ -116,6 +122,14 @@ export default async function PlanesPortaPage() {
               required
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
             />
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input name="disponible_porta" type="checkbox" defaultChecked className="h-4 w-4" />
+              Portabilidad
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input name="disponible_linea_nueva" type="checkbox" defaultChecked className="h-4 w-4" />
+              Línea Nueva
+            </label>
             <button
               type="submit"
               className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700"
@@ -135,7 +149,7 @@ export default async function PlanesPortaPage() {
               <form
                 key={plan.id}
                 action={actualizarPlan}
-                className="grid grid-cols-1 items-center gap-3 px-5 py-4 sm:grid-cols-[1fr_120px_120px_auto]"
+                className="grid grid-cols-1 items-center gap-3 px-5 py-4 sm:grid-cols-[minmax(160px,1fr)_80px_110px_130px_80px_auto]"
               >
                 <input type="hidden" name="id" value={plan.id} />
                 <input
@@ -151,6 +165,24 @@ export default async function PlanesPortaPage() {
                   required
                   className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
                 />
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    name="disponible_porta"
+                    type="checkbox"
+                    defaultChecked={Boolean(plan.disponible_porta)}
+                    className="h-4 w-4"
+                  />
+                  Portabilidad
+                </label>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    name="disponible_linea_nueva"
+                    type="checkbox"
+                    defaultChecked={Boolean(plan.disponible_linea_nueva)}
+                    className="h-4 w-4"
+                  />
+                  Línea Nueva
+                </label>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
                   <input
                     name="activo"
