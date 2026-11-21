@@ -1042,6 +1042,8 @@ export default async function DetalleVentaPage({
     const esVendedorGestor =
       profile.rol === 'VENDEDOR' &&
       profile.puede_gestionar_ventas === true
+    const puedeCorregirCargaOriginal =
+      esVendedorGestor || ['ADMIN', 'SUPERVISOR'].includes(profile.rol)
 
     const idsMovilesOperacion = productos
       .filter((p: any) => ['PORTA', 'LINEA_NUEVA'].includes(String(p.tipo_producto ?? '').toUpperCase()))
@@ -1062,7 +1064,8 @@ export default async function DetalleVentaPage({
     }
 
     const puedeOfrecerEdicionCarga =
-      esVendedorGestor && puedeEditar && !cargaOriginalBloqueadaPorValidacion
+      puedeCorregirCargaOriginal && puedeEditar &&
+      (!esVendedorGestor || !cargaOriginalBloqueadaPorValidacion)
 
     const nombreResponsableProducto = (idResponsable: string | null | undefined) => {
       if (!idResponsable) return 'Sin asignar'
@@ -1152,8 +1155,8 @@ export default async function DetalleVentaPage({
           />
 
           <div className="space-y-5">
-            {esVendedorGestor && (
-              cargaOriginalBloqueadaPorValidacion ? (
+            {puedeCorregirCargaOriginal && (
+              esVendedorGestor && cargaOriginalBloqueadaPorValidacion ? (
                 <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                   <div className="font-semibold">Edición de datos de la venta bloqueada</div>
                   <div className="mt-1">La venta ya alcanzó Estado Vendedor = Venta Validada. Los datos originales no pueden modificarse.</div>
