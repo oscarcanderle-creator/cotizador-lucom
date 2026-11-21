@@ -280,6 +280,13 @@ export default function DashboardClient() {
                 <div key={indicador.clave} className="rounded-lg border border-gray-200 p-3 text-center">
                   <div className={'' + secundario + ' text-xs'}>{indicador.titulo.replace('BAF ', '')}</div>
                   <div className="mt-1 text-2xl font-bold tabular-nums">{canal === 'call' && datos ? formatoNumero.format(datos.totales[indicador.clave]) : '—'}</div>
+                  {indicador.clave === 'canceladas' && canal === 'call' && datos && (
+                    <div className="mt-1 text-xs font-semibold text-red-600">
+                      {datos.totales.cargadas > 0
+                        ? (datos.totales.canceladas / datos.totales.cargadas * 100).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '% sobre cargadas'
+                        : 'Sin cargadas en el período'}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
