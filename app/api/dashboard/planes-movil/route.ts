@@ -4,12 +4,12 @@ import { createAdminClient } from '../../../../utils/supabase/admin'
 
 const LOTE = 500
 function siglaVendedor(valor: unknown): string | null {
-  const token = String(valor ?? '').trim().split(/\\s+/)[0]?.toUpperCase() || ''
+  const token = String(valor ?? '').trim().split(/\s+/)[0]?.toUpperCase() || ''
   return /^[A-Z0-9]{2}$/.test(token) ? token : null
 }
 function fechaArgentina(valor: string | null): string | null {
   if (!valor) return null
-  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(valor)) return valor
+  if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) return valor
   const fecha = new Date(valor)
   if (Number.isNaN(fecha.valueOf())) return null
   const partes = new Intl.DateTimeFormat('en-CA', {
@@ -20,16 +20,16 @@ function fechaArgentina(valor: string | null): string | null {
   return `${tomar('year')}-${tomar('month')}-${tomar('day')}`
 }
 function fechaValida(valor: string): boolean {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(valor)) return false
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false
   const fecha = new Date(`${valor}T12:00:00Z`)
   return !Number.isNaN(fecha.valueOf()) && fecha.toISOString().slice(0, 10) === valor
 }
 function esFwa(plan: string | null): boolean {
-  return /\\bFWA\\b/i.test(String(plan ?? ''))
+  return /\bFWA\b/i.test(String(plan ?? ''))
 }
 function normalizarPlan(valor: string | null): string {
-  const texto = String(valor ?? '').trim().toUpperCase().replace(/\\s+/g, ' ')
-  const coincidencia = texto.match(/(?:^|\\D)(\\d+)\\s*(?:GB|GIGAS?|G)(?:\\b|$)/)
+  const texto = String(valor ?? '').trim().toUpperCase().replace(/\s+/g, ' ')
+  const coincidencia = texto.match(/(?:^|\D)(\d+)\s*(?:GB|GIGAS?|G)(?:\b|$)/)
   if (coincidencia) return `${Number(coincidencia[1])} GB`
   return texto || 'SIN PLAN'
 }
@@ -115,8 +115,8 @@ export async function GET(request: Request) {
       }
     }
     const planes = [...conteos.values()].sort((a, b) => {
-      const na = Number(a.plan.match(/^\\d+/)?.[0] ?? Infinity)
-      const nb = Number(b.plan.match(/^\\d+/)?.[0] ?? Infinity)
+      const na = Number(a.plan.match(/^\d+/)?.[0] ?? Infinity)
+      const nb = Number(b.plan.match(/^\d+/)?.[0] ?? Infinity)
       return na - nb || a.plan.localeCompare(b.plan, 'es')
     })
     const totales = planes.reduce((a, p) => ({ porta: a.porta + p.porta, ln: a.ln + p.ln }), { porta: 0, ln: 0 })
