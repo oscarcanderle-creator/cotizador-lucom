@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useRef, useState, useTransition } from 'react'
 import AppHeader from '../../components/AppHeader'
 
-type ProductoCatalogo = { id:number; producto:string; origen:string|null; plan:string; precio_lista:number; descuento_normal:number|null; precio_cliente:number|null; beneficios:string|null }
+type ProductoCatalogo = { id:number; negocio:string; catalogo_plan_id:number|null; producto:string; origen:string|null; plan:string; precio_lista:number; descuento_normal:number|null; precio_cliente:number|null; beneficios:string|null }
 type ResultadoGuardado = { ok:boolean; mensaje:string; idOperacion?:string }
 type Props = { nombreUsuario:string; vendedor:string; rol:string; puedeGestionarVentas:boolean; puedeOrigenBotIaLc:boolean; origenes:string[]; zonas:string[]; tiposDomicilio:string[]; productos:ProductoCatalogo[]; guardarVenta:(formData:FormData)=>Promise<ResultadoGuardado>; buscarClientePorDocumento:(tipoDocumento:string,numeroDocumento:string)=>Promise<any> }
 type ServicioNuevo = { id:number; tipo:'BAF'|'PORTA'|'LINEA_NUEVA'; tv:'NO'|'SI'; decos:'0'|'1'|'2' }
@@ -146,6 +146,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
  const [origenDato,setOrigenDato]=useState('')
  const [mostrarConfirmacionItec,setMostrarConfirmacionItec]=useState(false)
  const [companiasPorta,setCompaniasPorta]=useState<Record<number,string>>({})
+  const [negocioMovil,setNegocioMovil]=useState<'MASIVO'|'PYME'>('MASIVO')
  const [portaTitularId,setPortaTitularId]=useState<number|null>(null)
  const [productosSeleccionados,setProductosSeleccionados]=useState<Record<number,string>>({})
  const [pagosModem,setPagosModem]=useState<Record<number,string>>({})
@@ -167,22 +168,22 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
  const claroTv=useMemo(()=>productos.filter(p=>p.producto.trim().toUpperCase()==='CLARO TV').slice(0,1),[productos])
  const habilitaAnadirTv=existentes.some(s=>s.tipo==='BAF'&&s.modalidad==='2PLAY')
  const porta=useMemo(
-  ()=>productos.filter(p=>
+  ()=>productos.filter(p=>p.negocio===negocioMovil).filter(p=>
    p.producto.toUpperCase()==='PORTABILIDAD' &&
    etiquetaPlanMovil(p)!==null &&
    etiquetaPlanMovil(p)!=='FWA 5G 400G'
   ),
-  [productos]
+  [productos,negocioMovil]
  )
  const ln=useMemo(
-  ()=>productos.filter(p=>{
+  ()=>productos.filter(p=>p.negocio===negocioMovil).filter(p=>{
    const producto=p.producto.toUpperCase()
    const label=etiquetaPlanMovil(p)
    const esLineaNueva=producto.includes('LINEA NUEVA') || producto.includes('LÍNEA NUEVA')
    const esFwa=label==='FWA 5G 400G'
    return label!==null && (esLineaNueva || esFwa)
   }),
-  [productos]
+  [productos,negocioMovil]
  )
  const tiposDomicilioInternet=useMemo(()=>{
   const buscar=(texto:string)=>tiposDomicilio.find(x=>x.toUpperCase().includes(texto))
@@ -227,7 +228,8 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
 
   itecConfirmadoRef.current=false
   const fd=new FormData(form)
-  fd.set('servicios_nuevos_count',String(nuevos.length))
+  fd.set('negocio_movil',negocioMovil)
+   fd.set('servicios_nuevos_count',String(nuevos.length))
   fd.set('servicios_existentes_count',String(existentes.length))
   setResultado(null)
 
@@ -240,6 +242,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
      setDocumentoBusqueda('')
      setTipoBusqueda('DNI')
     setOrigenDato('')
+    setNegocioMovil('MASIVO')
     setNuevos([])
     setExistentes([])
     setCargaItec(false)
@@ -433,6 +436,22 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
  )}
 </div></div>)}<button type="button" onClick={agregarExistente} className="rounded-xl border border-dashed border-gray-400 px-4 py-2 text-sm font-semibold">+ Agregar servicio existente</button></div></Seccion>
   <Seccion n="04" titulo="Servicios Nuevos a Contratar">
+    <div className="mb-4 rounded-xl border border-gray-200 bg-white p-3">
+      <label className="block max-w-xs">
+        <span className="mb-1 block text-xs font-semibold uppercase text-gray-600">Segmento comercial móvil</span>
+        <select className={inputClass} name="negocio_movil" value={negocioMovil}
+          onChange={(e)=>{
+            setNegocioMovil(e.target.value as 'MASIVO'|'PYME')
+            setProductosSeleccionados({})
+            setPagosModem({})
+            setCuotasModem({})
+          }}>
+          <option value="MASIVO">MASIVO</option>
+          <option value="PYME">PYME</option>
+        </select>
+      </label>
+      <p className="mt-1 text-xs text-gray-500">Aplica a Portabilidad y Línea Nueva. Internet mantiene su selección actual.</p>
+    </div>
    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4"><BotonProducto activo={ultimoProducto==='BAF'} onClick={()=>{setUltimoProducto('BAF');agregar('BAF')}} disabled={nuevos.some(x=>x.tipo==='BAF')}>+ Internet</BotonProducto><BotonProducto activo={ultimoProducto==='PORTA'} onClick={()=>{setUltimoProducto('PORTA');agregar('PORTA')}}>+ Portabilidad</BotonProducto><BotonProducto activo={ultimoProducto==='LINEA_NUEVA'} onClick={()=>{setUltimoProducto('LINEA_NUEVA');agregar('LINEA_NUEVA')}}>+ Línea Nueva</BotonProducto></div>
    {rol==='TERRENO'&&nuevos.some(x=>x.tipo==='BAF')&&!habilitaAnadirTv&&(
     <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-3">
