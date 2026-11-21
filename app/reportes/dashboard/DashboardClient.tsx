@@ -5,6 +5,12 @@ import { useEffect, useState } from 'react'
 type Tema = 'ejecutivo' | 'oscuro' | 'compacto'
 type Indicador = 'ingresadas' | 'cargadas' | 'finalizadas' | 'canceladas'
 type Categoria = '2PLAY' | '3PLAY' | 'AÑADIR TV' | 'SIN CLASIFICAR'
+type DetallePlanes = {
+  desde: string
+  hasta: string
+  planes: { plan: string; porta: number; ln: number }[]
+  totales: { porta: number; ln: number }
+}
 type Respuesta = {
   desde: string
   hasta: string
@@ -65,6 +71,8 @@ export default function DashboardClient() {
   const [canal, setCanal] = useState('call')
   const [datos, setDatos] = useState<Respuesta | null>(null)
   const [comparacion, setComparacion] = useState<Respuesta | null>(null)
+  const [detallePlanes, setDetallePlanes] = useState<DetallePlanes | null>(null)
+  const [errorPlanes, setErrorPlanes] = useState('')
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
 
@@ -72,6 +80,8 @@ export default function DashboardClient() {
     if (canal !== 'call') {
       setDatos(null)
       setComparacion(null)
+      setDetallePlanes(null)
+      setErrorPlanes('')
       setError('')
       setCargando(false)
       return
@@ -82,6 +92,8 @@ export default function DashboardClient() {
     setError('')
     setDatos(null)
     setComparacion(null)
+    setDetallePlanes(null)
+    setErrorPlanes('')
     const comparar = periodo === 'mes' || periodo === 'anterior'
     const anterior = mesAnterior(desde)
     async function consultar(inicio: string, fin: string): Promise<Respuesta> {
@@ -92,6 +104,17 @@ export default function DashboardClient() {
       if (!respuesta.ok) throw new Error(json.error || 'No se pudieron recuperar los indicadores.')
       return json as Respuesta
     }
+    fetch(`/api/dashboard/planes-movil?desde=${desde}&hasta=${hasta}`, {
+      signal: controlador.signal, cache: 'no-store',
+    })
+      .then(async respuesta => {
+        const json = await respuesta.json()
+        if (!respuesta.ok) throw new Error(json.error || 'No se pudo consultar el detalle de planes.')
+        if (!controlador.signal.aborted) setDetallePlanes(json as DetallePlanes)
+      })
+      .catch((err: unknown) => {
+        if (!controlador.signal.aborted) setErrorPlanes(err instanceof Error ? err.message : 'Error al consultar planes.')
+      })
     Promise.all([
       consultar(desde, hasta),
       comparar ? consultar(anterior.desde, anterior.hasta) : Promise.resolve(null),
@@ -398,10 +421,47 @@ export default function DashboardClient() {
             )}
           </div>
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className="font-bold text-[#1b5594]">Detalle por punto de venta · PDV</h3>
-            <div className="mt-3 rounded-lg border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500">
-              Pendiente de integración con reportes PDV
-            </div>
+            <h3 className="font-bold text-[#1b5594]">Detalle Planes Porta - LN</h3>
+            <p className={'' + secundario + ' mt-1 text-xs'}>Ventas con Estado BBOO CARGADO STL, por Fecha Carga STL. MASIVO y PYME consolidados. FWA excluido.</p>
+            {errorPlanes ? (
+              <p className="mt-3 rounded-lg border border-red-200 p-4 text-sm text-red-600">{errorPlanes}</p>
+            ) : detallePlanes ? (
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left text-xs">
+                      <th className="py-2 pr-2">Plan</th>
+                      <th className="px-2 py-2 text-right">PORTA</th>
+                      <th className="px-2 py-2 text-right">LN</th>
+                      <th className="py-2 pl-2 text-right">TOTAL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detallePlanes.planes.map(fila => (
+                      <tr key={fila.plan} className="border-b border-gray-200/70">
+                        <td className="py-2 pr-2">{fila.plan}</td>
+                        <td className="px-2 py-2 text-right tabular-nums">{formatoNumero.format(fila.porta)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums">{formatoNumero.format(fila.ln)}</td>
+                        <td className="py-2 pl-2 text-right font-semibold tabular-nums">{formatoNumero.format(fila.porta + fila.ln)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="font-bold">
+                      <td className="pt-3 pr-2">TOTAL</td>
+                      <td className="px-2 pt-3 text-right tabular-nums">{formatoNumero.format(detallePlanes.totales.porta)}</td>
+                      <td className="px-2 pt-3 text-right tabular-nums">{formatoNumero.format(detallePlanes.totales.ln)}</td>
+                      <td className="pt-3 pl-2 text-right tabular-nums">{formatoNumero.format(detallePlanes.totales.porta + detallePlanes.totales.ln)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+                {detallePlanes.planes.length === 0 && <p className={'' + secundario + ' py-4 text-center text-xs'}>Sin ventas cargadas en el período.</p>}
+              </div>
+            ) : (
+              <div className={'' + secundario + ' mt-3 rounded-lg border border-dashed border-gray-300 p-8 text-center text-sm'}>
+                {canal === 'call' ? 'Consultando detalle de planes...' : 'Seleccioná Call Lucom para consultar el detalle.'}
+              </div>
+            )}
           </div>
         </div>
         <p className={'' + secundario + ' mt-4 text-xs'}>Dashboard en desarrollo. Los datos visibles corresponden a consultas reales de BAF; los módulos pendientes no muestran cifras simuladas.</p>
