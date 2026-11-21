@@ -71,6 +71,7 @@ export async function GET(request: Request) {
     }
 
     const conteos = new Map<string, { plan: string; porta: number; ln: number }>()
+    let fwa = 0
     for (let pos = 0; pos < ids.length; pos += 200) {
       const { data: productos, error: errorProductos } = await admin.from('operacion_productos')
         .select('id,operacion_id,tipo_producto,plan_snapshot')
@@ -106,7 +107,10 @@ export async function GET(request: Request) {
         if (!fecha || fecha < desde || fecha > hasta) continue
         const planOriginal = gestion.plan_cargado || producto.plan_snapshot
         if (detalle.get(String(producto.id))?.es_fwa === true ||
-          esFwa(gestion.plan_cargado) || esFwa(producto.plan_snapshot)) continue
+          esFwa(gestion.plan_cargado) || esFwa(producto.plan_snapshot)) {
+          fwa++
+          continue
+        }
         const plan = normalizarPlan(planOriginal)
         const fila = conteos.get(plan) ?? { plan, porta: 0, ln: 0 }
         if (producto.tipo_producto === 'PORTA') fila.porta++
@@ -120,7 +124,7 @@ export async function GET(request: Request) {
       return na - nb || a.plan.localeCompare(b.plan, 'es')
     })
     const totales = planes.reduce((a, p) => ({ porta: a.porta + p.porta, ln: a.ln + p.ln }), { porta: 0, ln: 0 })
-    return NextResponse.json({ desde, hasta, planes, totales })
+    return NextResponse.json({ desde, hasta, planes, totales, fwa })
   } catch (error) {
     console.error('Dashboard detalle planes PORTA-LN', error)
     return NextResponse.json({ error: 'No se pudo consultar el detalle de planes PORTA-LN.' }, { status: 500 })
