@@ -24,6 +24,7 @@ export default async function ReportesPage() {
   if (!profile?.activo) redirect('/ventas')
 
   const puedeMantenimiento = ROLES_MANTENIMIENTO.includes(profile.rol)
+  const puedeDashboard = ['ADMIN', 'SUPERVISOR', 'BBOO', 'VENDEDOR'].includes(profile.rol)
   const nombreUsuario = profile.nombre?.trim() || user.email || 'Usuario'
 
   return (
@@ -72,19 +73,19 @@ export default async function ReportesPage() {
             </div>
           </Link>
 
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-5 opacity-70">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-lg font-semibold text-gray-900">
-                Dashboard
-              </div>
-              <span className="rounded-full bg-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-600">
-                Próximamente
-              </span>
+          {puedeDashboard && (
+          <Link
+            href="/reportes/dashboard"
+            className="rounded-xl border border-gray-200 bg-white p-5 transition hover:border-red-300 hover:bg-red-50 hover:shadow-sm"
+          >
+            <div className="text-lg font-semibold text-gray-900">
+              Dashboard Comercial
             </div>
             <div className="mt-2 text-sm text-gray-500">
-              Indicadores, evolución y visualización de resultados.
+              Indicadores, evolución y análisis de resultados comerciales.
             </div>
-          </div>
+          </Link>
+          )}
         </div>
       </div>
     </main>

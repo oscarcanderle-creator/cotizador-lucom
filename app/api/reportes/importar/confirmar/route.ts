@@ -473,6 +473,8 @@ function transformarFilaCater(
       filaExcel,
     ),
 
+    // O - TipoVenta
+    tipo_venta: valorONull(fila[14]),
     // V - Cater Sds Id
     cater_sds_id: valorONull(fila[21]),
   }
