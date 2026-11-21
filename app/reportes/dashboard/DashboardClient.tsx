@@ -151,6 +151,7 @@ export default function DashboardClient() {
   const canalesOrdenados = ordenCanales
     .filter(nombre => !!datos?.porCanal?.[nombre])
     .map(nombre => ({ nombre, ...datos!.porCanal[nombre] }))
+    .sort((a, b) => b.totales.cargadas - a.totales.cargadas || ordenCanales.indexOf(a.nombre) - ordenCanales.indexOf(b.nombre))
   const totalCanales = canalesOrdenados.reduce((acumulado, canal) => {
     for (const indicador of indicadores) acumulado[indicador.clave] += canal.totales[indicador.clave]
     return acumulado
