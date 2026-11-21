@@ -43,6 +43,7 @@ export default async function VentasPage(){
    if(sigla!=='L1'||perfil.puede_origen_bot_ia_lc!==true)return{ok:false,mensaje:'El origen BOT IA LC requiere habilitación individual para un vendedor L1.'}
    if(origenDato.toUpperCase()!=='BOT IA LC')return{ok:false,mensaje:'Seleccioná la denominación vigente BOT IA LC.'}
   }
+ if(origenDato.toUpperCase()==='PSR' && String(perfil.vendedor??'').trim().toUpperCase().split(/\s+/)[0]!=='L1')return{ok:false,mensaje:'El origen PSR está reservado a vendedores del grupo L1.'}
  if(origenDato.toUpperCase()==='PSR'&&!obs)return{ok:false,mensaje:'Completá OBS con el ID del prospecto de Mis Referidos.'}
   const nuevos=nuevosDesde(fd),existentes=existentesDesde(fd);if(!nuevos.length)return{ok:false,mensaje:'Agregá al menos un servicio nuevo a contratar.'};if(nuevos.filter(x=>x.tipo==='BAF').length>1)return{ok:false,mensaje:'Una venta puede contener como máximo un Internet/BAF nuevo.'}
   const tieneBafNuevo=nuevos.some(x=>x.tipo==='BAF')
