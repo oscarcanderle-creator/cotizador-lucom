@@ -72,8 +72,6 @@ export default function DashboardClient() {
   const [fechaInicio, setFechaInicio] = useState(() => hoyArgentina().slice(0, 7) + '-01')
   const [fechaFinal, setFechaFinal] = useState(() => hoyArgentina())
   const [canal, setCanal] = useState('call')
-  const [productosSeleccionados, setProductosSeleccionados] = useState<string[]>(['BAF', 'PORTA', 'LÍNEA NUEVA', 'FWA'])
-  const [selectorProductosAbierto, setSelectorProductosAbierto] = useState(false)
   const [datos, setDatos] = useState<Respuesta | null>(null)
   const [comparacion, setComparacion] = useState<Respuesta | null>(null)
   const [detallePlanes, setDetallePlanes] = useState<DetallePlanes | null>(null)
@@ -81,9 +79,6 @@ export default function DashboardClient() {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
 
-  const incluirBaf = productosSeleccionados.includes('BAF')
-  const incluirMoviles = productosSeleccionados.some(nombre => ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(nombre))
-  const incluirPlanes = productosSeleccionados.includes('PORTA') || productosSeleccionados.includes('LÍNEA NUEVA')
   useEffect(() => {
     if (canal !== 'call') {
       setDatos(null)
@@ -106,7 +101,7 @@ export default function DashboardClient() {
       setCargando(false)
       return
     }
-    setCargando(incluirBaf)
+    setCargando(true)
     setError('')
     setDatos(null)
     setComparacion(null)
@@ -122,7 +117,7 @@ export default function DashboardClient() {
       if (!respuesta.ok) throw new Error(json.error || 'No se pudieron recuperar los indicadores.')
       return json as Respuesta
     }
-    if (incluirMoviles) fetch(`/api/dashboard/planes-movil?desde=${desde}&hasta=${hasta}`, {
+    fetch(`/api/dashboard/planes-movil?desde=${desde}&hasta=${hasta}`, {
       signal: controlador.signal, cache: 'no-store',
     })
       .then(async respuesta => {
@@ -133,7 +128,7 @@ export default function DashboardClient() {
       .catch((err: unknown) => {
         if (!controlador.signal.aborted) setErrorPlanes(err instanceof Error ? err.message : 'Error al consultar planes.')
       })
-    if (incluirBaf) Promise.all([
+    Promise.all([
       consultar(desde, hasta),
       comparar ? consultar(anterior.desde, anterior.hasta) : Promise.resolve(null),
     ])
@@ -150,7 +145,7 @@ export default function DashboardClient() {
       })
       .finally(() => { if (!controlador.signal.aborted) setCargando(false) })
     return () => controlador.abort()
-  }, [periodo, fechaInicio, fechaFinal, canal, incluirBaf, incluirMoviles])
+  }, [periodo, fechaInicio, fechaFinal, canal])
 
   const oscuro = tema === 'oscuro'
   const compacto = tema === 'compacto'
@@ -256,35 +251,9 @@ export default function DashboardClient() {
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold">
             Productos
-            <div className="relative font-normal">
-              <button
-                type="button"
-                aria-expanded={selectorProductosAbierto}
-                onClick={() => setSelectorProductosAbierto(abierto => !abierto)}
-                className={'' + control + ' flex min-h-10 w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm'}
-              >
-                <span className="min-w-0 truncate">{productosSeleccionados.length === 4 ? 'Todos los productos' : productosSeleccionados.length ? productosSeleccionados.join(' · ') : 'Seleccionar productos'}</span>
-                <span aria-hidden="true">▾</span>
-              </button>
-              {selectorProductosAbierto && (
-                <div className={'' + tarjeta + ' absolute left-0 top-full z-30 mt-1 w-full min-w-[220px] rounded-lg border p-2 shadow-lg'}>
-                  <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm hover:bg-gray-100 hover:text-gray-900">
-                    <input type="checkbox" checked={productosSeleccionados.length === 4} onChange={e => setProductosSeleccionados(e.target.checked ? ['BAF', 'PORTA', 'LÍNEA NUEVA', 'FWA'] : [])} />
-                    Todos
-                  </label>
-                  {(['BAF', 'PORTA', 'LÍNEA NUEVA', 'FWA'] as const).map(nombre => (
-                    <label key={nombre} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm hover:bg-gray-100 hover:text-gray-900">
-                      <input
-                        type="checkbox"
-                        checked={productosSeleccionados.includes(nombre)}
-                        onChange={e => setProductosSeleccionados(actual => e.target.checked ? [...actual, nombre] : actual.filter(p => p !== nombre))}
-                      />
-                      {nombre}
-                    </label>
-                  ))}
-                  <button type="button" onClick={() => setSelectorProductosAbierto(false)} className="mt-1 w-full rounded bg-blue-100 px-2 py-2 text-xs font-semibold text-blue-900">Aplicar selección</button>
-                </div>
-              )}
+            <div className={'' + control + ' flex min-h-10 flex-wrap items-center gap-1 rounded-lg border px-2 py-1 font-normal'}>
+              <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-900">BAF</span>
+              <span className={'' + secundario + ' text-xs'}>BAF · PORTA · LN · FWA (Call)</span>
             </div>
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold">
@@ -308,7 +277,7 @@ export default function DashboardClient() {
         {cargando && <p className={'' + secundario + ' mb-4 text-sm'}>Consultando indicadores BAF...</p>}
 
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-          {productos.filter(producto => productosSeleccionados.includes(producto.nombre)).map(producto => (
+          {productos.map(producto => (
             <div key={producto.nombre} className={'' + tarjeta + ' overflow-hidden rounded-xl border shadow-sm'}>
               <div className={'' + producto.color + ' flex items-center justify-between px-3 py-3 font-bold text-white'}>
                 <span className="text-lg">{producto.icono}</span>
@@ -335,7 +304,6 @@ export default function DashboardClient() {
           ))}
         </div>
 
-        {incluirBaf && (
         <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
             <h3 className="font-bold text-[#1b5594]">Evolución diaria · BAF Call Lucom</h3>
@@ -410,8 +378,6 @@ export default function DashboardClient() {
           </div>
         </div>
 
-        )}
-        {incluirBaf && (
         <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
             <h3 className="font-bold text-[#1b5594]">Estado de ventas · BAF Call Lucom</h3>
@@ -452,9 +418,8 @@ export default function DashboardClient() {
           </div>
         </div>
 
-        )}
-        {(incluirBaf || incluirPlanes) && <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-          {incluirBaf && <div className={'' + tarjeta + ' rounded-xl border p-4'}>
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <div className={'' + tarjeta + ' rounded-xl border p-4'}>
             <h3 className="font-bold text-[#1b5594]">Detalle por canales comerciales · BAF</h3>
             <p className={'' + secundario + ' mt-1 text-xs'}>Abrí cada canal para consultar sus vendedores. Referidos incluye N1, C1, T1, P1, J1, F1, B1 y el histórico R1.</p>
             {datos && canalesOrdenados.length ? (
@@ -490,8 +455,8 @@ export default function DashboardClient() {
                 {cargando ? 'Consultando canales...' : datos ? 'Sin ventas en el período.' : 'Seleccioná Call Lucom y un período.'}
               </div>
             )}
-          </div>}
-          {incluirPlanes && <div className={'' + tarjeta + ' rounded-xl border p-4'}>
+          </div>
+          <div className={'' + tarjeta + ' rounded-xl border p-4'}>
             <h3 className="font-bold text-[#1b5594]">Detalle Planes Porta - LN</h3>
             <p className={'' + secundario + ' mt-1 text-xs'}>Ventas con Estado BBOO CARGADO STL, por Fecha Carga STL. MASIVO y PYME consolidados. FWA excluido.</p>
             {errorPlanes ? (
@@ -533,8 +498,8 @@ export default function DashboardClient() {
                 {canal === 'call' ? 'Consultando detalle de planes...' : 'Seleccioná Call Lucom para consultar el detalle.'}
               </div>
             )}
-          </div>}
-        </div>}
+          </div>
+        </div>
         <p className={'' + secundario + ' mt-4 text-xs'}>Dashboard en desarrollo. Los datos visibles corresponden a consultas reales de BAF; los módulos pendientes no muestran cifras simuladas.</p>
       </div>
     </section>
