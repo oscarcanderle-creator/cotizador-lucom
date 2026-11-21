@@ -1477,7 +1477,31 @@ export default async function DetalleVentaPage({
                                 <p className="mt-1 text-xs text-gray-500">Automática al establecer Estado BBOO = ACTIVA NRO PORTADO.</p>
                               </div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SIM</label><GestionInputValidado name="sim" tipo="SIM" esEsim={String(detalle?.tipo_sim ?? '').trim().toUpperCase() === 'ESIM'} defaultValue={gestion?.sim ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
-                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</label><select name="plan_cargado" defaultValue={gestion?.plan_cargado || producto.plan_snapshot || ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar plan</option>{(() => { const actual = String(gestion?.plan_cargado || producto.plan_snapshot || '').trim(); const activos = Array.from(new Set((planesPorta ?? []).map((p: any) => String(p.nombre ?? '').trim()).filter(Boolean))); const opciones = actual && !activos.includes(actual) ? [actual, ...activos] : activos; return opciones.map((nombre: string) => <option key={nombre} value={nombre}>{nombre}</option>) })()}</select></div>
+                              <div>
+                                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</label>
+                                  {(() => {
+                                    const esFwa = detalle?.es_fwa === true
+                                    const guardado = String(gestion?.plan_cargado || producto.plan_snapshot || '').trim()
+                                    const actual = esFwa && guardado.toUpperCase() === 'FWA 5G'
+                                      ? 'FWA 5G 400G'
+                                      : guardado
+                                    const activos = Array.from(new Set(
+                                      (planesPorta ?? [])
+                                        .map((p: any) => String(p.nombre ?? '').trim())
+                                        .filter(Boolean)
+                                        .filter((nombre: string) => !esFwa || nombre.toUpperCase() === 'FWA 5G 400G')
+                                    ))
+                                    const opciones = actual && !activos.includes(actual)
+                                      ? [actual, ...activos]
+                                      : activos
+                                    return (
+                                      <select name="plan_cargado" defaultValue={actual} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100">
+                                        <option value="">Seleccionar plan</option>
+                                        {opciones.map((nombre: string) => <option key={nombre} value={nombre}>{nombre}</option>)}
+                                      </select>
+                                    )
+                                  })()}
+                                </div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><GestionInputValidado name="sds" tipo="SDS" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">PIN / LNVA NRO</label><input name="pin_lnva_nro" defaultValue={gestion?.pin_lnva_nro ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <GestionLogisticaChip
