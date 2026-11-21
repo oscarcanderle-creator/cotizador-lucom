@@ -5,7 +5,7 @@ import AppHeader from '../../components/AppHeader'
 
 type ProductoCatalogo = { id:number; producto:string; origen:string|null; plan:string; precio_lista:number; descuento_normal:number|null; precio_cliente:number|null; beneficios:string|null }
 type ResultadoGuardado = { ok:boolean; mensaje:string; idOperacion?:string }
-type Props = { nombreUsuario:string; vendedor:string; rol:string; puedeGestionarVentas:boolean; origenes:string[]; zonas:string[]; tiposDomicilio:string[]; productos:ProductoCatalogo[]; guardarVenta:(formData:FormData)=>Promise<ResultadoGuardado>; buscarClientePorDocumento:(tipoDocumento:string,numeroDocumento:string)=>Promise<any> }
+type Props = { nombreUsuario:string; vendedor:string; rol:string; puedeGestionarVentas:boolean; puedeOrigenBotIaLc:boolean; origenes:string[]; zonas:string[]; tiposDomicilio:string[]; productos:ProductoCatalogo[]; guardarVenta:(formData:FormData)=>Promise<ResultadoGuardado>; buscarClientePorDocumento:(tipoDocumento:string,numeroDocumento:string)=>Promise<any> }
 type ServicioNuevo = { id:number; tipo:'BAF'|'PORTA'|'LINEA_NUEVA'; tv:'NO'|'SI'; decos:'0'|'1'|'2' }
 type ServicioExistente = { id:number; tipo:'BAF'|'LINEA_MOVIL'; modalidad:string }
 type ClienteBuscado = { nombre:string|null; apellido:string|null; fecha_nacimiento:string|null; email:string|null; telefono:string|null; telefono_alternativo:string|null }
@@ -88,7 +88,7 @@ function opcionesPlanesMoviles(lista:ProductoCatalogo[]){
  return opciones.sort((a,b)=>(orden.get(a.label)??99)-(orden.get(b.label)??99))
 }
 
-export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestionarVentas,origenes,zonas,tiposDomicilio,productos,guardarVenta,buscarClientePorDocumento}:Props){
+export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestionarVentas,puedeOrigenBotIaLc,origenes,zonas,tiposDomicilio,productos,guardarVenta,buscarClientePorDocumento}:Props){
   const [tipoBusqueda,setTipoBusqueda]=useState('DNI')
   const [documentoBusqueda,setDocumentoBusqueda]=useState('')
   const [buscandoCliente,setBuscandoCliente]=useState(false)
@@ -363,7 +363,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
     <Selector
      label="Origen del dato"
      name="origen_dato"
-     opciones={opts(origenes)}
+     opciones={opts(origenes.filter(o=>!['BOT IA LC','BOT DRIVE LC'].includes(o.trim().toUpperCase()) || (puedeOrigenBotIaLc && o.trim().toUpperCase()==='BOT IA LC')))}
      value={origenDato}
      onChange={setOrigenDato}
      required
