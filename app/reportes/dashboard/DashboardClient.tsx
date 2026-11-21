@@ -216,7 +216,7 @@ export default function DashboardClient() {
       </header>
 
       <div className="p-4 sm:p-5">
-        <div className={'' + tarjeta + ' mb-4 grid grid-cols-1 gap-3 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-4'}>
+        <div className={'' + tarjeta + ' mb-4 grid grid-cols-1 gap-3 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-3'}>
           <label className="flex flex-col gap-1 text-sm font-semibold">
             Rango de fechas
             <span className={'' + control + ' flex min-w-0 items-center rounded-lg border font-normal'}>
@@ -248,13 +248,6 @@ export default function DashboardClient() {
                 </span>
               )}
             </span>
-          </label>
-          <label className="flex flex-col gap-1 text-sm font-semibold">
-            Productos
-            <div className={'' + control + ' flex min-h-10 flex-wrap items-center gap-1 rounded-lg border px-2 py-1 font-normal'}>
-              <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-900">BAF</span>
-              <span className={'' + secundario + ' text-xs'}>BAF · PORTA · LN · FWA (Call)</span>
-            </div>
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold">
             Canal principal
