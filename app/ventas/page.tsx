@@ -14,13 +14,13 @@ function existentesDesde(fd:FormData){const n=Math.max(0,Number(texto(fd,'servic
 
 export default async function VentasPage(){
  const supabase=await createClient();const {data:{user}}=await supabase.auth.getUser();if(!user)redirect('/login')
- const {data:profile}=await supabase.from('profiles').select('nombre,vendedor,rol,activo,puede_gestionar_ventas').eq('id',user.id).single();if(!profile||!profile.activo)redirect('/login')
+ const {data:profile}=await supabase.from('profiles').select('nombre,vendedor,rol,activo,puede_gestionar_ventas,puede_origen_bot_ia_lc').eq('id',user.id).single();if(!profile||!profile.activo)redirect('/login')
  const [{data:origenes},{data:zonas},{data:tiposDomicilio},{data:productos}]=await Promise.all([
   supabase.from('catalogo_origenes').select('nombre').eq('activo',true).order('orden'),supabase.from('catalogo_zonas').select('nombre').eq('activo',true).order('orden'),supabase.from('catalogo_tipos_domicilio').select('nombre').eq('activo',true).order('orden'),supabase.from('productos').select('id,producto,origen,plan,precio_lista,descuento_normal,precio_cliente,beneficios').eq('activo',true).order('orden')])
  const nombreUsuario=profile.nombre?.trim()||user.email||'Usuario';const vendedor=profile.vendedor?.trim()||nombreUsuario
  async function guardarVenta(fd:FormData):Promise<{ok:boolean;mensaje:string;idOperacion?:string}>{'use server'
   const sb=await createClient();const {data:{user}}=await sb.auth.getUser();if(!user)return{ok:false,mensaje:'La sesión expiró. Volvé a iniciar sesión.'}
-  const {data:perfil}=await sb.from('profiles').select('nombre,vendedor,rol,activo').eq('id',user.id).single();if(!perfil||!perfil.activo)return{ok:false,mensaje:'El usuario no está habilitado.'}
+  const {data:perfil}=await sb.from('profiles').select('nombre,vendedor,rol,activo,puede_origen_bot_ia_lc').eq('id',user.id).single();if(!perfil||!perfil.activo)return{ok:false,mensaje:'El usuario no está habilitado.'}
   const cargaItecSolicitada=texto(fd,'carga_itec')==='SI'
   if(cargaItecSolicitada&&perfil.rol!=='TERRENO')return{ok:false,mensaje:'La carga ITEC está habilitada únicamente para usuarios con rol TERRENO.'}
   const itec={
@@ -38,6 +38,11 @@ export default async function VentasPage(){
  const obs=origenDato.toUpperCase()==='PSR' ? texto(fd,'obs') : ''
   if(!domicilio)return{ok:false,mensaje:'Completá Calle y Nro en la sección Domicilio.'}
   if(!origenDato)return{ok:false,mensaje:'Seleccioná Origen del dato.'}
+  if(['BOT IA LC','BOT DRIVE LC'].includes(origenDato.toUpperCase().replace(/\s+/g,' '))){
+   const sigla=String(perfil.vendedor??'').trim().toUpperCase().split(/\s+/)[0]
+   if(sigla!=='L1'||perfil.puede_origen_bot_ia_lc!==true)return{ok:false,mensaje:'El origen BOT IA LC requiere habilitación individual para un vendedor L1.'}
+   if(origenDato.toUpperCase()!=='BOT IA LC')return{ok:false,mensaje:'Seleccioná la denominación vigente BOT IA LC.'}
+  }
  if(origenDato.toUpperCase()==='PSR'&&!obs)return{ok:false,mensaje:'Completá OBS con el ID del prospecto de Mis Referidos.'}
   const nuevos=nuevosDesde(fd),existentes=existentesDesde(fd);if(!nuevos.length)return{ok:false,mensaje:'Agregá al menos un servicio nuevo a contratar.'};if(nuevos.filter(x=>x.tipo==='BAF').length>1)return{ok:false,mensaje:'Una venta puede contener como máximo un Internet/BAF nuevo.'}
   const tieneBafNuevo=nuevos.some(x=>x.tipo==='BAF')
@@ -362,6 +367,6 @@ export default async function VentasPage(){
    return{ok:true,mensaje:mensajeFinal,idOperacion}
   }catch(error){console.error(error);if(operacionCreada)await admin.from('operaciones').delete().eq('id_operacion',idOperacion);else if(serviciosCreados.length)await admin.from('cliente_servicios').delete().in('id',serviciosCreados);return{ok:false,mensaje:error instanceof Error?error.message:'No se pudo guardar la venta.'}}
  }
- return <FormularioVentas nombreUsuario={nombreUsuario} vendedor={vendedor} rol={profile.rol} puedeGestionarVentas={profile.puede_gestionar_ventas===true} origenes={(origenes??[]).map(x=>x.nombre)} zonas={(zonas??[]).map(x=>x.nombre)} tiposDomicilio={(tiposDomicilio??[]).map(x=>x.nombre)} productos={(productos??[]).map(p=>({...p,precio_lista:Number(p.precio_lista??0),descuento_normal:p.descuento_normal==null?null:Number(p.descuento_normal),precio_cliente:p.precio_cliente==null?null:Number(p.precio_cliente)}))} guardarVenta={guardarVenta}
+ return <FormularioVentas nombreUsuario={nombreUsuario} vendedor={vendedor} rol={profile.rol} puedeGestionarVentas={profile.puede_gestionar_ventas===true} puedeOrigenBotIaLc={profile.puede_origen_bot_ia_lc===true && String(profile.vendedor??'').trim().toUpperCase().startsWith('L1 ')} origenes={(origenes??[]).map(x=>x.nombre)} zonas={(zonas??[]).map(x=>x.nombre)} tiposDomicilio={(tiposDomicilio??[]).map(x=>x.nombre)} productos={(productos??[]).map(p=>({...p,precio_lista:Number(p.precio_lista??0),descuento_normal:p.descuento_normal==null?null:Number(p.descuento_normal),precio_cliente:p.precio_cliente==null?null:Number(p.precio_cliente)}))} guardarVenta={guardarVenta}
         buscarClientePorDocumento={buscarClientePorDocumento}/>
 }
