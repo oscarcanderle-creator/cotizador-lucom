@@ -282,8 +282,8 @@ export default function DashboardClient() {
                   <div className="mt-1 text-2xl font-bold tabular-nums">{canal === 'call' && datos ? formatoNumero.format(datos.totales[indicador.clave]) : '—'}</div>
                   {indicador.clave === 'canceladas' && canal === 'call' && datos && (
                     <div className="mt-1 text-xs font-semibold text-red-600">
-                      {(datos.totales.cargadas + datos.totales.canceladas) > 0
-                        ? (datos.totales.canceladas / (datos.totales.canceladas + datos.totales.cargadas) * 100).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '% canceladas'
+                      {(datos.totales.finalizadas + datos.totales.canceladas) > 0
+                        ? (datos.totales.canceladas / (datos.totales.canceladas + datos.totales.finalizadas) * 100).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '% de cancelación'
                         : 'Sin base para calcular'}
                     </div>
                   )}
