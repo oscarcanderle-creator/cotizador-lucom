@@ -53,13 +53,6 @@ function rangoPeriodo(periodo: string) {
   const hoy = hoyArgentina()
   const [anio, mes, dia] = hoy.split('-').map(Number)
   const inicioMes = `${anio}-${String(mes).padStart(2, '0')}-01`
-  if (periodo.startsWith('historico:')) {
-    const [anioElegido, mesElegido] = periodo.slice('historico:'.length).split('-').map(Number)
-    if (!anioElegido || !mesElegido || mesElegido < 1 || mesElegido > 12) return { desde: inicioMes, hasta: hoy }
-    const inicio = `${anioElegido}-${String(mesElegido).padStart(2, '0')}-01`
-    const fin = new Date(Date.UTC(anioElegido, mesElegido, 0)).toISOString().slice(0, 10)
-    return { desde: inicio, hasta: fin > hoy ? hoy : fin }
-  }
   if (periodo === 'hoy') return { desde: hoy, hasta: hoy }
   if (periodo === 'mes') return { desde: inicioMes, hasta: hoy }
   if (periodo === 'anterior') {
@@ -76,6 +69,8 @@ function rangoPeriodo(periodo: string) {
 export default function DashboardClient() {
   const [tema, setTema] = useState<Tema>('ejecutivo')
   const [periodo, setPeriodo] = useState('mes')
+  const [fechaInicio, setFechaInicio] = useState(() => hoyArgentina().slice(0, 7) + '-01')
+  const [fechaFinal, setFechaFinal] = useState(() => hoyArgentina())
   const [canal, setCanal] = useState('call')
   const [datos, setDatos] = useState<Respuesta | null>(null)
   const [comparacion, setComparacion] = useState<Respuesta | null>(null)
@@ -95,14 +90,24 @@ export default function DashboardClient() {
       return
     }
     const controlador = new AbortController()
-    const { desde, hasta } = rangoPeriodo(periodo)
+    const { desde, hasta } = periodo === 'personalizado'
+      ? { desde: fechaInicio, hasta: fechaFinal }
+      : rangoPeriodo(periodo)
+    if (periodo === 'personalizado' && (!desde || !hasta || desde > hasta)) {
+      setError('La fecha de inicio debe ser anterior o igual a la fecha final.')
+      setDatos(null)
+      setComparacion(null)
+      setDetallePlanes(null)
+      setCargando(false)
+      return
+    }
     setCargando(true)
     setError('')
     setDatos(null)
     setComparacion(null)
     setDetallePlanes(null)
     setErrorPlanes('')
-    const comparar = periodo === 'mes' || periodo === 'anterior' || periodo.startsWith('historico:')
+    const comparar = periodo === 'mes' || periodo === 'anterior'
     const anterior = mesAnterior(desde)
     async function consultar(inicio: string, fin: string): Promise<Respuesta> {
       const respuesta = await fetch(`/api/dashboard/baf?desde=${inicio}&hasta=${fin}`, {
@@ -140,7 +145,7 @@ export default function DashboardClient() {
       })
       .finally(() => { if (!controlador.signal.aborted) setCargando(false) })
     return () => controlador.abort()
-  }, [periodo, canal])
+  }, [periodo, fechaInicio, fechaFinal, canal])
 
   const oscuro = tema === 'oscuro'
   const compacto = tema === 'compacto'
@@ -219,16 +224,20 @@ export default function DashboardClient() {
               <option value="semana">Esta semana</option>
               <option value="mes">Mes en curso</option>
               <option value="anterior">Mes anterior</option>
-              <optgroup label="Meses históricos">
-                {Array.from({ length: (Number(hoyArgentina().slice(0, 4)) - 2020) * 12 + Number(hoyArgentina().slice(5, 7)) }, (_, indice) => {
-                  const fecha = new Date(Date.UTC(2020, indice, 1))
-                  const mes = fecha.toISOString().slice(0, 7)
-                  return { mes, etiqueta: etiquetaMes(mes + '-01') }
-                }).reverse().map(opcion => (
-                  <option key={opcion.mes} value={'historico:' + opcion.mes}>{opcion.etiqueta}</option>
-                ))}
-              </optgroup>
+              <option value="personalizado">Rango personalizado</option>
             </select>
+            {periodo === 'personalizado' && (
+              <span className="mt-1 grid grid-cols-2 gap-2">
+                <span className="flex min-w-0 flex-col gap-1 text-xs">
+                  Desde
+                  <input type="date" value={fechaInicio} max={fechaFinal || hoyArgentina()} onChange={e => setFechaInicio(e.target.value)} className={'' + control + ' min-w-0 w-full rounded-lg border px-2 py-2 font-normal'} />
+                </span>
+                <span className="flex min-w-0 flex-col gap-1 text-xs">
+                  Hasta
+                  <input type="date" value={fechaFinal} min={fechaInicio} max={hoyArgentina()} onChange={e => setFechaFinal(e.target.value)} className={'' + control + ' min-w-0 w-full rounded-lg border px-2 py-2 font-normal'} />
+                </span>
+              </span>
+            )}
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold">
             Productos
