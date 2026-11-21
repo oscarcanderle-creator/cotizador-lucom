@@ -147,7 +147,7 @@ export default function DashboardClient() {
     { clave: 'finalizadas', nombre: 'Finalizadas', color: '#0d9488' },
     { clave: 'canceladas', nombre: 'Canceladas', color: '#dc2626' },
   ]
-  const ordenCanales = ['CALL LUCOM', 'LUCOM TERRENO', 'DISTRIBUCIÓN', 'LUCOM BOT-IA', 'REFERIDOS', 'SIN CLASIFICAR']
+  const ordenCanales = ['CALL LUCOM', 'LUCOM TERRENO', 'DISTRIBUCIÓN', 'LUCOM BOT-IA', 'REDES LUCOM', 'REFERIDOS', 'SIN CLASIFICAR']
   const canalesOrdenados = ordenCanales
     .filter(nombre => !!datos?.porCanal?.[nombre])
     .map(nombre => ({ nombre, ...datos!.porCanal[nombre] }))
@@ -352,7 +352,7 @@ export default function DashboardClient() {
                     <span className="w-10 text-right font-semibold tabular-nums">{formatoNumero.format(canalDetalle.totales.cargadas)}</span>
                   </div>
                 ))}
-                <p className={'' + secundario + ' pt-1 text-[11px]'}>{concilia ? 'Los cinco canales y Sin clasificar concilian con el total BAF.' : 'Atención: revisar conciliación de canales.'}</p>
+                <p className={'' + secundario + ' pt-1 text-[11px]'}>{concilia ? 'Los canales comerciales y Sin clasificar concilian con el total BAF.' : 'Atención: revisar conciliación de canales.'}</p>
               </div>
             ) : <div className={'' + secundario + ' mt-3 p-5 text-center text-sm'}>Sin datos del período.</div>}
           </div>
@@ -361,7 +361,7 @@ export default function DashboardClient() {
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
             <h3 className="font-bold text-[#1b5594]">Detalle por canales comerciales · BAF</h3>
-            <p className={'' + secundario + ' mt-1 text-xs'}>Abrí cada canal para consultar sus vendedores. Referidos incluye los grupos N1, C1, T1, P1, J1, F1 y B1.</p>
+            <p className={'' + secundario + ' mt-1 text-xs'}>Abrí cada canal para consultar sus vendedores. Referidos incluye N1, C1, T1, P1, J1, F1, B1 y el histórico R1.</p>
             {datos && canalesOrdenados.length ? (
               <div className="mt-3 space-y-2">
                 <div className={'' + secundario + ' grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] gap-1 px-2 text-right text-[10px]'}>
