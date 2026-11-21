@@ -49,12 +49,12 @@ function etiquetaMes(fecha: string) {
   return new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
     .format(new Date(fecha + 'T12:00:00Z'))
 }
-function rangoPeriodo(periodo: string, mesSeleccionado: string) {
+function rangoPeriodo(periodo: string) {
   const hoy = hoyArgentina()
   const [anio, mes, dia] = hoy.split('-').map(Number)
   const inicioMes = `${anio}-${String(mes).padStart(2, '0')}-01`
-  if (periodo === 'seleccionar') {
-    const [anioElegido, mesElegido] = mesSeleccionado.split('-').map(Number)
+  if (periodo.startsWith('historico:')) {
+    const [anioElegido, mesElegido] = periodo.slice('historico:'.length).split('-').map(Number)
     if (!anioElegido || !mesElegido || mesElegido < 1 || mesElegido > 12) return { desde: inicioMes, hasta: hoy }
     const inicio = `${anioElegido}-${String(mesElegido).padStart(2, '0')}-01`
     const fin = new Date(Date.UTC(anioElegido, mesElegido, 0)).toISOString().slice(0, 10)
@@ -76,7 +76,6 @@ function rangoPeriodo(periodo: string, mesSeleccionado: string) {
 export default function DashboardClient() {
   const [tema, setTema] = useState<Tema>('ejecutivo')
   const [periodo, setPeriodo] = useState('mes')
-  const [mesSeleccionado, setMesSeleccionado] = useState(() => hoyArgentina().slice(0, 7))
   const [canal, setCanal] = useState('call')
   const [datos, setDatos] = useState<Respuesta | null>(null)
   const [comparacion, setComparacion] = useState<Respuesta | null>(null)
@@ -96,14 +95,14 @@ export default function DashboardClient() {
       return
     }
     const controlador = new AbortController()
-    const { desde, hasta } = rangoPeriodo(periodo, mesSeleccionado)
+    const { desde, hasta } = rangoPeriodo(periodo)
     setCargando(true)
     setError('')
     setDatos(null)
     setComparacion(null)
     setDetallePlanes(null)
     setErrorPlanes('')
-    const comparar = periodo === 'mes' || periodo === 'anterior' || periodo === 'seleccionar'
+    const comparar = periodo === 'mes' || periodo === 'anterior' || periodo.startsWith('historico:')
     const anterior = mesAnterior(desde)
     async function consultar(inicio: string, fin: string): Promise<Respuesta> {
       const respuesta = await fetch(`/api/dashboard/baf?desde=${inicio}&hasta=${fin}`, {
@@ -141,7 +140,7 @@ export default function DashboardClient() {
       })
       .finally(() => { if (!controlador.signal.aborted) setCargando(false) })
     return () => controlador.abort()
-  }, [periodo, mesSeleccionado, canal])
+  }, [periodo, canal])
 
   const oscuro = tema === 'oscuro'
   const compacto = tema === 'compacto'
@@ -220,18 +219,16 @@ export default function DashboardClient() {
               <option value="semana">Esta semana</option>
               <option value="mes">Mes en curso</option>
               <option value="anterior">Mes anterior</option>
-              <option value="seleccionar">Seleccionar mes</option>
+              <optgroup label="Meses históricos">
+                {Array.from({ length: (Number(hoyArgentina().slice(0, 4)) - 2020) * 12 + Number(hoyArgentina().slice(5, 7)) }, (_, indice) => {
+                  const fecha = new Date(Date.UTC(2020, indice, 1))
+                  const mes = fecha.toISOString().slice(0, 7)
+                  return { mes, etiqueta: etiquetaMes(mes + '-01') }
+                }).reverse().map(opcion => (
+                  <option key={opcion.mes} value={'historico:' + opcion.mes}>{opcion.etiqueta}</option>
+                ))}
+              </optgroup>
             </select>
-            {periodo === 'seleccionar' && (
-              <input
-                type="month"
-                value={mesSeleccionado}
-                max={hoyArgentina().slice(0, 7)}
-                onChange={e => setMesSeleccionado(e.target.value)}
-                className={'' + control + ' mt-1 rounded-lg border px-3 py-2 font-normal'}
-                aria-label="Mes a consultar"
-              />
-            )}
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold">
             Productos
