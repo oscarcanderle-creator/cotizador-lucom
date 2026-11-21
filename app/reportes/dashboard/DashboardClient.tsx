@@ -10,6 +10,7 @@ type DetallePlanes = {
   hasta: string
   planes: { plan: string; porta: number; ln: number }[]
   totales: { porta: number; ln: number }
+  fwa: number
 }
 type Respuesta = {
   desde: string
@@ -147,9 +148,9 @@ export default function DashboardClient() {
 
   const productos = [
     { nombre: 'BAF', icono: '◉', color: 'bg-[#07559b]', activo: true },
-    { nombre: 'PORTA', icono: '▣', color: 'bg-[#e21f2b]', activo: false },
-    { nombre: 'LÍNEA NUEVA', icono: '▤', color: 'bg-[#7646d9]', activo: false },
-    { nombre: 'FWA', icono: '⌁', color: 'bg-[#fa9800]', activo: false },
+    { nombre: 'PORTA', icono: '▣', color: 'bg-[#e21f2b]', activo: true },
+    { nombre: 'LÍNEA NUEVA', icono: '▤', color: 'bg-[#7646d9]', activo: true },
+    { nombre: 'FWA', icono: '⌁', color: 'bg-[#fa9800]', activo: true },
     { nombre: 'CATER / EQUIPOS', icono: '▣', color: 'bg-[#008c84]', activo: false },
     { nombre: '1175', icono: '▤', color: 'bg-[#6942c9]', activo: false },
   ]
@@ -217,7 +218,7 @@ export default function DashboardClient() {
             Productos
             <div className={'' + control + ' flex min-h-10 flex-wrap items-center gap-1 rounded-lg border px-2 py-1 font-normal'}>
               <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-900">BAF</span>
-              <span className={'' + secundario + ' text-xs'}>Otros productos en preparación</span>
+              <span className={'' + secundario + ' text-xs'}>BAF · PORTA · LN · FWA (Call)</span>
             </div>
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold">
@@ -248,9 +249,9 @@ export default function DashboardClient() {
                 <span className="text-sm">{producto.nombre}</span>
               </div>
               <div className="px-3 py-4 text-center">
-                <div className="text-3xl font-bold tabular-nums">{producto.activo && canal === 'call' && datos ? formatoNumero.format(datos.totales.cargadas) : '—'}</div>
-                <div className={'' + secundario + ' mt-1 text-xs'}>{producto.activo ? 'BAF cargadas · SDS validada' : 'Pendiente de integración'}</div>
-                {producto.activo && canal === 'call' && (
+                <div className="text-3xl font-bold tabular-nums">{canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(detallePlanes.fwa) : '—'}</div>
+                <div className={'' + secundario + ' mt-1 text-xs'}>{producto.nombre === 'BAF' ? 'BAF cargadas · SDS validada' : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
+                {producto.nombre === 'BAF' && canal === 'call' && (
                   <>
                     <div className="mt-3 flex h-3 overflow-hidden rounded bg-gray-200">
                       <div style={{ width: porcentaje2 + '%', backgroundColor: '#2563eb' }} />
