@@ -78,7 +78,7 @@ export default async function AdminUsuariosPage() {
   } = await supabase
     .from('profiles')
     .select(
-      'id, nombre, vendedor, dni_vendedor, rol, activo, puede_gestionar_ventas, debe_cambiar_password, created_at'
+      'id, nombre, vendedor, dni_vendedor, rol, activo, puede_gestionar_ventas, puede_origen_bot_ia_lc, debe_cambiar_password, created_at'
     )
     .order('nombre')
 
@@ -182,6 +182,9 @@ export default async function AdminUsuariosPage() {
     const puedeGestionarVentas =
       !esCadeteria &&
       formData.get('puede_gestionar_ventas') === 'on'
+    const puedeOrigenBotIaLc =
+      !esCadeteria && vendedorEfectivo?.trim().toUpperCase().startsWith('L1 ') === true &&
+      formData.get('puede_origen_bot_ia_lc') === 'on'
 
     if (
       !nombre ||
@@ -215,6 +218,7 @@ export default async function AdminUsuariosPage() {
           vendedor: vendedorEfectivo,
           rol,
           puede_gestionar_ventas: puedeGestionarVentas,
+          puede_origen_bot_ia_lc: puedeOrigenBotIaLc,
         },
       })
 
@@ -239,6 +243,7 @@ export default async function AdminUsuariosPage() {
           rol,
           activo: true,
           puede_gestionar_ventas: puedeGestionarVentas,
+          puede_origen_bot_ia_lc: puedeOrigenBotIaLc,
           debe_cambiar_password: true,
         })
 
@@ -304,6 +309,9 @@ export default async function AdminUsuariosPage() {
     const puedeGestionarVentas =
       !esCadeteria &&
       formData.get('puede_gestionar_ventas') === 'on'
+    const puedeOrigenBotIaLc =
+      !esCadeteria && vendedorEfectivo?.trim().toUpperCase().startsWith('L1 ') === true &&
+      formData.get('puede_origen_bot_ia_lc') === 'on'
 
     if (
       !id ||
@@ -375,6 +383,7 @@ export default async function AdminUsuariosPage() {
             vendedor: vendedorEfectivo,
             rol,
             puede_gestionar_ventas: puedeGestionarVentas,
+            puede_origen_bot_ia_lc: puedeOrigenBotIaLc,
           },
         }
       )
@@ -400,6 +409,7 @@ export default async function AdminUsuariosPage() {
           rol,
           activo,
           puede_gestionar_ventas: puedeGestionarVentas,
+          puede_origen_bot_ia_lc: puedeOrigenBotIaLc,
         })
         .eq('id', id)
 
@@ -773,6 +783,8 @@ export default async function AdminUsuariosPage() {
             Habilitado para gestionar ventas
           </label>
 
+          <label className="flex items-center gap-2 mt-2 text-sm text-gray-700"><input type="checkbox" name="puede_origen_bot_ia_lc" /> Habilitado para origen BOT IA LC (solo L1)</label>
+
           <div className="flex justify-end mt-4">
             <button
               type="submit"
@@ -968,6 +980,8 @@ export default async function AdminUsuariosPage() {
 
                       Gestiona ventas
                     </label>
+
+                    <label className="flex items-center gap-2 text-sm text-gray-700 lg:pb-2"><input type="checkbox" name="puede_origen_bot_ia_lc" defaultChecked={usuario.puede_origen_bot_ia_lc === true} /> Origen BOT IA LC (solo L1)</label>
 
                     <button
                       type="submit"
