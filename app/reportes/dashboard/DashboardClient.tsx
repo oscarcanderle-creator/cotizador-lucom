@@ -148,7 +148,6 @@ export default function DashboardClient() {
   }, [periodo, fechaInicio, fechaFinal, canal])
 
   const oscuro = tema === 'oscuro'
-  const compacto = tema === 'compacto'
   const fondo = oscuro ? 'bg-[#101827] text-white' : 'bg-gray-50 text-gray-900'
   const tarjeta = oscuro
     ? 'border-slate-700 bg-[#1b2638] text-white'
@@ -157,6 +156,9 @@ export default function DashboardClient() {
   const control = oscuro
     ? 'border-slate-600 bg-slate-800 text-white'
     : 'border-gray-300 bg-white text-gray-900'
+  const borde = oscuro ? 'border-slate-600' : 'border-gray-200'
+  const fondoSuave = oscuro ? 'bg-slate-700/60' : 'bg-gray-50'
+  const tituloSeccion = oscuro ? 'text-sky-300' : 'text-[#1b5594]'
 
   const productos = [
     { nombre: 'BAF', icono: '◉', color: 'bg-[#07559b]', activo: true },
@@ -199,7 +201,7 @@ export default function DashboardClient() {
   ]
 
   return (
-    <section className={'' + fondo + ' overflow-hidden rounded-2xl border border-gray-200'}>
+    <section className={'' + fondo + (oscuro ? ' border-slate-700' : ' border-gray-200') + ' overflow-hidden rounded-2xl border'}>
       <header className="flex flex-wrap items-center justify-between gap-4 bg-[#17457e] px-5 py-5 text-white sm:px-7">
         <div className="flex items-center gap-5">
           <div className="border-r border-blue-300/50 pr-5 text-2xl font-black italic tracking-tight">Lucom</div>
@@ -208,10 +210,21 @@ export default function DashboardClient() {
             <p className="text-sm text-blue-100">Call Lucom + Puntos de Venta</p>
           </div>
         </div>
-        <div className="text-right text-xs text-blue-100">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setTema(actual => actual === 'oscuro' ? 'ejecutivo' : 'oscuro')}
+            aria-label={oscuro ? 'Activar modo claro' : 'Activar modo oscuro'}
+            aria-pressed={oscuro}
+            className="rounded-lg border border-blue-200/50 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+          >
+            {oscuro ? '☀ Modo claro' : '☾ Modo oscuro'}
+          </button>
+          <div className="text-right text-xs text-blue-100">
           <div>Origen de información</div>
           <div className="mt-1 font-semibold text-white">PGL · datos en consulta</div>
           <div className="text-blue-200">Claro · pendiente de integración</div>
+          </div>
         </div>
       </header>
 
@@ -236,14 +249,14 @@ export default function DashboardClient() {
                 <option value="personalizado">Rango personalizado</option>
               </select>
               {periodo === 'personalizado' && (
-                <span className="grid min-w-0 flex-1 grid-cols-2 border-l border-gray-300">
+                <span className={'grid min-w-0 flex-1 grid-cols-2 border-l ' + (oscuro ? 'border-slate-600' : 'border-gray-300')}>
                   <span className="flex min-w-0 flex-col px-1 text-[10px]">
                     Desde
-                    <input type="date" aria-label="Fecha inicio" value={fechaInicio} max={fechaFinal || hoyArgentina()} onChange={e => setFechaInicio(e.target.value)} className="min-w-0 w-full bg-transparent text-[11px] font-normal outline-none" />
+                    <input type="date" aria-label="Fecha inicio" value={fechaInicio} max={fechaFinal || hoyArgentina()} onChange={e => setFechaInicio(e.target.value)} className={'min-w-0 w-full bg-transparent text-[11px] font-normal outline-none ' + (oscuro ? '[color-scheme:dark]' : '')} />
                   </span>
-                  <span className="flex min-w-0 flex-col border-l border-gray-300 px-1 text-[10px]">
+                  <span className={'flex min-w-0 flex-col border-l px-1 text-[10px] ' + (oscuro ? 'border-slate-600' : 'border-gray-300')}>
                     Hasta
-                    <input type="date" aria-label="Fecha final" value={fechaFinal} min={fechaInicio} max={hoyArgentina()} onChange={e => setFechaFinal(e.target.value)} className="min-w-0 w-full bg-transparent text-[11px] font-normal outline-none" />
+                    <input type="date" aria-label="Fecha final" value={fechaFinal} min={fechaInicio} max={hoyArgentina()} onChange={e => setFechaFinal(e.target.value)} className={'min-w-0 w-full bg-transparent text-[11px] font-normal outline-none ' + (oscuro ? '[color-scheme:dark]' : '')} />
                   </span>
                 </span>
               )}
@@ -281,7 +294,7 @@ export default function DashboardClient() {
                 <div className={'' + secundario + ' mt-1 text-xs'}>{producto.nombre === 'BAF' ? 'BAF cargadas · SDS validada' : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
                 {producto.nombre === 'BAF' && canal === 'call' && (
                   <>
-                    <div className="mt-3 flex h-3 overflow-hidden rounded bg-gray-200">
+                    <div className={'mt-3 flex h-3 overflow-hidden rounded ' + (oscuro ? 'bg-slate-700' : 'bg-gray-200')}>
                       <div style={{ width: porcentaje2 + '%', backgroundColor: '#2563eb' }} />
                       <div style={{ width: porcentaje3 + '%', backgroundColor: '#0d9488' }} />
                     </div>
@@ -299,7 +312,7 @@ export default function DashboardClient() {
 
         <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className="font-bold text-[#1b5594]">Evolución diaria · BAF Call Lucom</h3>
+            <h3 className={'font-bold ' + tituloSeccion}>Evolución diaria · BAF Call Lucom</h3>
             <p className={'' + secundario + ' mt-1 text-xs'}>Cargadas por fecha de gestión; finalizadas y canceladas por fecha de cierre.</p>
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
               {coloresDiarios.map(serie => (
@@ -332,7 +345,7 @@ export default function DashboardClient() {
             )}
           </div>
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className="font-bold text-[#1b5594]">Composición comercial BAF</h3>
+            <h3 className={'font-bold ' + tituloSeccion}>Composición comercial BAF</h3>
             <p className={'' + secundario + ' mt-1 text-xs'}>Ventas cargadas · 2PLAY y 3PLAY. El resto se informa por separado.</p>
             {comparacion && datos ? (
               <div className="mt-4 space-y-5">
@@ -342,7 +355,7 @@ export default function DashboardClient() {
                       <span className="font-semibold capitalize">{barra.nombre}</span>
                       <span className="font-bold tabular-nums">{formatoNumero.format(barra.total)}</span>
                     </div>
-                    <div className="h-9 overflow-hidden rounded-md bg-gray-200">
+                    <div className={'h-9 overflow-hidden rounded-md ' + (oscuro ? 'bg-slate-700' : 'bg-gray-200')}>
                       <div className="flex h-full" style={{ width: (barra.total / maximo * 100) + '%' }}>
                         {barra.dos > 0 && <div className="flex h-full items-center justify-center overflow-hidden bg-[#2563eb] text-xs font-bold text-white" style={{ width: (barra.dos / barra.total * 100) + '%' }} title={'2PLAY: ' + barra.dos}>{barra.dos}</div>}
                         {barra.tres > 0 && <div className="flex h-full items-center justify-center overflow-hidden bg-[#0d9488] text-xs font-bold text-white" style={{ width: (barra.tres / barra.total * 100) + '%' }} title={'3PLAY: ' + barra.tres}>{barra.tres}</div>}
@@ -354,7 +367,7 @@ export default function DashboardClient() {
                     </div>
                   </div>
                 ))}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 pt-3 text-xs">
+                <div className={'flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs ' + borde}>
                   <span><span className="text-[#2563eb]">■</span> 2PLAY &nbsp; <span className="text-[#0d9488]">■</span> 3PLAY</span>
                   <span className="font-semibold">
                     Variación vs. mes anterior: {variacion === null ? 'Sin base comparable' : (variacion > 0 ? '+' : '') + variacion.toFixed(1) + '%'}
@@ -373,10 +386,10 @@ export default function DashboardClient() {
 
         <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className="font-bold text-[#1b5594]">Estado de ventas · BAF Call Lucom</h3>
+            <h3 className={'font-bold ' + tituloSeccion}>Estado de ventas · BAF Call Lucom</h3>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {indicadores.map(indicador => (
-                <div key={indicador.clave} className="rounded-lg border border-gray-200 p-3 text-center">
+                <div key={indicador.clave} className={'rounded-lg border p-3 text-center ' + borde}>
                   <div className={'' + secundario + ' text-xs'}>{indicador.titulo.replace('BAF ', '')}</div>
                   <div className="mt-1 text-2xl font-bold tabular-nums">{canal === 'call' && datos ? formatoNumero.format(datos.totales[indicador.clave]) : '—'}</div>
                   {indicador.clave === 'canceladas' && canal === 'call' && datos && (
@@ -392,14 +405,14 @@ export default function DashboardClient() {
             <p className={'' + secundario + ' mt-3 text-xs'}>Cada indicador utiliza su fecha comercial correspondiente.</p>
           </div>
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className="font-bold text-[#1b5594]">Distribución comercial BAF · Cargadas</h3>
+            <h3 className={'font-bold ' + tituloSeccion}>Distribución comercial BAF · Cargadas</h3>
             <p className={'' + secundario + ' mt-1 text-xs'}>Participación de cada canal sobre las BAF cargadas del período.</p>
             {datos ? (
               <div className="mt-3 space-y-2">
                 {canalesOrdenados.map(canalDetalle => (
                   <div key={canalDetalle.nombre} className="flex items-center gap-2 text-xs">
                     <span className="w-28 shrink-0 truncate" title={canalDetalle.nombre}>{canalDetalle.nombre}</span>
-                    <div className="h-3 flex-1 overflow-hidden rounded bg-gray-100">
+                    <div className={'h-3 flex-1 overflow-hidden rounded ' + (oscuro ? 'bg-slate-700' : 'bg-gray-100')}>
                       <div className="h-full rounded bg-[#2563eb]" style={{ width: (datos.totales.cargadas ? canalDetalle.totales.cargadas / datos.totales.cargadas * 100 : 0) + '%' }} />
                     </div>
                     <span className="w-10 text-right font-semibold tabular-nums">{formatoNumero.format(canalDetalle.totales.cargadas)}</span>
@@ -413,7 +426,7 @@ export default function DashboardClient() {
 
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className="font-bold text-[#1b5594]">Detalle por canales comerciales · BAF</h3>
+            <h3 className={'font-bold ' + tituloSeccion}>Detalle por canales comerciales · BAF</h3>
             <p className={'' + secundario + ' mt-1 text-xs'}>Abrí cada canal para consultar sus vendedores. Referidos incluye N1, C1, T1, P1, J1, F1, B1 y el histórico R1.</p>
             {datos && canalesOrdenados.length ? (
               <div className="mt-3 space-y-2">
@@ -422,14 +435,14 @@ export default function DashboardClient() {
                   <span>Ingresadas</span><span>Cargadas</span><span>Finalizadas</span><span>Canceladas</span>
                 </div>
                 {canalesOrdenados.map(canalDetalle => (
-                  <details key={canalDetalle.nombre} className="rounded-lg border border-gray-200">
-                    <summary className="grid cursor-pointer grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] items-center gap-1 px-2 py-3 text-right text-xs font-semibold hover:bg-gray-50">
+                  <details key={canalDetalle.nombre} className={'rounded-lg border ' + borde}>
+                    <summary className={'grid cursor-pointer grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] items-center gap-1 px-2 py-3 text-right text-xs font-semibold ' + (oscuro ? 'hover:bg-slate-600' : 'hover:bg-gray-50')}>
                       <span className="truncate text-left">{canalDetalle.nombre}</span>
                       {indicadores.map(indicador => <span key={indicador.clave} className="tabular-nums">{formatoNumero.format(canalDetalle.totales[indicador.clave])}</span>)}
                     </summary>
-                    <div className="border-t border-gray-200 bg-gray-50">
+                    <div className={'border-t ' + borde + ' ' + fondoSuave}>
                       {Object.entries(canalDetalle.vendedores).sort((a, b) => b[1].cargadas - a[1].cargadas || a[0].localeCompare(b[0])).map(([nombre, totales]) => (
-                        <div key={nombre} className="grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] items-center gap-1 border-b border-gray-200 px-2 py-2 text-right text-xs last:border-0">
+                        <div key={nombre} className={'grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] items-center gap-1 border-b px-2 py-2 text-right text-xs last:border-0 ' + borde}>
                           <span className="truncate text-left" title={nombre}>{nombre}</span>
                           {indicadores.map(indicador => <span key={indicador.clave} className="tabular-nums">{formatoNumero.format(totales[indicador.clave])}</span>)}
                         </div>
@@ -437,7 +450,7 @@ export default function DashboardClient() {
                     </div>
                   </details>
                 ))}
-                <div className="grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] gap-1 border-t border-gray-200 px-2 py-2 text-right text-xs font-bold">
+                <div className={'grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] gap-1 border-t px-2 py-2 text-right text-xs font-bold ' + borde}>
                   <span className="text-left">TOTAL</span>
                   {indicadores.map(indicador => <span key={indicador.clave} className="tabular-nums">{formatoNumero.format(totalCanales[indicador.clave])}</span>)}
                 </div>
@@ -450,7 +463,7 @@ export default function DashboardClient() {
             )}
           </div>
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className="font-bold text-[#1b5594]">Detalle Planes Porta - LN</h3>
+            <h3 className={'font-bold ' + tituloSeccion}>Detalle Planes Porta - LN</h3>
             <p className={'' + secundario + ' mt-1 text-xs'}>Ventas con Estado BBOO CARGADO STL, por Fecha Carga STL. MASIVO y PYME consolidados. FWA excluido.</p>
             {errorPlanes ? (
               <p className="mt-3 rounded-lg border border-red-200 p-4 text-sm text-red-600">{errorPlanes}</p>
@@ -458,7 +471,7 @@ export default function DashboardClient() {
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-200 text-left text-xs">
+                    <tr className={'border-b text-left text-xs ' + borde}>
                       <th className="py-2 pr-2">Plan</th>
                       <th className="px-2 py-2 text-right">PORTA</th>
                       <th className="px-2 py-2 text-right">LN</th>
@@ -467,7 +480,7 @@ export default function DashboardClient() {
                   </thead>
                   <tbody>
                     {detallePlanes.planes.map(fila => (
-                      <tr key={fila.plan} className="border-b border-gray-200/70">
+                      <tr key={fila.plan} className={'border-b ' + (oscuro ? 'border-slate-700' : 'border-gray-200/70')}>
                         <td className="py-2 pr-2">{fila.plan}</td>
                         <td className="px-2 py-2 text-right tabular-nums">{formatoNumero.format(fila.porta)}</td>
                         <td className="px-2 py-2 text-right tabular-nums">{formatoNumero.format(fila.ln)}</td>
