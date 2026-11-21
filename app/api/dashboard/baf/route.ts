@@ -86,6 +86,7 @@ export async function GET(request: Request) {
     const operaciones = new Map<string, { fecha_hora: string | null; vendedor: string | null }>()
     const indicadores = vacio()
     const totales = { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 }
+    const diarios: Record<string, Record<Indicador, number>> = {}
 
     // Se consultan las operaciones del grupo permitido antes de recuperar productos.
     // Para cierres y cargas de un período, también deben considerarse ventas ingresadas antes.
@@ -142,18 +143,20 @@ export async function GET(request: Request) {
         const fechaCierre = fechaArgentina(gestion?.fecha_cierre ?? null)
         const estadoBaf = estadoPorId.get(gestion?.estado_baf_id ?? -1) ?? ''
         const estadoClaro = String(gestion?.estado_claro ?? '').trim().toUpperCase()
-        function contar(indicador: Indicador) {
+        function contar(indicador: Indicador, fecha: string) {
           totales[indicador]++
           indicadores[indicador][categoria]++
+          diarios[fecha] ??= { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 }
+          diarios[fecha][indicador]++
         }
-        if (fechaIngreso && fechaIngreso >= desde && fechaIngreso <= hasta) contar('ingresadas')
-        if (estadoBaf === 'CARGADO' && fechaGestion && fechaGestion >= desde && fechaGestion <= hasta && !!gestion?.sds?.trim()) contar('cargadas')
-        if (estadoClaro === 'FINALIZADA' && fechaCierre && fechaCierre >= desde && fechaCierre <= hasta) contar('finalizadas')
-        if (estadoClaro === 'CANCELADA' && fechaCierre && fechaCierre >= desde && fechaCierre <= hasta) contar('canceladas')
+        if (fechaIngreso && fechaIngreso >= desde && fechaIngreso <= hasta) contar('ingresadas', fechaIngreso)
+        if (estadoBaf === 'CARGADO' && fechaGestion && fechaGestion >= desde && fechaGestion <= hasta && !!gestion?.sds?.trim()) contar('cargadas', fechaGestion)
+        if (estadoClaro === 'FINALIZADA' && fechaCierre && fechaCierre >= desde && fechaCierre <= hasta) contar('finalizadas', fechaCierre)
+        if (estadoClaro === 'CANCELADA' && fechaCierre && fechaCierre >= desde && fechaCierre <= hasta) contar('canceladas', fechaCierre)
       }
     }
 
-    return NextResponse.json({ desde, hasta, totales, categorias: indicadores })
+    return NextResponse.json({ desde, hasta, totales, categorias: indicadores, diarios })
   } catch (error) {
     console.error('Dashboard CALL BAF', error)
     return NextResponse.json({ error: 'No se pudieron consultar los indicadores BAF.' }, { status: 500 })
