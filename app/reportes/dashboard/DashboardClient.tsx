@@ -96,128 +96,166 @@ export default function DashboardClient() {
     ? 'border-slate-600 bg-slate-800 text-white'
     : 'border-gray-300 bg-white text-gray-900'
 
-  const canales = [
-    { valor: 'call', etiqueta: 'CALL Lucom' },
-    { valor: 'todos', etiqueta: 'Todos los canales (pendiente)' },
-    { valor: 'pdv', etiqueta: 'Puntos de Venta (pendiente)' },
+  const productos = [
+    { nombre: 'BAF', icono: '◉', color: 'bg-[#07559b]', activo: true },
+    { nombre: 'PORTA', icono: '▣', color: 'bg-[#e21f2b]', activo: false },
+    { nombre: 'LÍNEA NUEVA', icono: '▤', color: 'bg-[#7646d9]', activo: false },
+    { nombre: 'FWA', icono: '⌁', color: 'bg-[#fa9800]', activo: false },
+    { nombre: 'CATER / EQUIPOS', icono: '▣', color: 'bg-[#008c84]', activo: false },
+    { nombre: '1175', icono: '▤', color: 'bg-[#6942c9]', activo: false },
   ]
+  const b2 = datos?.categorias.cargadas['2PLAY'] ?? 0
+  const b3 = datos?.categorias.cargadas['3PLAY'] ?? 0
+  const sumaPlay = b2 + b3
+  const porcentaje2 = sumaPlay ? b2 / sumaPlay * 100 : 0
+  const porcentaje3 = sumaPlay ? b3 / sumaPlay * 100 : 0
 
   return (
-    <section className={`${fondo} rounded-2xl p-4 sm:p-6`}>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold">Panel de resultados</h2>
-          <p className={`mt-1 text-sm ${secundario}`}>
-            Indicadores comerciales y evolución de ventas.
-          </p>
-        </div>
-        <span className={`rounded-full border px-3 py-1 text-xs ${tarjeta}`}>
-          Módulo CALL · BAF
-        </span>
-      </div>
-
-      <div className={`mb-6 grid grid-cols-1 gap-3 rounded-xl border p-4 sm:grid-cols-2 xl:grid-cols-4 ${tarjeta}`}>
-        <label className="flex flex-col gap-1 text-sm font-medium">
-          Período
-          <select value={periodo} onChange={e => setPeriodo(e.target.value)} className={`rounded-lg border px-3 py-2 ${control}`}>
-            <option value="hoy">Hoy</option>
-            <option value="semana">Esta semana</option>
-            <option value="mes">Este mes</option>
-            <option value="anterior">Mes anterior</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm font-medium">
-          Canal
-          <select value={canal} onChange={e => setCanal(e.target.value)} className={`rounded-lg border px-3 py-2 ${control}`}>
-            {canales.map(item => <option key={item.valor} value={item.valor}>{item.etiqueta}</option>)}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm font-medium">
-          Grupo / Punto de venta
-          <select disabled className={`rounded-lg border px-3 py-2 opacity-60 ${control}`}>
-            <option>Disponible en la próxima etapa</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm font-medium">
-          Tema visual
-          <select value={tema} onChange={e => setTema(e.target.value as Tema)} className={`rounded-lg border px-3 py-2 ${control}`}>
-            <option value="ejecutivo">Ejecutivo</option>
-            <option value="oscuro">Oscuro</option>
-            <option value="compacto">Compacto</option>
-          </select>
-        </label>
-      </div>
-
-      {canal !== 'call' && (
-        <div className={`mb-4 rounded-xl border p-4 text-sm ${tarjeta}`}>
-          La consolidación de CALL y Puntos de Venta se incorporará cuando estén conectados los reportes ACTIVACIONES, CATER y 1175.
-        </div>
-      )}
-      {error && <p role="alert" className="mb-4 text-sm font-medium text-red-600">{error}</p>}
-      {cargando && <p className={`mb-4 text-sm ${secundario}`}>Consultando resultados BAF...</p>}
-
-      {canal === 'call' && (
-        <>
-          <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 ${compacto ? 'mb-4' : 'mb-6'}`}>
-            {indicadores.map(indicador => (
-              <div key={indicador.clave} className={`rounded-xl border ${compacto ? 'p-3' : 'p-5'} ${tarjeta}`}>
-                <div className={`text-sm font-semibold ${secundario}`}>{indicador.titulo}</div>
-                <div className={`font-bold ${compacto ? 'my-2 text-3xl' : 'my-4 text-4xl'}`}>
-                  {datos ? formatoNumero.format(datos.totales[indicador.clave]) : '—'}
-                </div>
-                <p className={`text-xs ${secundario}`}>{indicador.descripcion}</p>
-              </div>
-            ))}
+    <section className={'' + fondo + ' overflow-hidden rounded-2xl border border-gray-200'}>
+      <header className="flex flex-wrap items-center justify-between gap-4 bg-[#17457e] px-5 py-5 text-white sm:px-7">
+        <div className="flex items-center gap-5">
+          <div className="border-r border-blue-300/50 pr-5 text-2xl font-black italic tracking-tight">Lucom</div>
+          <div>
+            <h2 className="text-2xl font-bold leading-tight">Ventas y Activaciones</h2>
+            <p className="text-sm text-blue-100">Call Lucom + Puntos de Venta</p>
           </div>
-          <div className={`mb-6 rounded-xl border p-5 ${tarjeta}`}>
-            <h3 className="font-bold">Composición BAF</h3>
-            <p className={`mt-1 text-xs ${secundario}`}>Desglose por indicador. Cada resultado corresponde a su propia fecha comercial.</p>
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead><tr className={`border-b ${oscuro ? 'border-slate-600' : 'border-gray-200'}`}>
-                  <th className="py-2 pr-4">Indicador</th>
-                  {categorias.map(cat => <th className="px-3 py-2 text-right" key={cat}>{cat}</th>)}
-                </tr></thead>
-                <tbody>
-                  {indicadores.map(indicador => (
-                    <tr key={indicador.clave} className={`border-b ${oscuro ? 'border-slate-700' : 'border-gray-100'}`}>
-                      <td className="py-3 pr-4 font-medium">{indicador.titulo}</td>
-                      {categorias.map(cat => <td className="px-3 py-3 text-right tabular-nums" key={cat}>
-                        {datos ? formatoNumero.format(datos.categorias[indicador.clave][cat]) : '—'}
-                      </td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        </div>
+        <div className="text-right text-xs text-blue-100">
+          <div>Origen de información</div>
+          <div className="mt-1 font-semibold text-white">PGL · datos en consulta</div>
+          <div className="text-blue-200">Claro · pendiente de integración</div>
+        </div>
+      </header>
+
+      <div className="p-4 sm:p-5">
+        <div className={'' + tarjeta + ' mb-4 grid grid-cols-1 gap-3 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-4'}>
+          <label className="flex flex-col gap-1 text-sm font-semibold">
+            Rango de fechas
+            <select value={periodo} onChange={e => setPeriodo(e.target.value)} className={'' + control + ' rounded-lg border px-3 py-2 font-normal'}>
+              <option value="hoy">Hoy</option>
+              <option value="semana">Esta semana</option>
+              <option value="mes">Mes en curso</option>
+              <option value="anterior">Mes anterior</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-semibold">
+            Productos
+            <div className={'' + control + ' flex min-h-10 flex-wrap items-center gap-1 rounded-lg border px-2 py-1 font-normal'}>
+              <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-900">BAF</span>
+              <span className={'' + secundario + ' text-xs'}>Otros productos en preparación</span>
+            </div>
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-semibold">
+            Canal principal
+            <select value={canal} onChange={e => setCanal(e.target.value)} className={'' + control + ' rounded-lg border px-3 py-2 font-normal'}>
+              <option value="call">Call Lucom</option>
+              <option value="todos">Todos los canales (pendiente)</option>
+              <option value="pdv">Puntos de Venta (pendiente)</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-semibold">
+            Canales de venta / PDV
+            <select disabled className={'' + control + ' rounded-lg border px-3 py-2 font-normal opacity-60'}>
+              <option>Próxima etapa</option>
+            </select>
+          </label>
+        </div>
+
+        {canal !== 'call' && <p className={'' + tarjeta + ' mb-4 rounded-xl border p-4 text-sm'}>La integración de Puntos de Venta se habilitará con ACTIVACIONES, CATER y 1175.</p>}
+        {error && <p role="alert" className="mb-4 text-sm font-semibold text-red-600">{error}</p>}
+        {cargando && <p className={'' + secundario + ' mb-4 text-sm'}>Consultando indicadores BAF...</p>}
+
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+          {productos.map(producto => (
+            <div key={producto.nombre} className={'' + tarjeta + ' overflow-hidden rounded-xl border shadow-sm'}>
+              <div className={'' + producto.color + ' flex items-center justify-between px-3 py-3 font-bold text-white'}>
+                <span className="text-lg">{producto.icono}</span>
+                <span className="text-sm">{producto.nombre}</span>
+              </div>
+              <div className="px-3 py-4 text-center">
+                <div className="text-3xl font-bold tabular-nums">{producto.activo && canal === 'call' && datos ? formatoNumero.format(datos.totales.cargadas) : '—'}</div>
+                <div className={'' + secundario + ' mt-1 text-xs'}>{producto.activo ? 'BAF cargadas · SDS validada' : 'Pendiente de integración'}</div>
+                {producto.activo && canal === 'call' && (
+                  <>
+                    <div className="mt-3 flex h-3 overflow-hidden rounded bg-gray-200">
+                      <div style={{ width: porcentaje2 + '%', backgroundColor: '#2563eb' }} />
+                      <div style={{ width: porcentaje3 + '%', backgroundColor: '#0d9488' }} />
+                    </div>
+                    <div className="mt-2 flex justify-between gap-2 text-xs">
+                      <span>2PLAY <strong>{datos ? formatoNumero.format(b2) : '—'}</strong></span>
+                      <span>3PLAY <strong>{datos ? formatoNumero.format(b3) : '—'}</strong></span>
+                    </div>
+                    <p className={'' + secundario + ' mt-1 text-[11px]'}>AÑADIR TV se contabiliza por separado</p>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <div className={'' + tarjeta + ' rounded-xl border p-4'}>
+            <h3 className="font-bold text-[#1b5594]">Evolución diaria de ventas y activaciones</h3>
+            <div className="mt-3 flex h-44 items-center justify-center rounded-lg border border-dashed border-gray-300 text-center text-sm text-gray-500">
+              Gráfico de evolución · próxima conexión
             </div>
           </div>
-        </>
-      )}
+          <div className={'' + tarjeta + ' rounded-xl border p-4'}>
+            <h3 className="font-bold text-[#1b5594]">Composición comercial BAF</h3>
+            <p className={'' + secundario + ' mt-1 text-xs'}>Ventas cargadas · 2PLAY y 3PLAY. El resto se informa por separado.</p>
+            <div className="mt-5 flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold">Mes seleccionado</span>
+              <span className="text-xl font-bold tabular-nums">{datos ? formatoNumero.format(sumaPlay) : '—'}</span>
+            </div>
+            <div className="mt-2 flex h-9 overflow-hidden rounded-md bg-gray-200">
+              <div style={{ width: porcentaje2 + '%', backgroundColor: '#2563eb' }} className="flex items-center justify-center text-xs font-bold text-white">{b2 || ''}</div>
+              <div style={{ width: porcentaje3 + '%', backgroundColor: '#0d9488' }} className="flex items-center justify-center text-xs font-bold text-white">{b3 || ''}</div>
+            </div>
+            <div className="mt-2 flex justify-between text-xs">
+              <span>■ 2PLAY · {sumaPlay ? porcentaje2.toFixed(1) : '0'}%</span>
+              <span>■ 3PLAY · {sumaPlay ? porcentaje3.toFixed(1) : '0'}%</span>
+            </div>
+            <p className={'' + secundario + ' mt-5 text-xs'}>Comparación con el mes anterior: próxima conexión a datos.</p>
+          </div>
+        </div>
 
-      <div className={`grid grid-cols-1 gap-4 lg:grid-cols-3 ${compacto ? 'mb-4' : 'mb-6'}`}>
-        <div className={`rounded-xl border p-5 lg:col-span-2 ${tarjeta}`}>
-          <h3 className="font-bold">Evolución de ventas</h3>
-          <div className={`mt-4 flex ${compacto ? 'h-40' : 'h-64'} items-center justify-center rounded-lg border border-dashed ${oscuro ? 'border-slate-600' : 'border-gray-200'}`}>
-            <span className={`text-sm ${secundario}`}>Gráfico pendiente de conexión</span>
+        <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <div className={'' + tarjeta + ' rounded-xl border p-4'}>
+            <h3 className="font-bold text-[#1b5594]">Estado de ventas · BAF Call Lucom</h3>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {indicadores.map(indicador => (
+                <div key={indicador.clave} className="rounded-lg border border-gray-200 p-3 text-center">
+                  <div className={'' + secundario + ' text-xs'}>{indicador.titulo.replace('BAF ', '')}</div>
+                  <div className="mt-1 text-2xl font-bold tabular-nums">{canal === 'call' && datos ? formatoNumero.format(datos.totales[indicador.clave]) : '—'}</div>
+                </div>
+              ))}
+            </div>
+            <p className={'' + secundario + ' mt-3 text-xs'}>Cada indicador utiliza su fecha comercial correspondiente.</p>
+          </div>
+          <div className={'' + tarjeta + ' rounded-xl border p-4'}>
+            <h3 className="font-bold text-[#1b5594]">Distribución por canal principal</h3>
+            <div className="mt-3 flex h-28 items-center justify-center rounded-lg border border-dashed border-gray-300 text-sm text-gray-500">
+              Pendiente de integración CALL + PDV
+            </div>
           </div>
         </div>
-        <div className={`rounded-xl border p-5 ${tarjeta}`}>
-          <h3 className="font-bold">Distribución por canal</h3>
-          <div className={`mt-4 flex ${compacto ? 'h-40' : 'h-64'} items-center justify-center rounded-lg border border-dashed ${oscuro ? 'border-slate-600' : 'border-gray-200'}`}>
-            <span className={`text-center text-sm ${secundario}`}>Pendiente de integración con reportes PDV</span>
+
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <div className={'' + tarjeta + ' rounded-xl border p-4'}>
+            <h3 className="font-bold text-[#1b5594]">Detalle por canales de venta · Call Lucom</h3>
+            <div className="mt-3 rounded-lg border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500">
+              Próxima etapa: desglose por canal, grupo y vendedor
+            </div>
+          </div>
+          <div className={'' + tarjeta + ' rounded-xl border p-4'}>
+            <h3 className="font-bold text-[#1b5594]">Detalle por punto de venta · PDV</h3>
+            <div className="mt-3 rounded-lg border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500">
+              Pendiente de integración con reportes PDV
+            </div>
           </div>
         </div>
+        <p className={'' + secundario + ' mt-4 text-xs'}>Dashboard en desarrollo. Los datos visibles corresponden a consultas reales de BAF; los módulos pendientes no muestran cifras simuladas.</p>
       </div>
-      <div className={`rounded-xl border p-5 ${tarjeta}`}>
-        <h3 className="font-bold">Análisis detallado</h3>
-        <p className={`mt-2 text-sm ${secundario}`}>La navegación por grupo y vendedor se incorporará respetando los permisos comerciales del usuario.</p>
-        <div className={`mt-4 rounded-lg border border-dashed p-5 text-center text-sm ${oscuro ? 'border-slate-600' : 'border-gray-200'} ${secundario}`}>
-          Información pendiente de conexión
-        </div>
-      </div>
-      <p className={`mt-4 text-xs ${secundario}`}>
-        Datos de prueba. Los indicadores CARGADAS sin fecha de gestión no se asignan a un período.
-      </p>
     </section>
   )
 }
