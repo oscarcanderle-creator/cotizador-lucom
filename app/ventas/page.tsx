@@ -15,8 +15,16 @@ function existentesDesde(fd:FormData){const n=Math.max(0,Number(texto(fd,'servic
 export default async function VentasPage(){
  const supabase=await createClient();const {data:{user}}=await supabase.auth.getUser();if(!user)redirect('/login')
  const {data:profile}=await supabase.from('profiles').select('nombre,vendedor,rol,activo,puede_gestionar_ventas,puede_origen_bot_ia_lc').eq('id',user.id).single();if(!profile||!profile.activo)redirect('/login')
- const [{data:origenes},{data:zonas},{data:tiposDomicilio},{data:productos}]=await Promise.all([
-  supabase.from('catalogo_origenes').select('nombre').eq('activo',true).order('orden'),supabase.from('catalogo_zonas').select('nombre').eq('activo',true).order('orden'),supabase.from('catalogo_tipos_domicilio').select('nombre').eq('activo',true).order('orden'),supabase.from('productos').select('id,producto,origen,plan,precio_lista,descuento_normal,precio_cliente,beneficios').eq('activo',true).order('orden')])
+ const [{data:origenes},{data:zonas},{data:tiposDomicilio},{data:productos,error:errorProductos},{data:planesMoviles,error:errorPlanes}]=await Promise.all([
+  supabase.from('catalogo_origenes').select('nombre').eq('activo',true).order('orden'),supabase.from('catalogo_zonas').select('nombre').eq('activo',true).order('orden'),supabase.from('catalogo_tipos_domicilio').select('nombre').eq('activo',true).order('orden'),supabase.from('productos').select('id,negocio,catalogo_plan_id,producto,origen,plan,precio_lista,descuento_normal,precio_cliente,beneficios').eq('activo',true).order('orden'),supabase.from('catalogo_planes_porta').select('id,negocio,activo,solo_linea_nueva,disponible_porta,disponible_linea_nueva')])
+  if(errorProductos||errorPlanes)throw new Error(`No se pudo consultar el catálogo comercial: ${errorProductos?.message??errorPlanes?.message}`)
+  const planesPorId=new Map((planesMoviles??[]).map(p=>[Number(p.id),p]))
+  const productosVisibles=(productos??[]).filter(p=>{
+   if(!['PORTABILIDAD','LINEA NUEVA'].includes(String(p.producto).trim().toUpperCase()))return true
+   const plan=planesPorId.get(Number(p.catalogo_plan_id))
+   if(!plan||!plan.activo||plan.negocio!==p.negocio)return false
+   return p.producto.trim().toUpperCase()==='PORTABILIDAD' ? Boolean(plan.disponible_porta)&&!plan.solo_linea_nueva : Boolean(plan.disponible_linea_nueva)
+  })
  const nombreUsuario=profile.nombre?.trim()||user.email||'Usuario';const vendedor=profile.vendedor?.trim()||nombreUsuario
  async function guardarVenta(fd:FormData):Promise<{ok:boolean;mensaje:string;idOperacion?:string}>{'use server'
   const sb=await createClient();const {data:{user}}=await sb.auth.getUser();if(!user)return{ok:false,mensaje:'La sesión expiró. Volvé a iniciar sesión.'}
@@ -47,7 +55,9 @@ export default async function VentasPage(){
  if(origenDato.toUpperCase()==='PSR' && String(perfil.vendedor??'').trim().toUpperCase().split(/\s+/)[0]!=='L1')return{ok:false,mensaje:'El origen PSR está reservado a vendedores del grupo L1.'}
  if(origenDato.toUpperCase()==='PSR'&&!obs)return{ok:false,mensaje:'Completá OBS con el ID del prospecto de Mis Referidos.'}
   const nuevos=nuevosDesde(fd),existentes=existentesDesde(fd);if(!nuevos.length)return{ok:false,mensaje:'Agregá al menos un servicio nuevo a contratar.'};if(nuevos.filter(x=>x.tipo==='BAF').length>1)return{ok:false,mensaje:'Una venta puede contener como máximo un Internet/BAF nuevo.'}
-  const tieneBafNuevo=nuevos.some(x=>x.tipo==='BAF')
+  const negocioMovil=texto(fd,'negocio_movil').toUpperCase()
+   if(nuevos.some(x=>x.tipo==='PORTA'||x.tipo==='LINEA_NUEVA')&&!['MASIVO','PYME'].includes(negocioMovil))return{ok:false,mensaje:'Seleccioná el segmento MASIVO o PYME para los servicios móviles.'}
+   const tieneBafNuevo=nuevos.some(x=>x.tipo==='BAF')
   const habilitaAnadirTv=existentes.some(x=>x.tipo==='BAF'&&x.modalidad==='2PLAY')
   if(cargaItecSolicitada&&!tieneBafNuevo)return{ok:false,mensaje:'La carga ITEC solo puede utilizarse cuando la venta incluye Internet / BAF.'}
   if(cargaItecSolicitada){
@@ -76,7 +86,35 @@ export default async function VentasPage(){
   const nims=portas.map(x=>x.nim);if(new Set(nims).size!==nims.length)return{ok:false,mensaje:'Hay NIM repetidos en las portabilidades.'}
   if(portas.length===1) portas[0].lineaTitular=true
   if(portas.length>1 && portas.filter(x=>x.lineaTitular).length!==1)return{ok:false,mensaje:'En una Portabilidad de líneas múltiples debés marcar una y solo una Línea Titular.'}
-  const admin=createAdminClient(),m=marcaArgentina(),idOperacion=`${m.id}-${dni}`;let operacionCreada=false;const serviciosCreados:number[]=[]
+  const admin=createAdminClient()
+   // Validar catálogo móvil antes de escribir datos del cliente o la operación.
+   const serviciosMoviles=nuevos.filter(x=>x.tipo==='PORTA'||x.tipo==='LINEA_NUEVA')
+   if(serviciosMoviles.length){
+    const {data:productosMoviles,error:errorMoviles}=await admin.from('productos')
+     .select('id,negocio,producto,origen,activo,catalogo_plan_id').in('id',serviciosMoviles.map(x=>x.productoId))
+    if(errorMoviles)return{ok:false,mensaje:errorMoviles.message}
+    const idsPlanes=[...new Set((productosMoviles??[]).map(p=>p.catalogo_plan_id).filter((id):id is number=>id!==null))]
+    const {data:planesValidos,error:errorPlanesValidos}=idsPlanes.length
+     ? await admin.from('catalogo_planes_porta').select('id,negocio,activo,solo_linea_nueva,disponible_porta,disponible_linea_nueva').in('id',idsPlanes)
+     : {data:[],error:null}
+    if(errorPlanesValidos)return{ok:false,mensaje:errorPlanesValidos.message}
+    const mapaProductos=new Map((productosMoviles??[]).map(p=>[Number(p.id),p]))
+    const mapaPlanes=new Map((planesValidos??[]).map(p=>[Number(p.id),p]))
+    for(const servicio of serviciosMoviles){
+     const producto=mapaProductos.get(servicio.productoId)
+     const plan=producto?mapaPlanes.get(Number(producto.catalogo_plan_id)):null
+     const tipoEsperado=servicio.tipo==='PORTA'?'PORTABILIDAD':'LINEA NUEVA'
+     const habilitado=servicio.tipo==='PORTA'
+      ? Boolean(plan?.disponible_porta)&&!plan?.solo_linea_nueva
+      : Boolean(plan?.disponible_linea_nueva)
+     if(!producto?.activo||producto.negocio!==negocioMovil||producto.producto!==tipoEsperado||
+        !plan?.activo||plan.negocio!==negocioMovil||!habilitado||
+        (servicio.tipo==='PORTA'&&producto.origen!==servicio.compania)){
+      return{ok:false,mensaje:'El plan móvil seleccionado no está habilitado para este segmento, servicio o compañía. Actualizá la pantalla y elegí otro plan.'}
+     }
+    }
+   }
+   const m=marcaArgentina(),idOperacion=`${m.id}-${dni}`;let operacionCreada=false;const serviciosCreados:number[]=[]
 
   let caminante:string|null=null
 
@@ -369,6 +407,6 @@ export default async function VentasPage(){
    return{ok:true,mensaje:mensajeFinal,idOperacion}
   }catch(error){console.error(error);if(operacionCreada)await admin.from('operaciones').delete().eq('id_operacion',idOperacion);else if(serviciosCreados.length)await admin.from('cliente_servicios').delete().in('id',serviciosCreados);return{ok:false,mensaje:error instanceof Error?error.message:'No se pudo guardar la venta.'}}
  }
- return <FormularioVentas nombreUsuario={nombreUsuario} vendedor={vendedor} rol={profile.rol} puedeGestionarVentas={profile.puede_gestionar_ventas===true} puedeOrigenBotIaLc={profile.puede_origen_bot_ia_lc===true && String(profile.vendedor??'').trim().toUpperCase().startsWith('L1 ')} origenes={(origenes??[]).map(x=>x.nombre)} zonas={(zonas??[]).map(x=>x.nombre)} tiposDomicilio={(tiposDomicilio??[]).map(x=>x.nombre)} productos={(productos??[]).map(p=>({...p,precio_lista:Number(p.precio_lista??0),descuento_normal:p.descuento_normal==null?null:Number(p.descuento_normal),precio_cliente:p.precio_cliente==null?null:Number(p.precio_cliente)}))} guardarVenta={guardarVenta}
+ return <FormularioVentas nombreUsuario={nombreUsuario} vendedor={vendedor} rol={profile.rol} puedeGestionarVentas={profile.puede_gestionar_ventas===true} puedeOrigenBotIaLc={profile.puede_origen_bot_ia_lc===true && String(profile.vendedor??'').trim().toUpperCase().startsWith('L1 ')} origenes={(origenes??[]).map(x=>x.nombre)} zonas={(zonas??[]).map(x=>x.nombre)} tiposDomicilio={(tiposDomicilio??[]).map(x=>x.nombre)} productos={productosVisibles.map(p=>({...p,precio_lista:Number(p.precio_lista??0),descuento_normal:p.descuento_normal==null?null:Number(p.descuento_normal),precio_cliente:p.precio_cliente==null?null:Number(p.precio_cliente)}))} guardarVenta={guardarVenta}
         buscarClientePorDocumento={buscarClientePorDocumento}/>
 }

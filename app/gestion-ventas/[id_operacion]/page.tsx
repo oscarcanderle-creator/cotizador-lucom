@@ -1042,6 +1042,8 @@ export default async function DetalleVentaPage({
     const esVendedorGestor =
       profile.rol === 'VENDEDOR' &&
       profile.puede_gestionar_ventas === true
+    const puedeCorregirCargaOriginal =
+      esVendedorGestor || ['ADMIN', 'SUPERVISOR'].includes(profile.rol)
 
     const idsMovilesOperacion = productos
       .filter((p: any) => ['PORTA', 'LINEA_NUEVA'].includes(String(p.tipo_producto ?? '').toUpperCase()))
@@ -1062,7 +1064,8 @@ export default async function DetalleVentaPage({
     }
 
     const puedeOfrecerEdicionCarga =
-      esVendedorGestor && puedeEditar && !cargaOriginalBloqueadaPorValidacion
+      puedeCorregirCargaOriginal && puedeEditar &&
+      (!esVendedorGestor || !cargaOriginalBloqueadaPorValidacion)
 
     const nombreResponsableProducto = (idResponsable: string | null | undefined) => {
       if (!idResponsable) return 'Sin asignar'
@@ -1152,8 +1155,8 @@ export default async function DetalleVentaPage({
           />
 
           <div className="space-y-5">
-            {esVendedorGestor && (
-              cargaOriginalBloqueadaPorValidacion ? (
+            {puedeCorregirCargaOriginal && (
+              esVendedorGestor && cargaOriginalBloqueadaPorValidacion ? (
                 <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                   <div className="font-semibold">Edición de datos de la venta bloqueada</div>
                   <div className="mt-1">La venta ya alcanzó Estado Vendedor = Venta Validada. Los datos originales no pueden modificarse.</div>
@@ -1474,7 +1477,31 @@ export default async function DetalleVentaPage({
                                 <p className="mt-1 text-xs text-gray-500">Automática al establecer Estado BBOO = ACTIVA NRO PORTADO.</p>
                               </div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SIM</label><GestionInputValidado name="sim" tipo="SIM" esEsim={String(detalle?.tipo_sim ?? '').trim().toUpperCase() === 'ESIM'} defaultValue={gestion?.sim ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
-                              <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</label><select name="plan_cargado" defaultValue={gestion?.plan_cargado || producto.plan_snapshot || ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100"><option value="">Seleccionar plan</option>{(() => { const actual = String(gestion?.plan_cargado || producto.plan_snapshot || '').trim(); const activos = Array.from(new Set((planesPorta ?? []).map((p: any) => String(p.nombre ?? '').trim()).filter(Boolean))); const opciones = actual && !activos.includes(actual) ? [actual, ...activos] : activos; return opciones.map((nombre: string) => <option key={nombre} value={nombre}>{nombre}</option>) })()}</select></div>
+                              <div>
+                                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</label>
+                                  {(() => {
+                                    const esFwa = detalle?.es_fwa === true
+                                    const guardado = String(gestion?.plan_cargado || producto.plan_snapshot || '').trim()
+                                    const actual = esFwa && guardado.toUpperCase() === 'FWA 5G'
+                                      ? 'FWA 5G 400G'
+                                      : guardado
+                                    const activos = Array.from(new Set(
+                                      (planesPorta ?? [])
+                                        .map((p: any) => String(p.nombre ?? '').trim())
+                                        .filter(Boolean)
+                                        .filter((nombre: string) => !esFwa || nombre.toUpperCase() === 'FWA 5G 400G')
+                                    ))
+                                    const opciones = actual && !activos.includes(actual)
+                                      ? [actual, ...activos]
+                                      : activos
+                                    return (
+                                      <select name="plan_cargado" defaultValue={actual} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100">
+                                        <option value="">Seleccionar plan</option>
+                                        {opciones.map((nombre: string) => <option key={nombre} value={nombre}>{nombre}</option>)}
+                                      </select>
+                                    )
+                                  })()}
+                                </div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">SDS</label><GestionInputValidado name="sds" tipo="SDS" defaultValue={gestion?.sds ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">PIN / LNVA NRO</label><input name="pin_lnva_nro" defaultValue={gestion?.pin_lnva_nro ?? ''} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 opacity-100 disabled:bg-gray-100 disabled:text-gray-700 disabled:opacity-100" /></div>
                               <GestionLogisticaChip

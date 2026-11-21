@@ -32,7 +32,9 @@ async function contexto(body: any) {
     }),
   ])
 
-  if (!profile?.activo || profile.rol !== 'VENDEDOR' || profile.puede_gestionar_ventas !== true)
+  const esSupervisorOAdmin = ['ADMIN', 'SUPERVISOR'].includes(String(profile?.rol ?? ''))
+  const esVendedorGestor = profile?.rol === 'VENDEDOR' && profile.puede_gestionar_ventas === true
+  if (!profile?.activo || (!esSupervisorOAdmin && !esVendedorGestor))
     return { error: NextResponse.json({ error: 'No tenés permiso para editar los datos originales.' }, { status: 403 }) }
   if (opError || !operacion)
     return { error: NextResponse.json({ error: opError?.message || 'Venta no encontrada.' }, { status: 404 }) }
@@ -47,7 +49,7 @@ async function contexto(body: any) {
   if (pe) throw pe
 
   const ids = (productos ?? []).map((p: any) => Number(p.id)).filter(Boolean)
-  if (ids.length) {
+  if (ids.length && !esSupervisorOAdmin) {
     const [{ data: gm, error: ge }, { data: estados, error: ee }] = await Promise.all([
       admin.from('gestion_producto_movil').select('producto_operacion_id,estado_porta_id').in('producto_operacion_id', ids),
       admin.from('estados_porta').select('id,nombre,codigo'),
@@ -118,7 +120,9 @@ export async function POST(request: Request) {
         valor_nuevo: nuevo == null ? null : String(nuevo),
         modificado_por: c.user.id,
         modificado_por_nombre: nombre,
-        motivo: 'Corrección directa por Vendedor Gestor',
+        motivo: ['ADMIN', 'SUPERVISOR'].includes(String(c.profile.rol))
+          ? `Corrección directa por ${c.profile.rol}`
+          : 'Corrección directa por Vendedor Gestor',
       })
       if (error) throw error
       cantidad++
