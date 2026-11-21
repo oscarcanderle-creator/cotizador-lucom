@@ -363,7 +363,7 @@ export default function FormularioVentas({nombreUsuario,vendedor,rol,puedeGestio
     <Selector
      label="Origen del dato"
      name="origen_dato"
-     opciones={opts(origenes.filter(o=>!['BOT IA LC','BOT DRIVE LC'].includes(o.trim().toUpperCase()) || (puedeOrigenBotIaLc && o.trim().toUpperCase()==='BOT IA LC')))}
+     opciones={opts(origenes.filter(o=>(o.trim().toUpperCase()!=='PSR' || vendedor.trim().toUpperCase().startsWith('L1 ')) && (!['BOT IA LC','BOT DRIVE LC'].includes(o.trim().toUpperCase()) || (puedeOrigenBotIaLc && o.trim().toUpperCase()==='BOT IA LC'))))}
      value={origenDato}
      onChange={setOrigenDato}
      required
