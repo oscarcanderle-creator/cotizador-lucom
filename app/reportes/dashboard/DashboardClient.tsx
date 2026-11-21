@@ -10,6 +10,7 @@ type Respuesta = {
   hasta: string
   totales: Record<Indicador, number>
   categorias: Record<Indicador, Record<Categoria, number>>
+  porCanal: Record<string, { totales: Record<Indicador, number>; vendedores: Record<string, Record<Indicador, number>> }>
   porVendedor: Record<string, Record<Indicador, number>>
   diarios: Record<string, Record<Indicador, number>>
 }
@@ -146,15 +147,15 @@ export default function DashboardClient() {
     { clave: 'finalizadas', nombre: 'Finalizadas', color: '#0d9488' },
     { clave: 'canceladas', nombre: 'Canceladas', color: '#dc2626' },
   ]
-  const grupos = Object.entries(datos?.porVendedor ?? {}).reduce<Record<string, { totales: Record<Indicador, number>; vendedores: { nombre: string; totales: Record<Indicador, number> }[] }>>((acumulado, [nombre, totales]) => {
-    const token = nombre.split(/\s+/)[0]?.toUpperCase() ?? ''
-    const grupo = /^[A-Z0-9]{2}$/.test(token) ? token : 'SIN GRUPO'
-    acumulado[grupo] ??= { totales: { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 }, vendedores: [] }
-    acumulado[grupo].vendedores.push({ nombre, totales })
-    for (const indicador of indicadores) acumulado[grupo].totales[indicador.clave] += totales[indicador.clave]
+  const ordenCanales = ['CALL LUCOM', 'LUCOM TERRENO', 'DISTRIBUCIÓN', 'LUCOM BOT-IA', 'REFERIDOS', 'SIN CLASIFICAR']
+  const canalesOrdenados = ordenCanales
+    .filter(nombre => !!datos?.porCanal?.[nombre])
+    .map(nombre => ({ nombre, ...datos!.porCanal[nombre] }))
+  const totalCanales = canalesOrdenados.reduce((acumulado, canal) => {
+    for (const indicador of indicadores) acumulado[indicador.clave] += canal.totales[indicador.clave]
     return acumulado
-  }, {})
-  const gruposOrdenados = Object.entries(grupos).sort((a, b) => b[1].totales.cargadas - a[1].totales.cargadas || a[0].localeCompare(b[0]))
+  }, { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 })
+  const concilia = datos && indicadores.every(indicador => totalCanales[indicador.clave] === datos.totales[indicador.clave])
   const barras = [
     { nombre: datos ? etiquetaMes(datos.desde) : 'Mes seleccionado', dos: b2, tres: b3, total: sumaPlay },
     { nombre: comparacion ? etiquetaMes(comparacion.desde) : 'Mes anterior', dos: previo2, tres: previo3, total: totalPrevio },
@@ -338,43 +339,60 @@ export default function DashboardClient() {
             <p className={'' + secundario + ' mt-3 text-xs'}>Cada indicador utiliza su fecha comercial correspondiente.</p>
           </div>
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className="font-bold text-[#1b5594]">Distribución por canal principal</h3>
-            <div className="mt-3 flex h-28 items-center justify-center rounded-lg border border-dashed border-gray-300 text-sm text-gray-500">
-              Pendiente de integración CALL + PDV
-            </div>
+            <h3 className="font-bold text-[#1b5594]">Distribución comercial BAF · Cargadas</h3>
+            <p className={'' + secundario + ' mt-1 text-xs'}>Participación de cada canal sobre las BAF cargadas del período.</p>
+            {datos ? (
+              <div className="mt-3 space-y-2">
+                {canalesOrdenados.map(canalDetalle => (
+                  <div key={canalDetalle.nombre} className="flex items-center gap-2 text-xs">
+                    <span className="w-28 shrink-0 truncate" title={canalDetalle.nombre}>{canalDetalle.nombre}</span>
+                    <div className="h-3 flex-1 overflow-hidden rounded bg-gray-100">
+                      <div className="h-full rounded bg-[#2563eb]" style={{ width: (datos.totales.cargadas ? canalDetalle.totales.cargadas / datos.totales.cargadas * 100 : 0) + '%' }} />
+                    </div>
+                    <span className="w-10 text-right font-semibold tabular-nums">{formatoNumero.format(canalDetalle.totales.cargadas)}</span>
+                  </div>
+                ))}
+                <p className={'' + secundario + ' pt-1 text-[11px]'}>{concilia ? 'Los cinco canales y Sin clasificar concilian con el total BAF.' : 'Atención: revisar conciliación de canales.'}</p>
+              </div>
+            ) : <div className={'' + secundario + ' mt-3 p-5 text-center text-sm'}>Sin datos del período.</div>}
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className="font-bold text-[#1b5594]">Detalle por canales de venta · Call Lucom</h3>
-            <p className={'' + secundario + ' mt-1 text-xs'}>Desglose por sigla de grupo y vendedor. Seleccioná un grupo para ver sus integrantes.</p>
-            {datos && gruposOrdenados.length ? (
+            <h3 className="font-bold text-[#1b5594]">Detalle por canales comerciales · BAF</h3>
+            <p className={'' + secundario + ' mt-1 text-xs'}>Abrí cada canal para consultar sus vendedores. Referidos incluye los grupos N1, C1, T1, P1, J1, F1 y B1.</p>
+            {datos && canalesOrdenados.length ? (
               <div className="mt-3 space-y-2">
                 <div className={'' + secundario + ' grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] gap-1 px-2 text-right text-[10px]'}>
-                  <span className="text-left">Grupo / vendedor</span>
+                  <span className="text-left">Canal / vendedor</span>
                   <span>Ingresadas</span><span>Cargadas</span><span>Finalizadas</span><span>Canceladas</span>
                 </div>
-                {gruposOrdenados.map(([sigla, grupo]) => (
-                  <details key={sigla} className="rounded-lg border border-gray-200">
+                {canalesOrdenados.map(canalDetalle => (
+                  <details key={canalDetalle.nombre} className="rounded-lg border border-gray-200">
                     <summary className="grid cursor-pointer grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] items-center gap-1 px-2 py-3 text-right text-xs font-semibold hover:bg-gray-50">
-                      <span className="truncate text-left">{sigla} · {grupo.vendedores.length} vendedor(es)</span>
-                      {indicadores.map(indicador => <span key={indicador.clave} className="tabular-nums">{formatoNumero.format(grupo.totales[indicador.clave])}</span>)}
+                      <span className="truncate text-left">{canalDetalle.nombre}</span>
+                      {indicadores.map(indicador => <span key={indicador.clave} className="tabular-nums">{formatoNumero.format(canalDetalle.totales[indicador.clave])}</span>)}
                     </summary>
                     <div className="border-t border-gray-200 bg-gray-50">
-                      {grupo.vendedores.sort((a, b) => b.totales.cargadas - a.totales.cargadas || a.nombre.localeCompare(b.nombre)).map(vendedor => (
-                        <div key={vendedor.nombre} className="grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] items-center gap-1 border-b border-gray-200 px-2 py-2 text-right text-xs last:border-0">
-                          <span className="truncate text-left" title={vendedor.nombre}>{vendedor.nombre}</span>
-                          {indicadores.map(indicador => <span key={indicador.clave} className="tabular-nums">{formatoNumero.format(vendedor.totales[indicador.clave])}</span>)}
+                      {Object.entries(canalDetalle.vendedores).sort((a, b) => b[1].cargadas - a[1].cargadas || a[0].localeCompare(b[0])).map(([nombre, totales]) => (
+                        <div key={nombre} className="grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] items-center gap-1 border-b border-gray-200 px-2 py-2 text-right text-xs last:border-0">
+                          <span className="truncate text-left" title={nombre}>{nombre}</span>
+                          {indicadores.map(indicador => <span key={indicador.clave} className="tabular-nums">{formatoNumero.format(totales[indicador.clave])}</span>)}
                         </div>
                       ))}
                     </div>
                   </details>
                 ))}
+                <div className="grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(48px,65px))] gap-1 border-t border-gray-200 px-2 py-2 text-right text-xs font-bold">
+                  <span className="text-left">TOTAL</span>
+                  {indicadores.map(indicador => <span key={indicador.clave} className="tabular-nums">{formatoNumero.format(totalCanales[indicador.clave])}</span>)}
+                </div>
+                <p className={'' + secundario + ' text-[11px]'}>{concilia ? 'Conciliado con indicadores generales.' : 'Diferencia detectada: revisar los canales.'}</p>
               </div>
             ) : (
               <div className={'' + secundario + ' mt-3 rounded-lg border border-dashed border-gray-300 p-8 text-center text-sm'}>
-                {cargando ? 'Consultando grupos...' : datos ? 'Sin ventas en el período.' : 'Seleccioná Call Lucom y un período.'}
+                {cargando ? 'Consultando canales...' : datos ? 'Sin ventas en el período.' : 'Seleccioná Call Lucom y un período.'}
               </div>
             )}
           </div>
