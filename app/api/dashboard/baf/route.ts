@@ -153,8 +153,9 @@ export async function GET(request: Request) {
       const estadoPorId = new Map((estados ?? []).map(e => [e.id, String(e.codigo ?? '').trim().toUpperCase()]))
       const gestionPorProducto = new Map((gestiones ?? []).map(g => [String(g.producto_operacion_id), g]))
       for (const producto of productos ?? []) {
-        const operacion = operaciones.get(producto.operacion_id)
-        if (!operacion) continue
+        const operacionEncontrada = operaciones.get(producto.operacion_id)
+        if (!operacionEncontrada) continue
+        const operacion = operacionEncontrada
         const gestion = gestionPorProducto.get(String(producto.id))
         const categoria = categoriaBaf(producto.plan_snapshot, gestion?.sds ?? null)
         const fechaIngreso = fechaArgentina(operacion.fecha_hora)
