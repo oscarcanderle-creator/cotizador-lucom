@@ -249,7 +249,7 @@ export default function DashboardClient() {
                 <span className="text-sm">{producto.nombre}</span>
               </div>
               <div className="px-3 py-4 text-center">
-                <div className="text-3xl font-bold tabular-nums">{canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(detallePlanes.fwa) : '—'}</div>
+                <div className="text-3xl font-bold tabular-nums">{canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
                 <div className={'' + secundario + ' mt-1 text-xs'}>{producto.nombre === 'BAF' ? 'BAF cargadas · SDS validada' : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
                 {producto.nombre === 'BAF' && canal === 'call' && (
                   <>
