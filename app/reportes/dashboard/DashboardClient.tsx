@@ -10,6 +10,7 @@ type Respuesta = {
   hasta: string
   totales: Record<Indicador, number>
   categorias: Record<Indicador, Record<Categoria, number>>
+  diarios: Record<string, Record<Indicador, number>>
 }
 
 const indicadores: { clave: Indicador; titulo: string; descripcion: string }[] = [
@@ -137,6 +138,13 @@ export default function DashboardClient() {
   const totalPrevio = previo2 + previo3
   const maximo = Math.max(sumaPlay, totalPrevio, 1)
   const variacion = totalPrevio ? ((sumaPlay - totalPrevio) / totalPrevio) * 100 : null
+  const dias = datos ? Object.entries(datos.diarios ?? {}).sort(([a], [b]) => a.localeCompare(b)) : []
+  const maximoDiario = Math.max(1, ...dias.flatMap(([, d]) => [d.cargadas, d.finalizadas, d.canceladas]))
+  const coloresDiarios: { clave: 'cargadas' | 'finalizadas' | 'canceladas'; nombre: string; color: string }[] = [
+    { clave: 'cargadas', nombre: 'Cargadas', color: '#2563eb' },
+    { clave: 'finalizadas', nombre: 'Finalizadas', color: '#0d9488' },
+    { clave: 'canceladas', nombre: 'Canceladas', color: '#dc2626' },
+  ]
   const barras = [
     { nombre: datos ? etiquetaMes(datos.desde) : 'Mes seleccionado', dos: b2, tres: b3, total: sumaPlay },
     { nombre: comparacion ? etiquetaMes(comparacion.desde) : 'Mes anterior', dos: previo2, tres: previo3, total: totalPrevio },
@@ -227,10 +235,37 @@ export default function DashboardClient() {
 
         <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className="font-bold text-[#1b5594]">Evolución diaria de ventas y activaciones</h3>
-            <div className="mt-3 flex h-44 items-center justify-center rounded-lg border border-dashed border-gray-300 text-center text-sm text-gray-500">
-              Gráfico de evolución · próxima conexión
+            <h3 className="font-bold text-[#1b5594]">Evolución diaria · BAF Call Lucom</h3>
+            <p className={'' + secundario + ' mt-1 text-xs'}>Cargadas por fecha de gestión; finalizadas y canceladas por fecha de cierre.</p>
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              {coloresDiarios.map(serie => (
+                <span key={serie.clave} className="flex items-center gap-1">
+                  <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: serie.color }} />
+                  {serie.nombre}
+                </span>
+              ))}
             </div>
+            {datos && dias.length ? (
+              <div className="mt-3 overflow-x-auto pb-2">
+                <div className="flex h-48 items-end gap-1 border-b border-gray-300 pb-1" style={{ minWidth: Math.max(340, dias.length * 22) }}>
+                  {dias.map(([fecha, valores]) => (
+                    <div key={fecha} className="flex h-full min-w-0 flex-1 flex-col justify-end" title={fecha + ' · Cargadas: ' + valores.cargadas + ' · Finalizadas: ' + valores.finalizadas + ' · Canceladas: ' + valores.canceladas}>
+                      <div className="flex h-40 items-end justify-center gap-px">
+                        {coloresDiarios.map(serie => (
+                          <div key={serie.clave} className="min-w-0 flex-1 rounded-t-sm" style={{ height: (valores[serie.clave] / maximoDiario * 100) + '%', backgroundColor: serie.color }} />
+                        ))}
+                      </div>
+                      <div className={'' + secundario + ' mt-1 text-center text-[10px] tabular-nums'}>{fecha.slice(8)}</div>
+                    </div>
+                  ))}
+                </div>
+                <p className={'' + secundario + ' mt-1 text-[11px]'}>Eje horizontal: día del mes. Pasá el cursor sobre las barras para ver los valores.</p>
+              </div>
+            ) : (
+              <div className={'' + secundario + ' mt-3 flex h-40 items-center justify-center rounded-lg border border-dashed border-gray-300 text-center text-sm'}>
+                {cargando ? 'Consultando evolución diaria...' : datos ? 'Sin movimientos en el período.' : 'Seleccioná Call Lucom y un período.'}
+              </div>
+            )}
           </div>
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
             <h3 className="font-bold text-[#1b5594]">Composición comercial BAF</h3>
