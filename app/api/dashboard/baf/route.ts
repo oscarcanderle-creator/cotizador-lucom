@@ -7,6 +7,23 @@ type Categoria = '2PLAY' | '3PLAY' | 'AÑADIR TV' | 'SIN CLASIFICAR'
 const INDICADORES: Indicador[] = ['ingresadas', 'cargadas', 'finalizadas', 'canceladas']
 const CATEGORIAS: Categoria[] = ['2PLAY', '3PLAY', 'AÑADIR TV', 'SIN CLASIFICAR']
 const LOTE = 500
+type Canal = 'CALL LUCOM' | 'LUCOM TERRENO' | 'DISTRIBUCIÓN' | 'LUCOM BOT-IA' | 'REFERIDOS' | 'SIN CLASIFICAR'
+const REFERIDOS = new Set(['N1', 'C1', 'T1', 'P1', 'J1', 'F1', 'B1'])
+function canalComercial(vendedor: string | null, origen: string | null, obs: string | null): Canal {
+  const sigla = extraerSigla(vendedor)
+  const o = String(origen ?? '').trim().toUpperCase().replace(/\s+/g, ' ')
+  if (sigla === 'L1') {
+    if (o === 'BOT DRIVE LC' || o === 'BOT IA LC') return 'LUCOM BOT-IA'
+    if (o === 'PSR' && !!String(obs ?? '').trim()) return 'DISTRIBUCIÓN'
+    return 'CALL LUCOM'
+  }
+  if (sigla === 'LT') return 'LUCOM TERRENO'
+  if (sigla && REFERIDOS.has(sigla)) return 'REFERIDOS'
+  return 'SIN CLASIFICAR'
+}
+function totalesVacios(): Record<Indicador, number> {
+  return { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 }
+}
 
 function extraerSigla(valor: unknown): string | null {
   const token = String(valor ?? '').trim().split(/\s+/)[0]?.toUpperCase() || ''
@@ -83,18 +100,19 @@ export async function GET(request: Request) {
     const admin = createAdminClient()
     const inicio = `${desde}T00:00:00-03:00`
     const fin = `${hasta}T23:59:59.999-03:00`
-    const operaciones = new Map<string, { fecha_hora: string | null; vendedor: string | null }>()
+    const operaciones = new Map<string, { fecha_hora: string | null; vendedor: string | null; origen_dato: string | null; obs: string | null }>()
     const indicadores = vacio()
     const totales = { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 }
     const diarios: Record<string, Record<Indicador, number>> = {}
     const porVendedor: Record<string, Record<Indicador, number>> = {}
+    const porCanal: Record<string, { totales: Record<Indicador, number>; vendedores: Record<string, Record<Indicador, number>> }> = {}
 
     // Se consultan las operaciones del grupo permitido antes de recuperar productos.
     // Para cierres y cargas de un período, también deben considerarse ventas ingresadas antes.
     // La paginación completa evita truncar el resultado al límite predeterminado de Supabase.
     for (let offset = 0; ; offset += LOTE) {
       let consulta = admin.from('operaciones')
-        .select('id_operacion,fecha_hora,vendedor')
+        .select('id_operacion,fecha_hora,vendedor,origen_dato,obs')
         .eq('tipo', 'BAF')
         .order('id_operacion')
         .range(offset, offset + LOTE - 1)
@@ -103,7 +121,7 @@ export async function GET(request: Request) {
       if (error) throw error
       for (const o of data ?? []) {
         if (!global && extraerSigla(o.vendedor) !== sigla) continue
-        operaciones.set(o.id_operacion, { fecha_hora: o.fecha_hora, vendedor: o.vendedor })
+        operaciones.set(o.id_operacion, { fecha_hora: o.fecha_hora, vendedor: o.vendedor, origen_dato: o.origen_dato, obs: o.obs })
       }
       if (!data || data.length < LOTE) break
     }
@@ -148,6 +166,11 @@ export async function GET(request: Request) {
           const vendedor = String(operacion.vendedor ?? '').trim() || 'SIN VENDEDOR'
           porVendedor[vendedor] ??= { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 }
           porVendedor[vendedor][indicador]++
+          const canal = canalComercial(operacion.vendedor, operacion.origen_dato, operacion.obs)
+          porCanal[canal] ??= { totales: totalesVacios(), vendedores: {} }
+          porCanal[canal].totales[indicador]++
+          porCanal[canal].vendedores[vendedor] ??= totalesVacios()
+          porCanal[canal].vendedores[vendedor][indicador]++
           totales[indicador]++
           indicadores[indicador][categoria]++
           diarios[fecha] ??= { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 }
@@ -160,7 +183,7 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ desde, hasta, totales, categorias: indicadores, diarios, porVendedor })
+    return NextResponse.json({ desde, hasta, totales, categorias: indicadores, diarios, porVendedor, porCanal })
   } catch (error) {
     console.error('Dashboard CALL BAF', error)
     return NextResponse.json({ error: 'No se pudieron consultar los indicadores BAF.' }, { status: 500 })
