@@ -29,6 +29,16 @@ function hoyArgentina(): string {
   const tomar = (tipo: string) => partes.find(p => p.type === tipo)?.value ?? ''
   return `${tomar('year')}-${tomar('month')}-${tomar('day')}`
 }
+function mesAnterior(desde: string) {
+  const [anio, mes] = desde.split('-').map(Number)
+  const inicio = new Date(Date.UTC(anio, mes - 2, 1))
+  const fin = new Date(Date.UTC(anio, mes - 1, 0))
+  return { desde: inicio.toISOString().slice(0, 10), hasta: fin.toISOString().slice(0, 10) }
+}
+function etiquetaMes(fecha: string) {
+  return new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(fecha + 'T12:00:00Z'))
+}
 function rangoPeriodo(periodo: string) {
   const hoy = hoyArgentina()
   const [anio, mes, dia] = hoy.split('-').map(Number)
@@ -51,12 +61,14 @@ export default function DashboardClient() {
   const [periodo, setPeriodo] = useState('mes')
   const [canal, setCanal] = useState('call')
   const [datos, setDatos] = useState<Respuesta | null>(null)
+  const [comparacion, setComparacion] = useState<Respuesta | null>(null)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (canal !== 'call') {
       setDatos(null)
+      setComparacion(null)
       setError('')
       setCargando(false)
       return
@@ -66,16 +78,27 @@ export default function DashboardClient() {
     setCargando(true)
     setError('')
     setDatos(null)
-    fetch(`/api/dashboard/baf?desde=${desde}&hasta=${hasta}`, {
-      signal: controlador.signal,
-      cache: 'no-store',
-    })
-      .then(async respuesta => {
-        const json = await respuesta.json()
-        if (!respuesta.ok) throw new Error(json.error || 'No se pudieron recuperar los indicadores.')
-        return json as Respuesta
+    setComparacion(null)
+    const comparar = periodo === 'mes' || periodo === 'anterior'
+    const anterior = mesAnterior(desde)
+    async function consultar(inicio: string, fin: string): Promise<Respuesta> {
+      const respuesta = await fetch(`/api/dashboard/baf?desde=${inicio}&hasta=${fin}`, {
+        signal: controlador.signal, cache: 'no-store',
       })
-      .then(setDatos)
+      const json = await respuesta.json()
+      if (!respuesta.ok) throw new Error(json.error || 'No se pudieron recuperar los indicadores.')
+      return json as Respuesta
+    }
+    Promise.all([
+      consultar(desde, hasta),
+      comparar ? consultar(anterior.desde, anterior.hasta) : Promise.resolve(null),
+    ])
+      .then(([actual, previo]) => {
+        if (!controlador.signal.aborted) {
+          setDatos(actual)
+          setComparacion(previo)
+        }
+      })
       .catch((err: unknown) => {
         if (!controlador.signal.aborted) {
           setError(err instanceof Error ? err.message : 'Error al consultar los indicadores.')
@@ -109,6 +132,15 @@ export default function DashboardClient() {
   const sumaPlay = b2 + b3
   const porcentaje2 = sumaPlay ? b2 / sumaPlay * 100 : 0
   const porcentaje3 = sumaPlay ? b3 / sumaPlay * 100 : 0
+  const previo2 = comparacion?.categorias.cargadas['2PLAY'] ?? 0
+  const previo3 = comparacion?.categorias.cargadas['3PLAY'] ?? 0
+  const totalPrevio = previo2 + previo3
+  const maximo = Math.max(sumaPlay, totalPrevio, 1)
+  const variacion = totalPrevio ? ((sumaPlay - totalPrevio) / totalPrevio) * 100 : null
+  const barras = [
+    { nombre: datos ? etiquetaMes(datos.desde) : 'Mes seleccionado', dos: b2, tres: b3, total: sumaPlay },
+    { nombre: comparacion ? etiquetaMes(comparacion.desde) : 'Mes anterior', dos: previo2, tres: previo3, total: totalPrevio },
+  ]
 
   return (
     <section className={'' + fondo + ' overflow-hidden rounded-2xl border border-gray-200'}>
@@ -203,19 +235,40 @@ export default function DashboardClient() {
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
             <h3 className="font-bold text-[#1b5594]">Composición comercial BAF</h3>
             <p className={'' + secundario + ' mt-1 text-xs'}>Ventas cargadas · 2PLAY y 3PLAY. El resto se informa por separado.</p>
-            <div className="mt-5 flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold">Mes seleccionado</span>
-              <span className="text-xl font-bold tabular-nums">{datos ? formatoNumero.format(sumaPlay) : '—'}</span>
-            </div>
-            <div className="mt-2 flex h-9 overflow-hidden rounded-md bg-gray-200">
-              <div style={{ width: porcentaje2 + '%', backgroundColor: '#2563eb' }} className="flex items-center justify-center text-xs font-bold text-white">{b2 || ''}</div>
-              <div style={{ width: porcentaje3 + '%', backgroundColor: '#0d9488' }} className="flex items-center justify-center text-xs font-bold text-white">{b3 || ''}</div>
-            </div>
-            <div className="mt-2 flex justify-between text-xs">
-              <span>■ 2PLAY · {sumaPlay ? porcentaje2.toFixed(1) : '0'}%</span>
-              <span>■ 3PLAY · {sumaPlay ? porcentaje3.toFixed(1) : '0'}%</span>
-            </div>
-            <p className={'' + secundario + ' mt-5 text-xs'}>Comparación con el mes anterior: próxima conexión a datos.</p>
+            {comparacion && datos ? (
+              <div className="mt-4 space-y-5">
+                {barras.map(barra => (
+                  <div key={barra.nombre}>
+                    <div className="mb-2 flex items-center justify-between text-sm">
+                      <span className="font-semibold capitalize">{barra.nombre}</span>
+                      <span className="font-bold tabular-nums">{formatoNumero.format(barra.total)}</span>
+                    </div>
+                    <div className="h-9 overflow-hidden rounded-md bg-gray-200">
+                      <div className="flex h-full" style={{ width: (barra.total / maximo * 100) + '%' }}>
+                        {barra.dos > 0 && <div className="flex h-full items-center justify-center overflow-hidden bg-[#2563eb] text-xs font-bold text-white" style={{ width: (barra.dos / barra.total * 100) + '%' }} title={'2PLAY: ' + barra.dos}>{barra.dos}</div>}
+                        {barra.tres > 0 && <div className="flex h-full items-center justify-center overflow-hidden bg-[#0d9488] text-xs font-bold text-white" style={{ width: (barra.tres / barra.total * 100) + '%' }} title={'3PLAY: ' + barra.tres}>{barra.tres}</div>}
+                      </div>
+                    </div>
+                    <div className={'' + secundario + ' mt-1 flex justify-between text-xs'}>
+                      <span>2PLAY: {formatoNumero.format(barra.dos)}</span>
+                      <span>3PLAY: {formatoNumero.format(barra.tres)}</span>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 pt-3 text-xs">
+                  <span><span className="text-[#2563eb]">■</span> 2PLAY &nbsp; <span className="text-[#0d9488]">■</span> 3PLAY</span>
+                  <span className="font-semibold">
+                    Variación vs. mes anterior: {variacion === null ? 'Sin base comparable' : (variacion > 0 ? '+' : '') + variacion.toFixed(1) + '%'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className={'' + secundario + ' mt-5 text-sm'}>
+                {cargando ? 'Consultando ambos períodos...' : periodo === 'hoy' || periodo === 'semana'
+                  ? 'La comparación mensual está disponible en Mes en curso y Mes anterior.'
+                  : 'Seleccioná Mes anterior para comparar octubre con septiembre.'}
+              </p>
+            )}
           </div>
         </div>
 
