@@ -87,6 +87,7 @@ export async function GET(request: Request) {
     const indicadores = vacio()
     const totales = { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 }
     const diarios: Record<string, Record<Indicador, number>> = {}
+    const porVendedor: Record<string, Record<Indicador, number>> = {}
 
     // Se consultan las operaciones del grupo permitido antes de recuperar productos.
     // Para cierres y cargas de un período, también deben considerarse ventas ingresadas antes.
@@ -144,6 +145,9 @@ export async function GET(request: Request) {
         const estadoBaf = estadoPorId.get(gestion?.estado_baf_id ?? -1) ?? ''
         const estadoClaro = String(gestion?.estado_claro ?? '').trim().toUpperCase()
         function contar(indicador: Indicador, fecha: string) {
+          const vendedor = String(operacion.vendedor ?? '').trim() || 'SIN VENDEDOR'
+          porVendedor[vendedor] ??= { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 }
+          porVendedor[vendedor][indicador]++
           totales[indicador]++
           indicadores[indicador][categoria]++
           diarios[fecha] ??= { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 }
@@ -156,7 +160,7 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ desde, hasta, totales, categorias: indicadores, diarios })
+    return NextResponse.json({ desde, hasta, totales, categorias: indicadores, diarios, porVendedor })
   } catch (error) {
     console.error('Dashboard CALL BAF', error)
     return NextResponse.json({ error: 'No se pudieron consultar los indicadores BAF.' }, { status: 500 })
