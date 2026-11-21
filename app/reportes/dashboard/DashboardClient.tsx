@@ -219,8 +219,16 @@ export default function DashboardClient() {
         <div className={'' + tarjeta + ' mb-4 grid grid-cols-1 gap-3 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-4'}>
           <label className="flex flex-col gap-1 text-sm font-semibold">
             Rango de fechas
-            <span className={'' + control + ' flex min-w-0 flex-col rounded-lg border font-normal'}>
-              <select value={periodo} onChange={e => setPeriodo(e.target.value)} className="min-w-0 w-full bg-transparent px-3 py-2 outline-none">
+            <span className={'' + control + ' flex min-w-0 items-center rounded-lg border font-normal'}>
+              <select
+                value={periodo}
+                onChange={e => setPeriodo(e.target.value)}
+                aria-label="Seleccionar rango de fechas"
+                title={periodo === 'personalizado' ? 'Cambiar tipo de período' : undefined}
+                className={periodo === 'personalizado'
+                  ? 'w-9 shrink-0 cursor-pointer bg-transparent py-2 pl-1 text-transparent outline-none'
+                  : 'min-w-0 w-full bg-transparent px-3 py-2 outline-none'}
+              >
                 <option value="hoy">Hoy</option>
                 <option value="semana">Esta semana</option>
                 <option value="mes">Mes en curso</option>
@@ -228,14 +236,14 @@ export default function DashboardClient() {
                 <option value="personalizado">Rango personalizado</option>
               </select>
               {periodo === 'personalizado' && (
-                <span className="grid grid-cols-2 gap-1 border-t border-gray-300 px-2 py-1">
-                  <span className="flex min-w-0 flex-col text-[10px]">
+                <span className="grid min-w-0 flex-1 grid-cols-2 border-l border-gray-300">
+                  <span className="flex min-w-0 flex-col px-1 text-[10px]">
                     Desde
-                    <input type="date" aria-label="Fecha inicio" value={fechaInicio} max={fechaFinal || hoyArgentina()} onChange={e => setFechaInicio(e.target.value)} className="min-w-0 w-full bg-transparent text-xs font-normal outline-none" />
+                    <input type="date" aria-label="Fecha inicio" value={fechaInicio} max={fechaFinal || hoyArgentina()} onChange={e => setFechaInicio(e.target.value)} className="min-w-0 w-full bg-transparent text-[11px] font-normal outline-none" />
                   </span>
-                  <span className="flex min-w-0 flex-col border-l border-gray-300 pl-1 text-[10px]">
+                  <span className="flex min-w-0 flex-col border-l border-gray-300 px-1 text-[10px]">
                     Hasta
-                    <input type="date" aria-label="Fecha final" value={fechaFinal} min={fechaInicio} max={hoyArgentina()} onChange={e => setFechaFinal(e.target.value)} className="min-w-0 w-full bg-transparent text-xs font-normal outline-none" />
+                    <input type="date" aria-label="Fecha final" value={fechaFinal} min={fechaInicio} max={hoyArgentina()} onChange={e => setFechaFinal(e.target.value)} className="min-w-0 w-full bg-transparent text-[11px] font-normal outline-none" />
                   </span>
                 </span>
               )}
