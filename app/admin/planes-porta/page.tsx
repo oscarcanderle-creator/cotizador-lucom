@@ -30,20 +30,33 @@ async function crearPlan(formData: FormData) {
   const { supabase } = await validarAdmin()
 
   const nombre = String(formData.get('nombre') ?? '').trim()
+  const negocio = String(formData.get('negocio') ?? '').trim().toUpperCase()
   const orden = Number(formData.get('orden') ?? 0)
   const disponible_porta = formData.get('disponible_porta') === 'on'
   const disponible_linea_nueva = formData.get('disponible_linea_nueva') === 'on'
 
-  if (!nombre || !Number.isFinite(orden)) {
+  if (!nombre || !Number.isFinite(orden) || !['MASIVO', 'PYME'].includes(negocio)) {
     throw new Error('Datos de plan inválidos.')
   }
 
+  const { data: existente, error: errorConsulta } = await supabase
+    .from('catalogo_planes_porta')
+    .select('id, nombre')
+    .eq('negocio', negocio)
+  if (errorConsulta) throw new Error(errorConsulta.message)
+  if ((existente ?? []).some((plan) => plan.nombre.trim().toUpperCase() === nombre.toUpperCase())) {
+    throw new Error('Este plan ya existe en el segmento seleccionado.')
+  }
+
+  const soloLineaNueva = nombre.toUpperCase().includes('FWA')
   const { error } = await supabase.from('catalogo_planes_porta').insert({
+    negocio,
     nombre,
     orden,
     activo: true,
-    disponible_porta,
+    disponible_porta: soloLineaNueva ? false : disponible_porta,
     disponible_linea_nueva,
+    solo_linea_nueva: soloLineaNueva,
   })
 
   if (error) throw new Error(`No se pudo crear el plan: ${error.message}`)
@@ -65,9 +78,24 @@ async function actualizarPlan(formData: FormData) {
     throw new Error('Datos de plan inválidos.')
   }
 
+  const { data: actual, error: errorActual } = await supabase
+    .from('catalogo_planes_porta')
+    .select('negocio, solo_linea_nueva')
+    .eq('id', id)
+    .single()
+  if (errorActual || !actual) throw new Error('No se pudo consultar el plan.')
+  const { data: otros, error: errorOtros } = await supabase
+    .from('catalogo_planes_porta')
+    .select('id, nombre')
+    .eq('negocio', actual.negocio)
+    .neq('id', id)
+  if (errorOtros) throw new Error(errorOtros.message)
+  if ((otros ?? []).some((plan) => plan.nombre.trim().toUpperCase() === nombre.toUpperCase())) {
+    throw new Error('Ya existe un plan con ese nombre en el mismo segmento.')
+  }
   const { error } = await supabase
     .from('catalogo_planes_porta')
-    .update({ nombre, orden, activo, disponible_porta, disponible_linea_nueva })
+    .update({ nombre, orden, activo, disponible_porta: actual.solo_linea_nueva ? false : disponible_porta, disponible_linea_nueva })
     .eq('id', id)
 
   if (error) throw new Error(`No se pudo actualizar el plan: ${error.message}`)
@@ -79,7 +107,7 @@ export default async function PlanesPortaPage() {
 
   const { data: planes, error } = await supabase
     .from('catalogo_planes_porta')
-    .select('id, nombre, orden, activo, disponible_porta, disponible_linea_nueva')
+    .select('id, negocio, nombre, orden, activo, solo_linea_nueva, disponible_porta, disponible_linea_nueva')
     .order('orden', { ascending: true })
     .order('nombre', { ascending: true })
 
@@ -102,13 +130,17 @@ export default async function PlanesPortaPage() {
             Planes PORTA / Línea Nueva
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Configurá la disponibilidad de cada registro para Portabilidad y Línea Nueva. Los cambios todavía no restringen el formulario de ventas.
+            Planes separados por segmento MASIVO y PYME. Las disponibilidades todavía no restringen el formulario de ventas.
           </p>
         </div>
 
         <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-gray-900">Nuevo plan</h2>
-          <form action={crearPlan} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_100px_auto_auto_auto]">
+          <form action={crearPlan} className="grid grid-cols-1 gap-3 sm:grid-cols-[130px_1fr_90px_auto_auto_auto]">
+            <select name="negocio" required defaultValue="MASIVO" className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+              <option value="MASIVO">MASIVO</option>
+              <option value="PYME">PYME</option>
+            </select>
             <input
               name="nombre"
               required
@@ -139,75 +171,69 @@ export default async function PlanesPortaPage() {
           </form>
         </section>
 
-        <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-5 py-4">
-            <h2 className="font-semibold text-gray-900">Planes configurados</h2>
-          </div>
-
-          <div className="divide-y divide-gray-200">
-            {(planes ?? []).map((plan) => (
-              <form
-                key={plan.id}
-                action={actualizarPlan}
-                className="grid grid-cols-1 items-center gap-3 px-5 py-4 sm:grid-cols-[minmax(160px,1fr)_80px_110px_130px_80px_auto]"
-              >
-                <input type="hidden" name="id" value={plan.id} />
-                <input
-                  name="nombre"
-                  defaultValue={plan.nombre}
-                  required
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-                <input
-                  name="orden"
-                  type="number"
-                  defaultValue={plan.orden ?? 0}
-                  required
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                  <input
-                    name="disponible_porta"
-                    type="checkbox"
-                    defaultChecked={Boolean(plan.disponible_porta)}
-                    className="h-4 w-4"
-                  />
-                  Portabilidad
-                </label>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                  <input
-                    name="disponible_linea_nueva"
-                    type="checkbox"
-                    defaultChecked={Boolean(plan.disponible_linea_nueva)}
-                    className="h-4 w-4"
-                  />
-                  Línea Nueva
-                </label>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                  <input
-                    name="activo"
-                    type="checkbox"
-                    defaultChecked={Boolean(plan.activo)}
-                    className="h-4 w-4"
-                  />
-                  Activo
-                </label>
-                <button
-                  type="submit"
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
-                >
-                  Guardar
-                </button>
-              </form>
-            ))}
-
-            {(planes ?? []).length === 0 && (
-              <div className="px-5 py-8 text-center text-sm text-gray-500">
-                No hay planes configurados.
+        {(['MASIVO', 'PYME'] as const).map((negocio) => {
+          const planesNegocio = (planes ?? []).filter((plan) => plan.negocio === negocio)
+          return (
+            <section key={negocio} className="mb-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              <div className="border-b border-gray-200 px-5 py-4">
+                <h2 className="font-semibold text-gray-900">Planes {negocio}</h2>
+                <p className="mt-1 text-xs text-gray-500">
+                  Disponibilidad independiente para Portabilidad y Línea Nueva en el segmento {negocio}.
+                </p>
               </div>
-            )}
-          </div>
-        </section>
+              <div className="divide-y divide-gray-200">
+                {planesNegocio.map((plan) => (
+                  <form key={plan.id} action={actualizarPlan}
+                    className="grid grid-cols-1 items-center gap-3 px-5 py-4 sm:grid-cols-[minmax(160px,1fr)_80px_110px_130px_80px_auto]">
+                    <input type="hidden" name="id" value={plan.id} />
+                    <div>
+                      <label className="block text-xs text-gray-500">Plan · ID {plan.id}</label>
+                      <input name="nombre" defaultValue={plan.nombre} required
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500">Orden</label>
+                      <input name="orden" type="number" defaultValue={plan.orden ?? 0} required
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <input name="disponible_porta" type="checkbox"
+                        disabled={Boolean(plan.solo_linea_nueva)}
+                        defaultChecked={!plan.solo_linea_nueva && Boolean(plan.disponible_porta)}
+                        className="h-4 w-4" />
+                      Portabilidad
+                    </label>
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <input name="disponible_linea_nueva" type="checkbox"
+                        defaultChecked={Boolean(plan.disponible_linea_nueva)} className="h-4 w-4" />
+                      Línea Nueva
+                    </label>
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <input name="activo" type="checkbox" defaultChecked={Boolean(plan.activo)}
+                        className="h-4 w-4" />
+                      Activo
+                    </label>
+                    <button type="submit"
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50">
+                      Guardar
+                    </button>
+                    {plan.solo_linea_nueva && (
+                      <p className="text-xs text-amber-700 sm:col-span-6">
+                        Plan exclusivo de Línea Nueva: Portabilidad no se puede habilitar.
+                      </p>
+                    )}
+                  </form>
+                ))}
+                {planesNegocio.length === 0 && (
+                  <div className="px-5 py-8 text-center text-sm text-gray-500">
+                    No hay planes configurados para {negocio}.
+                  </div>
+                )}
+              </div>
+            </section>
+          )
+        })}
+
       </div>
     </main>
   )
