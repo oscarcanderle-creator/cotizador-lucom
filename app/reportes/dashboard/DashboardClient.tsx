@@ -219,25 +219,27 @@ export default function DashboardClient() {
         <div className={'' + tarjeta + ' mb-4 grid grid-cols-1 gap-3 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-4'}>
           <label className="flex flex-col gap-1 text-sm font-semibold">
             Rango de fechas
-            <select value={periodo} onChange={e => setPeriodo(e.target.value)} className={'' + control + ' rounded-lg border px-3 py-2 font-normal'}>
-              <option value="hoy">Hoy</option>
-              <option value="semana">Esta semana</option>
-              <option value="mes">Mes en curso</option>
-              <option value="anterior">Mes anterior</option>
-              <option value="personalizado">Rango personalizado</option>
-            </select>
-            {periodo === 'personalizado' && (
-              <span className="mt-1 grid grid-cols-2 gap-2">
-                <span className="flex min-w-0 flex-col gap-1 text-xs">
-                  Desde
-                  <input type="date" value={fechaInicio} max={fechaFinal || hoyArgentina()} onChange={e => setFechaInicio(e.target.value)} className={'' + control + ' min-w-0 w-full rounded-lg border px-2 py-2 font-normal'} />
+            <span className={'' + control + ' flex min-w-0 flex-col rounded-lg border font-normal'}>
+              <select value={periodo} onChange={e => setPeriodo(e.target.value)} className="min-w-0 w-full bg-transparent px-3 py-2 outline-none">
+                <option value="hoy">Hoy</option>
+                <option value="semana">Esta semana</option>
+                <option value="mes">Mes en curso</option>
+                <option value="anterior">Mes anterior</option>
+                <option value="personalizado">Rango personalizado</option>
+              </select>
+              {periodo === 'personalizado' && (
+                <span className="grid grid-cols-2 gap-1 border-t border-gray-300 px-2 py-1">
+                  <span className="flex min-w-0 flex-col text-[10px]">
+                    Desde
+                    <input type="date" aria-label="Fecha inicio" value={fechaInicio} max={fechaFinal || hoyArgentina()} onChange={e => setFechaInicio(e.target.value)} className="min-w-0 w-full bg-transparent text-xs font-normal outline-none" />
+                  </span>
+                  <span className="flex min-w-0 flex-col border-l border-gray-300 pl-1 text-[10px]">
+                    Hasta
+                    <input type="date" aria-label="Fecha final" value={fechaFinal} min={fechaInicio} max={hoyArgentina()} onChange={e => setFechaFinal(e.target.value)} className="min-w-0 w-full bg-transparent text-xs font-normal outline-none" />
+                  </span>
                 </span>
-                <span className="flex min-w-0 flex-col gap-1 text-xs">
-                  Hasta
-                  <input type="date" value={fechaFinal} min={fechaInicio} max={hoyArgentina()} onChange={e => setFechaFinal(e.target.value)} className={'' + control + ' min-w-0 w-full rounded-lg border px-2 py-2 font-normal'} />
-                </span>
-              </span>
-            )}
+              )}
+            </span>
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold">
             Productos
