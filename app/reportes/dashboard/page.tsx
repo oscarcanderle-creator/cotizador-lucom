@@ -57,7 +57,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="mt-8">
-          <DashboardClient />
+          <DashboardClient puedeVerTodos={['ADMIN', 'SUPERVISOR', 'BBOO'].includes(profile.rol)} />
         </div>
       </div>
     </main>
