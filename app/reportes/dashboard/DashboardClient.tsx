@@ -318,13 +318,24 @@ export default function DashboardClient() {
               <div className="px-3 py-4 text-center">
                 <div className="text-3xl font-bold tabular-nums">{canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
                 <div className={'' + secundario + ' mt-1 text-xs'}>{producto.nombre === 'BAF' ? (canal === 'pdv' ? 'Activaciones · Fecha activación' : 'BAF cargadas · SDS validada') : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
-                {producto.nombre === 'BAF' && canal === 'pdv' && datosPdv && (
-                  <div className="mt-3 space-y-1 text-left text-xs">
-                    <div className="flex justify-between"><span>2PLAY</span><strong>{formatoNumero.format(datosPdv.totales['2PLAY'])}</strong></div>
-                    <div className="flex justify-between"><span>3PLAY</span><strong>{formatoNumero.format(datosPdv.totales['3PLAY'])}</strong></div>
-                    <div className="flex justify-between"><span>AÑADIR TV</span><strong>{formatoNumero.format(datosPdv.totales['AÑADIR TV'])}</strong></div>
-                  </div>
-                )}
+                {producto.nombre === 'BAF' && canal === 'pdv' && datosPdv && (() => {
+                  const dosPlay = datosPdv.totales['2PLAY']
+                  const tresPlay = datosPdv.totales['3PLAY']
+                  const totalPlay = dosPlay + tresPlay
+                  return (
+                    <>
+                      <div className={'mt-3 flex h-3 overflow-hidden rounded ' + (oscuro ? 'bg-slate-700' : 'bg-gray-200')}>
+                        <div style={{ width: (totalPlay ? dosPlay / totalPlay * 100 : 0) + '%', backgroundColor: '#2563eb' }} />
+                        <div style={{ width: (totalPlay ? tresPlay / totalPlay * 100 : 0) + '%', backgroundColor: '#0d9488' }} />
+                      </div>
+                      <div className="mt-2 flex justify-between gap-2 text-xs">
+                        <span>2PLAY <strong>{formatoNumero.format(dosPlay)}</strong></span>
+                        <span>3PLAY <strong>{formatoNumero.format(tresPlay)}</strong></span>
+                      </div>
+                      <p className={'' + secundario + ' mt-1 text-[11px]'}>AÑADIR TV: {formatoNumero.format(datosPdv.totales['AÑADIR TV'])} · se contabiliza por separado</p>
+                    </>
+                  )
+                })()}
                 {producto.nombre === 'BAF' && canal === 'call' && (
                   <>
                     <div className={'mt-3 flex h-3 overflow-hidden rounded ' + (oscuro ? 'bg-slate-700' : 'bg-gray-200')}>
