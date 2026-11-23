@@ -74,7 +74,7 @@ function rangoPeriodo(periodo: string) {
   return { desde: fecha.toISOString().slice(0, 10), hasta: hoy }
 }
 
-export default function DashboardClient() {
+export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: boolean }) {
   const [tema, setTema] = useState<Tema>('ejecutivo')
   const [periodo, setPeriodo] = useState('mes')
   const [fechaInicio, setFechaInicio] = useState(() => hoyArgentina().slice(0, 7) + '-01')
@@ -89,12 +89,12 @@ export default function DashboardClient() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (canal === 'todos') {
+    if (canal === 'todos' && !puedeVerTodos) {
+      setError('No tenés permisos para consultar todos los canales.')
       setDatosPdv(null)
       setDatos(null)
       setComparacion(null)
       setDetallePlanes(null)
-      setError('')
       setCargando(false)
       return
     }
@@ -117,17 +117,39 @@ export default function DashboardClient() {
     setComparacion(null)
     setDetallePlanes(null)
     setErrorPlanes('')
-    if (canal === 'pdv') {
-      fetch(`/api/dashboard/baf-pdv?desde=${desde}&hasta=${hasta}`, {
+    if (canal === 'pdv' || canal === 'todos') {
+      const consultaPdv = fetch(`/api/dashboard/baf-pdv?desde=${desde}&hasta=${hasta}`, {
         signal: controlador.signal, cache: 'no-store',
+      }).then(async respuesta => {
+        const json = await respuesta.json()
+        if (!respuesta.ok) throw new Error(json.error || 'No se pudieron recuperar las BAF de PDV.')
+        return json as RespuestaPdv
       })
-        .then(async respuesta => {
-          const json = await respuesta.json()
-          if (!respuesta.ok) throw new Error(json.error || 'No se pudieron recuperar las BAF de PDV.')
-          if (!controlador.signal.aborted) setDatosPdv(json as RespuestaPdv)
+      if (canal === 'pdv') {
+        consultaPdv
+          .then(actual => { if (!controlador.signal.aborted) setDatosPdv(actual) })
+          .catch((err: unknown) => {
+            if (!controlador.signal.aborted) setError(err instanceof Error ? err.message : 'Error al consultar PDV.')
+          })
+          .finally(() => { if (!controlador.signal.aborted) setCargando(false) })
+        return () => controlador.abort()
+      }
+      const consultaCall = fetch(`/api/dashboard/baf?desde=${desde}&hasta=${hasta}`, {
+        signal: controlador.signal, cache: 'no-store',
+      }).then(async respuesta => {
+        const json = await respuesta.json()
+        if (!respuesta.ok) throw new Error(json.error || 'No se pudieron recuperar las BAF de Call.')
+        return json as Respuesta
+      })
+      Promise.all([consultaCall, consultaPdv])
+        .then(([call, pdv]) => {
+          if (!controlador.signal.aborted) {
+            setDatos(call)
+            setDatosPdv(pdv)
+          }
         })
         .catch((err: unknown) => {
-          if (!controlador.signal.aborted) setError(err instanceof Error ? err.message : 'Error al consultar PDV.')
+          if (!controlador.signal.aborted) setError(err instanceof Error ? err.message : 'Error al consolidar BAF.')
         })
         .finally(() => { if (!controlador.signal.aborted) setCargando(false) })
       return () => controlador.abort()
@@ -170,7 +192,7 @@ export default function DashboardClient() {
       })
       .finally(() => { if (!controlador.signal.aborted) setCargando(false) })
     return () => controlador.abort()
-  }, [periodo, fechaInicio, fechaFinal, canal])
+  }, [periodo, fechaInicio, fechaFinal, canal, puedeVerTodos])
 
   const oscuro = tema === 'oscuro'
   const fondo = oscuro ? 'bg-[#101827] text-white' : 'bg-gray-50 text-gray-900'
@@ -193,6 +215,11 @@ export default function DashboardClient() {
     { nombre: 'CATER / EQUIPOS', icono: '▣', color: 'bg-[#008c84]', activo: false },
     { nombre: '1175', icono: '▤', color: 'bg-[#6942c9]', activo: false },
   ]
+  const bafTodosListo = canal === 'todos' && !!datos && !!datosPdv
+  const bafTodos2 = (datos?.categorias.cargadas['2PLAY'] ?? 0) + (datosPdv?.totales['2PLAY'] ?? 0)
+  const bafTodos3 = (datos?.categorias.cargadas['3PLAY'] ?? 0) + (datosPdv?.totales['3PLAY'] ?? 0)
+  const bafTodosPlay = bafTodos2 + bafTodos3
+  const bafTodosAnadir = (datos?.categorias.cargadas['AÑADIR TV'] ?? 0) + (datosPdv?.totales['AÑADIR TV'] ?? 0)
   const b2 = datos?.categorias.cargadas['2PLAY'] ?? 0
   const b3 = datos?.categorias.cargadas['3PLAY'] ?? 0
   const sumaPlay = b2 + b3
@@ -291,7 +318,7 @@ export default function DashboardClient() {
             Canal principal
             <select value={canal} onChange={e => setCanal(e.target.value)} className={'' + control + ' rounded-lg border px-3 py-2 font-normal'}>
               <option value="call">Call Lucom</option>
-              <option value="todos">Todos los canales (pendiente)</option>
+              {puedeVerTodos && <option value="todos">Todos los canales</option>}
               <option value="pdv">Puntos de Venta</option>
             </select>
           </label>
@@ -303,7 +330,7 @@ export default function DashboardClient() {
           </label>
         </div>
 
-        {canal === 'todos' && <p className={'' + tarjeta + ' mb-4 rounded-xl border p-4 text-sm'}>La consolidación de todos los canales continúa pendiente de integrar los restantes indicadores.</p>}
+        {canal === 'todos' && <p className={'' + tarjeta + ' mb-4 rounded-xl border p-4 text-sm'}>BAF consolidado: Call Lucom (cargadas con SDS) + Puntos de Venta (activaciones). PORTA, Línea Nueva, FWA, CATER y 1175: pendientes de consolidación; no se presentan totales parciales como totales de agencia.</p>}
         {error && <p role="alert" className="mb-4 text-sm font-semibold text-red-600">{error}</p>}
         {cargando && <p className={'' + secundario + ' mb-4 text-sm'}>Consultando indicadores BAF...</p>}
 
@@ -316,8 +343,21 @@ export default function DashboardClient() {
                 <span className="text-sm">{producto.nombre}</span>
               </div>
               <div className="px-3 py-4 text-center">
-                <div className="text-3xl font-bold tabular-nums">{canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
-                <div className={'' + secundario + ' mt-1 text-xs'}>{producto.nombre === 'BAF' ? (canal === 'pdv' ? 'Activaciones · Fecha activación' : 'BAF cargadas · SDS validada') : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
+                <div className="text-3xl font-bold tabular-nums">{bafTodosListo && producto.nombre === 'BAF' ? formatoNumero.format(datos!.totales.cargadas + datosPdv!.totales.total) : canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
+                <div className={'' + secundario + ' mt-1 text-xs'}>{producto.nombre === 'BAF' ? (canal === 'todos' ? 'Call cargadas + PDV activadas' : canal === 'pdv' ? 'Activaciones · Fecha activación' : 'BAF cargadas · SDS validada') : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
+                {producto.nombre === 'BAF' && canal === 'todos' && bafTodosListo && (
+                  <>
+                    <div className={'mt-3 flex h-3 overflow-hidden rounded ' + (oscuro ? 'bg-slate-700' : 'bg-gray-200')}>
+                      <div style={{ width: (bafTodosPlay ? bafTodos2 / bafTodosPlay * 100 : 0) + '%', backgroundColor: '#2563eb' }} />
+                      <div style={{ width: (bafTodosPlay ? bafTodos3 / bafTodosPlay * 100 : 0) + '%', backgroundColor: '#0d9488' }} />
+                    </div>
+                    <div className="mt-2 flex justify-between gap-2 text-xs">
+                      <span>2PLAY <strong>{formatoNumero.format(bafTodos2)}</strong></span>
+                      <span>3PLAY <strong>{formatoNumero.format(bafTodos3)}</strong></span>
+                    </div>
+                    <p className={'' + secundario + ' mt-1 text-[11px]'}>AÑADIR TV: {formatoNumero.format(bafTodosAnadir)} · se contabiliza por separado</p>
+                  </>
+                )}
                 {producto.nombre === 'BAF' && canal === 'pdv' && datosPdv && (() => {
                   const dosPlay = datosPdv.totales['2PLAY']
                   const tresPlay = datosPdv.totales['3PLAY']
@@ -354,6 +394,23 @@ export default function DashboardClient() {
           ))}
         </div>
 
+        {canal === 'todos' && bafTodosListo && (
+          <div className={tarjeta + ' mb-4 rounded-xl border p-4'}>
+            <h3 className={'font-bold ' + tituloSeccion}>BAF por origen comercial</h3>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {[
+                { nombre: 'Call Lucom · cargadas', valor: datos!.totales.cargadas },
+                { nombre: 'Puntos de Venta · activadas', valor: datosPdv!.totales.total },
+                { nombre: 'Total agencia · BAF', valor: datos!.totales.cargadas + datosPdv!.totales.total },
+              ].map(item => (
+                <div key={item.nombre} className={'rounded-lg border p-3 ' + borde}>
+                  <p className={secundario + ' text-xs'}>{item.nombre}</p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums">{formatoNumero.format(item.valor)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {canal === 'pdv' && (
           <div className="space-y-4">
             <div className={tarjeta + ' rounded-xl border p-4'}>
