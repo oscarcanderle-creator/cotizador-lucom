@@ -2,6 +2,14 @@
 
 import { useEffect, useState } from 'react'
 
+type TotalesPdv = { '2PLAY': number; '3PLAY': number; 'AÑADIR TV': number; total: number }
+type RespuestaPdv = {
+  desde: string
+  hasta: string
+  totales: TotalesPdv
+  porPdv: { punto_venta_id: string; punto_venta: string; totales: TotalesPdv; vendedores: Record<string, TotalesPdv> }[]
+  diarios: Record<string, TotalesPdv>
+}
 type Tema = 'ejecutivo' | 'oscuro' | 'compacto'
 type Indicador = 'ingresadas' | 'cargadas' | 'finalizadas' | 'canceladas'
 type Categoria = '2PLAY' | '3PLAY' | 'AÑADIR TV' | 'SIN CLASIFICAR'
@@ -72,6 +80,7 @@ export default function DashboardClient() {
   const [fechaInicio, setFechaInicio] = useState(() => hoyArgentina().slice(0, 7) + '-01')
   const [fechaFinal, setFechaFinal] = useState(() => hoyArgentina())
   const [canal, setCanal] = useState('call')
+  const [datosPdv, setDatosPdv] = useState<RespuestaPdv | null>(null)
   const [datos, setDatos] = useState<Respuesta | null>(null)
   const [comparacion, setComparacion] = useState<Respuesta | null>(null)
   const [detallePlanes, setDetallePlanes] = useState<DetallePlanes | null>(null)
@@ -80,11 +89,11 @@ export default function DashboardClient() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (canal !== 'call') {
+    if (canal === 'todos') {
+      setDatosPdv(null)
       setDatos(null)
       setComparacion(null)
       setDetallePlanes(null)
-      setErrorPlanes('')
       setError('')
       setCargando(false)
       return
@@ -103,10 +112,26 @@ export default function DashboardClient() {
     }
     setCargando(true)
     setError('')
+    setDatosPdv(null)
     setDatos(null)
     setComparacion(null)
     setDetallePlanes(null)
     setErrorPlanes('')
+    if (canal === 'pdv') {
+      fetch(`/api/dashboard/baf-pdv?desde=${desde}&hasta=${hasta}`, {
+        signal: controlador.signal, cache: 'no-store',
+      })
+        .then(async respuesta => {
+          const json = await respuesta.json()
+          if (!respuesta.ok) throw new Error(json.error || 'No se pudieron recuperar las BAF de PDV.')
+          if (!controlador.signal.aborted) setDatosPdv(json as RespuestaPdv)
+        })
+        .catch((err: unknown) => {
+          if (!controlador.signal.aborted) setError(err instanceof Error ? err.message : 'Error al consultar PDV.')
+        })
+        .finally(() => { if (!controlador.signal.aborted) setCargando(false) })
+      return () => controlador.abort()
+    }
     const comparar = periodo === 'mes' || periodo === 'anterior'
     const anterior = mesAnterior(desde)
     async function consultar(inicio: string, fin: string): Promise<Respuesta> {
@@ -267,7 +292,7 @@ export default function DashboardClient() {
             <select value={canal} onChange={e => setCanal(e.target.value)} className={'' + control + ' rounded-lg border px-3 py-2 font-normal'}>
               <option value="call">Call Lucom</option>
               <option value="todos">Todos los canales (pendiente)</option>
-              <option value="pdv">Puntos de Venta (pendiente)</option>
+              <option value="pdv">Puntos de Venta</option>
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold">
@@ -278,10 +303,11 @@ export default function DashboardClient() {
           </label>
         </div>
 
-        {canal !== 'call' && <p className={'' + tarjeta + ' mb-4 rounded-xl border p-4 text-sm'}>La integración de Puntos de Venta se habilitará con ACTIVACIONES, CATER y 1175.</p>}
+        {canal === 'todos' && <p className={'' + tarjeta + ' mb-4 rounded-xl border p-4 text-sm'}>La consolidación de todos los canales continúa pendiente de integrar los restantes indicadores.</p>}
         {error && <p role="alert" className="mb-4 text-sm font-semibold text-red-600">{error}</p>}
         {cargando && <p className={'' + secundario + ' mb-4 text-sm'}>Consultando indicadores BAF...</p>}
 
+        {/* Tarjetas comunes Call y PDV */}
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {productos.map(producto => (
             <div key={producto.nombre} className={'' + tarjeta + ' overflow-hidden rounded-xl border shadow-sm'}>
@@ -290,8 +316,15 @@ export default function DashboardClient() {
                 <span className="text-sm">{producto.nombre}</span>
               </div>
               <div className="px-3 py-4 text-center">
-                <div className="text-3xl font-bold tabular-nums">{canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
-                <div className={'' + secundario + ' mt-1 text-xs'}>{producto.nombre === 'BAF' ? 'BAF cargadas · SDS validada' : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
+                <div className="text-3xl font-bold tabular-nums">{canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
+                <div className={'' + secundario + ' mt-1 text-xs'}>{producto.nombre === 'BAF' ? (canal === 'pdv' ? 'Activaciones · Fecha activación' : 'BAF cargadas · SDS validada') : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
+                {producto.nombre === 'BAF' && canal === 'pdv' && datosPdv && (
+                  <div className="mt-3 space-y-1 text-left text-xs">
+                    <div className="flex justify-between"><span>2PLAY</span><strong>{formatoNumero.format(datosPdv.totales['2PLAY'])}</strong></div>
+                    <div className="flex justify-between"><span>3PLAY</span><strong>{formatoNumero.format(datosPdv.totales['3PLAY'])}</strong></div>
+                    <div className="flex justify-between"><span>AÑADIR TV</span><strong>{formatoNumero.format(datosPdv.totales['AÑADIR TV'])}</strong></div>
+                  </div>
+                )}
                 {producto.nombre === 'BAF' && canal === 'call' && (
                   <>
                     <div className={'mt-3 flex h-3 overflow-hidden rounded ' + (oscuro ? 'bg-slate-700' : 'bg-gray-200')}>
@@ -310,6 +343,44 @@ export default function DashboardClient() {
           ))}
         </div>
 
+        {canal === 'pdv' && (
+          <div className="space-y-4">
+            <div className={tarjeta + ' rounded-xl border p-4'}>
+              <h3 className={'font-bold ' + tituloSeccion}>Detalle por Punto de Venta · BAF</h3>
+              <p className={secundario + ' mt-1 text-xs'}>Abrí un Punto de Venta para consultar el desglose por vendedor.</p>
+              {datosPdv ? (
+                <div className="mt-3 space-y-2">
+                  <div className={secundario + ' grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(44px,70px))] gap-1 px-2 text-right text-[10px]'}>
+                    <span className="text-left">PDV / vendedor</span><span>2PLAY</span><span>3PLAY</span><span>Añadir TV</span><span>TOTAL</span>
+                  </div>
+                  {[...datosPdv.porPdv].sort((a,b) => b.totales.total - a.totales.total || a.punto_venta.localeCompare(b.punto_venta)).map(pdv => (
+                    <details key={pdv.punto_venta_id} className={'rounded-lg border ' + borde}>
+                      <summary className={'grid cursor-pointer grid-cols-[minmax(0,1fr)_repeat(4,minmax(44px,70px))] items-center gap-1 px-2 py-3 text-right text-xs font-semibold ' + (oscuro ? 'hover:bg-slate-600' : 'hover:bg-gray-50')}>
+                        <span className="truncate text-left" title={pdv.punto_venta}>{pdv.punto_venta}</span>
+                        {(['2PLAY', '3PLAY', 'AÑADIR TV', 'total'] as const).map(clave => <span key={clave} className="tabular-nums">{formatoNumero.format(pdv.totales[clave])}</span>)}
+                      </summary>
+                      <div className={'border-t ' + borde + ' ' + fondoSuave}>
+                        {Object.entries(pdv.vendedores).sort((a,b) => b[1].total - a[1].total || a[0].localeCompare(b[0])).map(([nombre, totales]) => (
+                          <div key={nombre} className={'grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(44px,70px))] gap-1 border-b px-2 py-2 text-right text-xs last:border-0 ' + borde}>
+                            <span className="truncate text-left" title={nombre}>{nombre}</span>
+                            {(['2PLAY', '3PLAY', 'AÑADIR TV', 'total'] as const).map(clave => <span key={clave} className="tabular-nums">{formatoNumero.format(totales[clave])}</span>)}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
+                  <div className={'grid grid-cols-[minmax(0,1fr)_repeat(4,minmax(44px,70px))] gap-1 border-t px-2 py-2 text-right text-xs font-bold ' + borde}>
+                    <span className="text-left">TOTAL</span>
+                    {(['2PLAY', '3PLAY', 'AÑADIR TV', 'total'] as const).map(clave => <span key={clave}>{formatoNumero.format(datosPdv.totales[clave])}</span>)}
+                  </div>
+                  {datosPdv.porPdv.length === 0 && <p className={secundario + ' py-4 text-sm'}>Sin ventas BAF en el período.</p>}
+                </div>
+              ) : <p className={secundario + ' mt-3 text-sm'}>{cargando ? 'Consultando Puntos de Venta...' : error ? 'No se pudieron cargar los datos.' : 'Sin datos disponibles.'}</p>}
+            </div>
+            <p className={secundario + ' text-xs'}>PORTA, Línea Nueva, CATER y 1175 de PDV: pendientes de integración.</p>
+          </div>
+        )}
+        {canal === 'call' && (<>
         <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
             <h3 className={'font-bold ' + tituloSeccion}>Evolución diaria · BAF Call Lucom</h3>
@@ -506,6 +577,7 @@ export default function DashboardClient() {
             )}
           </div>
         </div>
+        </>)}
         <p className={'' + secundario + ' mt-4 text-xs'}>Dashboard en desarrollo. Los datos visibles corresponden a consultas reales de BAF; los módulos pendientes no muestran cifras simuladas.</p>
       </div>
     </section>
