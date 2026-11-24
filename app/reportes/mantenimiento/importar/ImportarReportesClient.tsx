@@ -9,6 +9,7 @@ type TipoReporte =
   | 'FIJA'
   | 'WFM'
   | 'ACTIVACIONES'
+  | 'TRAMITES_PORTABILIDAD'
   | 'CATER'
   | 'DISTRIBUCION_R3'
 
@@ -96,6 +97,11 @@ const REPORTES: {
     value: 'ACTIVACIONES',
     label: 'Rep. Activaciones',
     descripcion: 'Activaciones de líneas móviles informadas por Claro.',
+  },
+  {
+    value: 'TRAMITES_PORTABILIDAD',
+    label: 'Tramites de Portabilidad',
+    descripcion: 'Trámites y estados de portabilidad informados por Claro.',
   },
   {
     value: 'CATER',
