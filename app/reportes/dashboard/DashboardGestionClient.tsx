@@ -214,65 +214,93 @@ function rangoAnterior(
   }
 }
 
-function MedidorInstrumental({ actual, anterior, color, oscuro }: {
+function MedidorInstrumental({
+  actual,
+  objetivo,
+  color,
+  oscuro,
+  estadoObjetivo,
+}: {
   actual: number | null
-  anterior: number | null
+  objetivo: number | null
   color: string
   oscuro: boolean
+  estadoObjetivo: string
 }) {
-  const comparable = actual !== null && anterior !== null
-    && anterior >= 0 && actual >= 0
+  const porcentaje =
+    objetivo !== null && objetivo > 0 && actual !== null
+      ? actual / objetivo * 100
+      : null
 
-  const maximo = Math.max(actual ?? 0, anterior ?? 0, 1)
-
-  const proporcion = comparable
-    ? anterior / maximo * 100
-    : 0
-
-  const anguloAnterior = Math.PI * (anterior ?? 0) / maximo
+  const avance = Math.min(100, Math.max(0, porcentaje ?? 0))
+  const angulo = Math.PI * avance / 100
+  const secundario = oscuro ? '#94a3b8' : '#64748b'
 
   return (
     <svg
-      viewBox="0 0 160 94"
-      className="mx-auto w-full max-w-[180px]"
+      viewBox="0 0 180 122"
+      className="mx-auto w-full max-w-[200px]"
       role="img"
-      aria-label={'Valor actual: ' + (actual ?? 'No disponible')
-        + '. Anterior: ' + (anterior ?? 'No disponible')}
+      aria-label={
+        'Ventas: ' + (actual ?? 'No disponible') +
+        '. Objetivo: ' + (objetivo ?? estadoObjetivo)
+      }
     >
       <path
-        d="M16 80 A64 64 0 0 1 144 80"
+        d="M20 82 A70 70 0 0 1 160 82"
         fill="none"
         stroke={oscuro ? '#334155' : '#e5e7eb'}
         strokeWidth="10"
         strokeLinecap="round"
       />
-      {comparable && proporcion > 0 && (
+
+      {porcentaje !== null && avance > 0 && (
         <path
-          d="M16 80 A64 64 0 0 1 144 80"
+          d="M20 82 A70 70 0 0 1 160 82"
           fill="none"
           stroke={color}
           strokeWidth="10"
           strokeLinecap="round"
           pathLength="100"
-          strokeDasharray={proporcion + ' 100'}
+          strokeDasharray={avance + ' 100'}
         />
       )}
-      {comparable && anterior > 0 && (
+
+      {objetivo !== null && objetivo > 0 &&
+        [0, 0.25, 0.5, 0.75, 1].map(t => (
+          <line
+            key={t}
+            x1={90 - 61 * Math.cos(Math.PI * t)}
+            y1={82 - 61 * Math.sin(Math.PI * t)}
+            x2={90 - 56 * Math.cos(Math.PI * t)}
+            y2={82 - 56 * Math.sin(Math.PI * t)}
+            stroke={secundario}
+            strokeWidth="1"
+          />
+        ))
+      }
+
+      {porcentaje !== null && (
         <g transform={
-          'translate('
-          + (80 - 64 * Math.cos(anguloAnterior)) + ' '
-          + (80 - 64 * Math.sin(anguloAnterior)) + ') rotate('
-          + (anguloAnterior * 180 / Math.PI - 90) + ')'
+          'translate(' +
+          (90 - 70 * Math.cos(angulo)) + ' ' +
+          (82 - 70 * Math.sin(angulo)) +
+          ') rotate(' +
+          (angulo * 180 / Math.PI - 90) + ')'
         }>
           <path
-            d="M-8 -10 L10 0 L-8 10 Z"
+            d="M-7 -8 L9 0 L-7 8 Z"
             fill={color}
+            stroke={oscuro ? '#e2e8f0' : '#ffffff'}
+            strokeWidth="1"
             strokeLinejoin="round"
           />
         </g>
       )}
+
       <text
-        x="80" y="64"
+        x="90"
+        y="61"
         textAnchor="middle"
         fontSize="34"
         fontWeight="700"
@@ -280,15 +308,63 @@ function MedidorInstrumental({ actual, anterior, color, oscuro }: {
       >
         {actual === null ? '—' : formato.format(actual)}
       </text>
+
       <text
-        x="80" y="82"
+        x="90"
+        y="78"
         textAnchor="middle"
         fontSize="11"
-        fill={oscuro ? '#94a3b8' : '#64748b'}
+        fill={secundario}
       >
-        {anterior !== null
-          ? 'Ant. ' + formato.format(anterior)
-          : 'Sin comparación'}
+        {objetivo !== null
+          ? 'Obj. ' + formato.format(objetivo)
+          : estadoObjetivo}
+      </text>
+
+      {objetivo !== null && objetivo > 0 && (
+        <>
+          <text
+            x="20"
+            y="100"
+            textAnchor="middle"
+            fontSize="10"
+            fill={secundario}
+          >
+            0
+          </text>
+
+          <text
+            x="160"
+            y="100"
+            textAnchor="middle"
+            fontSize="10"
+            fill={secundario}
+          >
+            {formato.format(objetivo)}
+          </text>
+        </>
+      )}
+
+      <text
+        x="90"
+        y="108"
+        textAnchor="middle"
+        fontSize="17"
+        fontWeight="700"
+        fill={
+          porcentaje === null
+            ? secundario
+            : porcentaje >= 100
+              ? '#16a34a'
+              : color
+        }
+      >
+        {porcentaje === null
+          ? objetivo === 0 ? 'Sin escala' : '—'
+          : porcentaje.toLocaleString('es-AR', {
+              minimumFractionDigits: 1,
+              maximumFractionDigits: 1,
+            }) + '%'}
       </text>
     </svg>
   )
@@ -296,8 +372,10 @@ function MedidorInstrumental({ actual, anterior, color, oscuro }: {
 
 export default function DashboardGestionClient({
   oscuro,
+  versionObjetivos = 0,
 }: {
   oscuro: boolean
+  versionObjetivos?: number
 }) {
   const [periodo, setPeriodo] = useState('mes')
   const [inicio, setInicio] = useState(
@@ -315,6 +393,91 @@ export default function DashboardGestionClient({
   const [grupos, setGrupos] = useState<Respuesta['grupos']>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+
+  const [objetivosMensuales, setObjetivosMensuales] = useState<{
+    mes: string
+    objetivos: Record<string, number | null>
+  } | null>(null)
+
+  const [errorObjetivos, setErrorObjetivos] = useState(false)
+  const [cargandoObjetivos, setCargandoObjetivos] = useState(false)
+
+  const rangoObjetivos = rangoFechas(periodo, inicio, final)
+
+  const mesObjetivos =
+    rangoObjetivos.desde &&
+    rangoObjetivos.hasta &&
+    rangoObjetivos.desde <= rangoObjetivos.hasta &&
+    rangoObjetivos.desde.slice(0, 7) ===
+      rangoObjetivos.hasta.slice(0, 7)
+      ? rangoObjetivos.desde.slice(0, 7)
+      : ''
+
+  useEffect(() => {
+    setObjetivosMensuales(null)
+    setErrorObjetivos(false)
+    setCargandoObjetivos(false)
+
+    if (!mesObjetivos || grupo || vendedor) return
+
+    const controller = new AbortController()
+
+    setCargandoObjetivos(true)
+
+    fetch(
+      '/api/dashboard/objetivos?mes=' +
+        encodeURIComponent(mesObjetivos),
+      {
+        signal: controller.signal,
+        cache: 'no-store',
+      }
+    )
+      .then(async respuesta => {
+        if (!respuesta.ok) {
+          throw new Error('Error al consultar objetivos.')
+        }
+
+        return respuesta.json()
+      })
+      .then(datos => {
+        if (!controller.signal.aborted) {
+          setObjetivosMensuales(datos)
+        }
+      })
+      .catch(error => {
+        if (!controller.signal.aborted) {
+          setErrorObjetivos(true)
+          console.error('Objetivos Dashboard', error)
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setCargandoObjetivos(false)
+        }
+      })
+
+    return () => controller.abort()
+  }, [mesObjetivos, versionObjetivos, grupo, vendedor])
+
+  function objetivoNegocio(clave: string): number | null {
+    if (grupo || vendedor) return null
+
+    if (
+      !mesObjetivos ||
+      objetivosMensuales?.mes !== mesObjetivos
+    ) return null
+
+    const indicadores: Record<string, string> = {
+      baf: 'BAF_INGRESADAS',
+      porta: 'PORTA_INGRESADAS',
+      ln: 'LN_INGRESADAS',
+      fwa: 'FWA_INGRESADAS',
+      total_movil: 'TOTAL_MOVIL_INGRESADAS',
+    }
+
+    return objetivosMensuales.objetivos[indicadores[clave]] ?? null
+  }
+
 
   useEffect(() => {
     const guardado = localStorage.getItem(
@@ -624,7 +787,18 @@ export default function DashboardGestionClient({
                 {tema === 'instrumental' ? (
                   <MedidorInstrumental
                     actual={cantidad ?? null}
-                    anterior={anterior?.totales[n.clave] ?? null}
+                    objetivo={objetivoNegocio(n.clave)}
+                    estadoObjetivo={
+                      grupo || vendedor
+                        ? 'Sin objetivo'
+                        : !mesObjetivos
+                          ? 'Período multimensual'
+                          : cargandoObjetivos
+                            ? 'Consultando...'
+                            : errorObjetivos
+                              ? 'Error de consulta'
+                              : 'Sin objetivo'
+                    }
                     color={n.color}
                     oscuro={oscuro}
                   />

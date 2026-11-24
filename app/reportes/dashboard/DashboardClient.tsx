@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import DashboardGestionClient from './DashboardGestionClient'
+import DashboardObjetivos from './DashboardObjetivos'
 
 type TotalesPdv = { '2PLAY': number; '3PLAY': number; 'AÑADIR TV': number; total: number }
 type RespuestaPdv = {
@@ -326,6 +327,8 @@ export default function DashboardClient({ puedeVerTodos, puedeVerGestion }: {
   puedeVerGestion: boolean
 }) {
   const [vistaDashboard, setVistaDashboard] = useState<'agencia' | 'call'>('agencia')
+  const [mostrarObjetivos, setMostrarObjetivos] = useState(false)
+  const [versionObjetivos, setVersionObjetivos] = useState(0)
   const [tema, setTema] = useState<Tema>('ejecutivo')
   const [temaVisual, setTemaVisual] = useState<'clasico' | 'ejecutivo' | 'instrumental'>('clasico')
 
@@ -715,7 +718,17 @@ export default function DashboardClient({ puedeVerTodos, puedeVerGestion }: {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <button
+          {vistaDashboard === 'call' && puedeVerGestion && (
+              <button
+                type="button"
+                onClick={() => setMostrarObjetivos(true)}
+                className="rounded-lg border border-white/30 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10"
+              >
+                ◎ Objetivos
+              </button>
+            )}
+
+            <button
             type="button"
             onClick={() => setTema(actual => actual === 'oscuro' ? 'ejecutivo' : 'oscuro')}
             aria-label={oscuro ? 'Activar modo claro' : 'Activar modo oscuro'}
@@ -745,8 +758,20 @@ export default function DashboardClient({ puedeVerTodos, puedeVerGestion }: {
         </div>
       </header>
 
+      {mostrarObjetivos && puedeVerGestion && (
+        <DashboardObjetivos
+          oscuro={oscuro}
+          onCerrar={() => setMostrarObjetivos(false)}
+          onGuardado={() => setVersionObjetivos(v => v + 1)}
+        />
+      )}
+
+
       {vistaDashboard === 'call' && puedeVerGestion && (
-        <DashboardGestionClient oscuro={oscuro} />
+        <DashboardGestionClient
+          oscuro={oscuro}
+          versionObjetivos={versionObjetivos}
+        />
       )}
 
       <div className={vistaDashboard === 'call' ? 'hidden' : 'p-4 sm:p-5'}>
