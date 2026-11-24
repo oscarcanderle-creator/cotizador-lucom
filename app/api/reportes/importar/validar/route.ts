@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { leerTramitesPortabilidad } from '../../../../../lib/reportes/leerTramitesPortabilidad'
 import { leerCsvClaro } from '../../../../../lib/reportes/leerCsvClaro'
 import { leerXlsxClaro } from '../../../../../lib/reportes/leerXlsxClaro'
 import { createClient } from '../../../../../utils/supabase/server'
@@ -273,6 +274,13 @@ export async function POST(request: Request) {
     const formData = await request.formData()
     const tipo = limpiar(formData.get('tipo')).toUpperCase()
     const archivo = formData.get('archivo')
+
+    if (tipo === 'TRAMITES_PORTABILIDAD') {
+      if (!(archivo instanceof File)) return NextResponse.json({error:'Debe seleccionar un archivo.'},{status:400})
+      const {hoja, datos} = await leerTramitesPortabilidad(await archivo.arrayBuffer())
+      const portadas = datos.filter(d => d.estado === 'ACTIVADO NRO PORTADO').reduce((s,d) => s+d.cantidad,0)
+      return NextResponse.json({ok:true,tipo,reporte:'Trámites de Portabilidad',archivo:archivo.name,filas_archivo:hoja.cantidadFilas,columnas:hoja.cantidadColumnas,registros_encontrados:datos.length,registros_validos:datos.length,registros_descartados:0,mensaje:'Archivo validado. Líneas portadas: '+portadas})
+    }
 
     if (!tipo) {
       return NextResponse.json(
