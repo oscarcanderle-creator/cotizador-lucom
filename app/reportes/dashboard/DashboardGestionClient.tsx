@@ -575,6 +575,24 @@ export default function DashboardGestionClient({
     return () => controlador.abort()
   }, [periodo, desde, hasta, grupo, vendedor])
 
+  const [ranking, setRanking] = useState<{ vendedor:string; porta:number; ln:number }[] | null>(null)
+  const [errorRanking, setErrorRanking] = useState('')
+  useEffect(() => {
+    setRanking(null)
+    setErrorRanking('')
+    if (!desde || !hasta || desde > hasta || (grupo && grupo !== 'L1')) return
+    const controller = new AbortController()
+    const params = new URLSearchParams({desde,hasta,grupo,vendedor})
+    fetch('/api/dashboard/ranking-propias?' + params, {signal:controller.signal,cache:'no-store'})
+      .then(async r => {
+        const json = await r.json()
+        if (!r.ok) throw new Error(json.error || 'Error al consultar ranking.')
+        if (!controller.signal.aborted) setRanking(json.filas)
+      })
+      .catch(e => { if (!controller.signal.aborted) setErrorRanking(e.message) })
+    return () => controller.abort()
+  }, [desde,hasta,grupo,vendedor])
+
   const vendedores = [...new Set(
     grupos
       .filter(g => !grupo || g.nombre === grupo)
@@ -859,6 +877,38 @@ export default function DashboardGestionClient({
           )
         })}
       </div>
+
+      <section className="mt-5">
+        <h3 className="text-lg font-bold">Ranking de ventas propias</h3>
+        <p className="mb-3 text-xs opacity-70">Vendedores L1 · Ventas concretadas · Período seleccionado</p>
+        {grupo && grupo !== 'L1' ? <p className="text-sm opacity-70">Este ranking corresponde exclusivamente al grupo L1.</p> : errorRanking ? <p className="text-sm text-red-500">{errorRanking}</p> : !ranking ? <p className="text-sm opacity-70">Consultando ranking…</p> : (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {([{clave:'porta',nombre:'PORTABILIDAD',color:'#e7192c',fecha:'Fecha de portación'}, {clave:'ln',nombre:'LÍNEA NUEVA',color:'#7342d7',fecha:'Fecha carga STL'}] as const).map(n => {
+              const filas = ranking.filter(f => f[n.clave] > 0).sort((a,b) => b[n.clave]-a[n.clave] || a.vendedor.localeCompare(b.vendedor,'es'))
+              const max = Math.max(1,...filas.map(f => f[n.clave]))
+              return <div key={n.clave} className={tarjeta + ' overflow-hidden rounded-xl border'}>
+                <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm font-bold" style={{backgroundColor:n.color,color:'#fff'}}>
+                  <span>{n.nombre}</span><span>{filas.reduce((s,f)=>s+f[n.clave],0)}</span>
+                </div>
+                <div className="space-y-3 p-3">
+                  {!filas.length && <p className="text-sm opacity-70">Sin ventas en el período.</p>}
+                  {filas.map((f,i) => <div key={f.vendedor}>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="w-6 shrink-0 opacity-60">{i+1}.</span>
+                      <span className="min-w-0 flex-1 break-words">{f.vendedor}</span>
+                      <span className="font-bold tabular-nums">{f[n.clave]}</span>
+                    </div>
+                    <div className={'ml-8 mt-1 h-2 rounded-full ' + (oscuro?'bg-slate-700':'bg-gray-100')}>
+                      <div className="h-full rounded-full" style={{width:(100*f[n.clave]/max)+'%',backgroundColor:n.color}}/>
+                    </div>
+                  </div>)}
+                  <p className="text-[10px] opacity-60">{n.fecha} · FWA excluido</p>
+                </div>
+              </div>
+            })}
+          </div>
+        )}
+      </section>
 
       <p className="mt-4 text-xs opacity-60">
         Fuente: operaciones y productos registrados en PGL.
