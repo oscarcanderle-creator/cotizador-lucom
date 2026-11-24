@@ -158,7 +158,11 @@ export default function ImportarReportesClient() {
   const [actualizacionCompletada, setActualizacionCompletada] = useState(false)
 
   useEffect(() => {
+    if (tipoReporte !== 'FIJA') return
     let vigente = true
+    setConsultandoActualizacion(true)
+    setErrorActualizacion('')
+    setActualizacionCompletada(false)
     async function consultarDisponibilidad() {
       try {
         const respuesta = await fetch('/api/reportes/actualizar-datos', { cache: 'no-store' })
@@ -175,10 +179,10 @@ export default function ImportarReportesClient() {
     }
     void consultarDisponibilidad()
     return () => { vigente = false }
-  }, [])
+  }, [tipoReporte, resultadoImportacion])
 
   async function actualizarDatos() {
-    if (actualizandoDatos || procesando || consultandoActualizacion || registrosFija === 0) return
+    if (tipoReporte !== 'FIJA' || actualizandoDatos || procesando || consultandoActualizacion || registrosFija === 0) return
     setActualizandoDatos(true)
     setActualizacionCompletada(false)
     setErrorActualizacion('')
@@ -274,6 +278,9 @@ export default function ImportarReportesClient() {
 
   function cambiarTipoReporte(valor: TipoReporte | '') {
     setTipoReporte(valor)
+    setActualizacionCompletada(false)
+    setResultadoActualizacion(null)
+    setProcesadosActualizacion(0)
     limpiarResultado()
   }
 
@@ -478,7 +485,7 @@ export default function ImportarReportesClient() {
             onChange={(event) =>
               cambiarTipoReporte(event.target.value as TipoReporte | '')
             }
-            disabled={procesando}
+            disabled={procesando || actualizandoDatos}
             className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 disabled:bg-gray-100"
           >
             <option value="">Seleccionar reporte...</option>
@@ -831,7 +838,7 @@ export default function ImportarReportesClient() {
           </div>
         )}
 
-        {!actualizacionCompletada && (
+        {tipoReporte === 'FIJA' && !actualizacionCompletada && (
         <section className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 sm:p-5">
           <h2 className="text-base font-bold text-gray-900">Actualización de datos</h2>
           <p className="mt-1 text-sm text-gray-600">
