@@ -616,6 +616,45 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
           ))}
         </div>
 
+        {(canal === 'pdv' || canal === 'todos') && (
+          <section className={tarjeta + ' mb-4 rounded-xl border p-4'}>
+            <h3 className={'font-bold ' + tituloSeccion}>Ranking de Puntos de Venta por producto</h3>
+            <p className={secundario + ' mt-1 text-xs'}>Exclusivamente PDV · Período seleccionado · Orden por cantidad de operaciones</p>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {[
+                { nombre: 'BAF', color: productos[0].color, filas: datosPdv?.porPdv.map(p => ({ ...p, valor: p.totales.total })) },
+                { nombre: 'PORTA', color: productos[1].color, filas: movilPdv?.porPdv.map(p => ({ ...p, valor: p.porta })) },
+                { nombre: 'LÍNEA NUEVA', color: productos[2].color, filas: movilPdv?.porPdv.map(p => ({ ...p, valor: p.ln })) },
+                { nombre: 'FWA', color: productos[3].color, filas: movilPdv?.porPdv.map(p => ({ ...p, valor: p.fwa })) },
+                { nombre: 'CATER / EQUIPOS', color: productos[4].color, filas: cater?.porPdv.map(p => ({ ...p, valor: p.total })) },
+                { nombre: '1175', color: productos[5].color, filas: r3?.porPdv.map(p => ({ ...p, valor: p.total })) },
+              ].map(producto => {
+                const filas = [...(producto.filas ?? [])].sort((a,b) => b.valor - a.valor || a.punto_venta.localeCompare(b.punto_venta))
+                const maximo = Math.max(1, ...filas.map(p => p.valor))
+                return (
+                  <div key={producto.nombre} className={'overflow-hidden rounded-lg border ' + borde}>
+                    <h4 className={producto.color + ' px-3 py-2 text-sm font-bold text-white'}>{producto.nombre}</h4>
+                    <div className="space-y-2 p-3">
+                      {!producto.filas ? <p className={secundario + ' text-xs'}>Datos no disponibles</p> : !filas.length || filas.every(p => p.valor === 0) ? <p className={secundario + ' text-xs'}>Sin operaciones en el período</p> : filas.map((pdv,i) => (
+                        <div key={pdv.punto_venta_id}>
+                          <div className="flex items-baseline gap-2 text-xs">
+                            <span className={secundario + ' w-5 shrink-0 tabular-nums'}>{i + 1}.</span>
+                            <span className="min-w-0 flex-1" title={pdv.punto_venta}>{pdv.punto_venta.replace(/^PDV\s+/i, '')}</span>
+                            <span className={'shrink-0 font-bold tabular-nums ' + (pdv.valor < 0 ? 'text-red-600' : '')}>{formatoNumero.format(pdv.valor)}</span>
+                          </div>
+                          <div className={'ml-7 mt-1 h-1.5 overflow-hidden rounded ' + (oscuro ? 'bg-slate-700' : 'bg-gray-100')}>
+                            <div className={producto.color + ' h-full rounded'} style={{ width: Math.max(0, pdv.valor) / maximo * 100 + '%' }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
         {canal === 'todos' && bafTodosListo && (
           <div className={tarjeta + ' mb-4 rounded-xl border p-4'}>
             <h3 className={'font-bold ' + tituloSeccion}>BAF por origen comercial</h3>
