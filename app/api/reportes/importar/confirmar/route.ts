@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { leerTramitesPortabilidad } from '../../../../../lib/reportes/leerTramitesPortabilidad'
 import { leerCsvClaro } from '../../../../../lib/reportes/leerCsvClaro'
 import { leerXlsxClaro } from '../../../../../lib/reportes/leerXlsxClaro'
 import { createClient } from '../../../../../utils/supabase/server'
@@ -556,6 +557,15 @@ export async function POST(request: Request) {
     const formData = await request.formData()
     const tipo = limpiar(formData.get('tipo')).toUpperCase()
     const archivo = formData.get('archivo')
+
+    if (tipo === 'TRAMITES_PORTABILIDAD') {
+      if (!(archivo instanceof File)) return NextResponse.json({error:'Debe seleccionar un archivo.'},{status:400})
+      const {datos} = await leerTramitesPortabilidad(await archivo.arrayBuffer())
+      const admin = createAdminClient()
+      const {data,error} = await admin.rpc('importar_reporte_tramites_portabilidad',{p_datos:datos,p_usuario_id:user.id,p_archivo_original:archivo.name})
+      if (error) throw error
+      return NextResponse.json({...data,reporte:'Trámites de Portabilidad',archivo:archivo.name,mensaje:'Trámites de Portabilidad importados correctamente.'})
+    }
 
     if (
       tipo !== 'ITEC' &&
