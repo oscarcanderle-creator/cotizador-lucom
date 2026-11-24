@@ -622,8 +622,8 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
         )}
         {canal === 'pdv' && (
           <div className="space-y-4">
-            <div className={tarjeta + ' rounded-xl border p-4'}>
-              <h3 className={'font-bold ' + tituloSeccion}>Detalle por Punto de Venta · BAF</h3>
+            <details className={tarjeta + ' group rounded-xl border p-4'}>
+              <summary className={'flex cursor-pointer list-none items-center justify-between gap-2 font-bold [&::-webkit-details-marker]:hidden ' + tituloSeccion}><span>Detalle por Punto de Venta · BAF</span><span aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-90">▸</span></summary>
               <p className={secundario + ' mt-1 text-xs'}>Abrí un Punto de Venta para consultar el desglose por vendedor.</p>
               {datosPdv ? (
                 <div className="mt-3 space-y-2">
@@ -653,9 +653,9 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
                   {datosPdv.porPdv.length === 0 && <p className={secundario + ' py-4 text-sm'}>Sin ventas BAF en el período.</p>}
                 </div>
               ) : <p className={secundario + ' mt-3 text-sm'}>{cargando ? 'Consultando Puntos de Venta...' : error ? 'No se pudieron cargar los datos.' : 'Sin datos disponibles.'}</p>}
-            </div>
-            <div className={tarjeta + ' rounded-xl border p-4'}>
-              <h3 className={'font-bold ' + tituloSeccion}>Detalle por Punto de Venta · PORTA y Línea Nueva</h3>
+            </details>
+            <details className={tarjeta + ' group rounded-xl border p-4'}>
+              <summary className={'flex cursor-pointer list-none items-center justify-between gap-2 font-bold [&::-webkit-details-marker]:hidden ' + tituloSeccion}><span>Detalle por Punto de Venta · PORTA y Línea Nueva</span><span aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-90">▸</span></summary>
               <p className={secundario + ' mt-1 text-xs'}>Total móvil: Activaciones (3055, 3065, 4001, 4095, 5301). PORTA: trámites activados por Dia ID. Línea Nueva: diferencia de ambos reportes para el mismo período y PDV.</p>
               {movilPdv ? (
                 <div className="mt-3 overflow-x-auto">
@@ -686,13 +686,13 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
                   {movilPdv.inconsistencias.length > 0 && <p role="alert" className="mt-3 text-sm font-semibold text-red-600">Atención: {movilPdv.inconsistencias.length} PDV con LN negativa. Revisar diferencias entre reportes.</p>}
                 </div>
               ) : <p className={secundario + ' mt-3 text-sm'}>{cargando ? 'Consultando móviles de PDV...' : 'Indicadores móviles no disponibles.'}</p>}
-            </div>
+            </details>
             <p className={secundario + ' text-xs'}>1175 de PDV: pendiente de integración.</p>
           </div>
         )}
         {(canal === 'pdv' || canal === 'todos') && (
-          <div className={tarjeta + ' mb-4 rounded-xl border p-4'}>
-            <h3 className={'font-bold ' + tituloSeccion}>Detalle CATER / EQUIPOS por Punto de Venta</h3>
+          <details className={tarjeta + ' mb-4 group rounded-xl border p-4'}>
+            <summary className={'flex cursor-pointer list-none items-center justify-between gap-2 font-bold [&::-webkit-details-marker]:hidden ' + tituloSeccion}><span>Detalle CATER / EQUIPOS por Punto de Venta</span><span aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-90">▸</span></summary>
             <p className={secundario + ' mt-1 text-xs'}>TipoVenta DIST · Fecha migración · SDS único. Abrí cada PDV para consultar sus vendedores.</p>
             {errorCater ? <p role="alert" className="mt-3 text-sm text-red-600">{errorCater}</p> : cater ? (
               <div className="mt-3 space-y-2">
@@ -713,7 +713,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
                 <div className={'flex justify-between border-t px-3 py-2 text-sm font-bold ' + borde}><span>TOTAL</span><span>{formatoNumero.format(cater.total)}</span></div>
               </div>
             ) : <p className={secundario + ' mt-3 text-sm'}>Consultando CATER...</p>}
-          </div>
+          </details>
         )}
         {canal === 'call' && (<>
         <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
@@ -840,8 +840,8 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
         </div>
 
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-          <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className={'font-bold ' + tituloSeccion}>Detalle por canales comerciales · BAF</h3>
+          <details className={'' + tarjeta + ' group rounded-xl border p-4'}>
+            <summary className={'flex cursor-pointer list-none items-center justify-between gap-2 font-bold [&::-webkit-details-marker]:hidden ' + tituloSeccion}><span>Detalle por canales comerciales · BAF</span><span aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-90">▸</span></summary>
             <p className={'' + secundario + ' mt-1 text-xs'}>Abrí cada canal para consultar sus vendedores. Referidos incluye N1, C1, T1, P1, J1, F1, B1 y el histórico R1.</p>
             {datos && canalesOrdenados.length ? (
               <div className="mt-3 space-y-2">
@@ -876,9 +876,9 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
                 {cargando ? 'Consultando canales...' : datos ? 'Sin ventas en el período.' : 'Seleccioná Call Lucom y un período.'}
               </div>
             )}
-          </div>
-          <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className={'font-bold ' + tituloSeccion}>Detalle Planes Porta - LN</h3>
+          </details>
+          <details className={'' + tarjeta + ' group rounded-xl border p-4'}>
+            <summary className={'flex cursor-pointer list-none items-center justify-between gap-2 font-bold [&::-webkit-details-marker]:hidden ' + tituloSeccion}><span>Detalle Planes Porta - LN</span><span aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-90">▸</span></summary>
             <p className={'' + secundario + ' mt-1 text-xs'}>Ventas con Estado BBOO CARGADO STL, por Fecha Carga STL. MASIVO y PYME consolidados. FWA excluido.</p>
             {errorPlanes ? (
               <p className="mt-3 rounded-lg border border-red-200 p-4 text-sm text-red-600">{errorPlanes}</p>
@@ -919,7 +919,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
                 {canal === 'call' ? 'Consultando detalle de planes...' : 'Seleccioná Call Lucom para consultar el detalle.'}
               </div>
             )}
-          </div>
+          </details>
         </div>
         </>)}
         <p className={'' + secundario + ' mt-4 text-xs'}>Dashboard en desarrollo. Los indicadores disponibles se consultan en PGL y reportes Claro; los pendientes no muestran cifras simuladas.</p>
