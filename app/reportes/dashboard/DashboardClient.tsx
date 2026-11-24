@@ -213,6 +213,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
   const [fechaInicio, setFechaInicio] = useState(() => hoyArgentina().slice(0, 7) + '-01')
   const [fechaFinal, setFechaFinal] = useState(() => hoyArgentina())
   const [canal, setCanal] = useState('call')
+  const [productosOcultos, setProductosOcultos] = useState<string[]>([])
   const [r3, setR3] = useState<RespuestaR3 | null>(null)
   const [errorR3, setErrorR3] = useState('')
   const [cater, setCater] = useState<RespuestaCater | null>(null)
@@ -616,44 +617,57 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
           ))}
         </div>
 
-        {(canal === 'pdv' || canal === 'todos') && (
-          <section className={tarjeta + ' mb-4 rounded-xl border p-4'}>
-            <h3 className={'font-bold ' + tituloSeccion}>Ranking de Puntos de Venta por producto</h3>
-            <p className={secundario + ' mt-1 text-xs'}>Exclusivamente PDV · Período seleccionado · Orden por cantidad de operaciones</p>
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {[
-                { nombre: 'BAF', color: productos[0].color, filas: datosPdv?.porPdv.map(p => ({ ...p, valor: p.totales.total })) },
-                { nombre: 'PORTA', color: productos[1].color, filas: movilPdv?.porPdv.map(p => ({ ...p, valor: p.porta })) },
-                { nombre: 'LÍNEA NUEVA', color: productos[2].color, filas: movilPdv?.porPdv.map(p => ({ ...p, valor: p.ln })) },
-                { nombre: 'FWA', color: productos[3].color, filas: movilPdv?.porPdv.map(p => ({ ...p, valor: p.fwa })) },
-                { nombre: 'CATER / EQUIPOS', color: productos[4].color, filas: cater?.porPdv.map(p => ({ ...p, valor: p.total })) },
-                { nombre: '1175', color: productos[5].color, filas: r3?.porPdv.map(p => ({ ...p, valor: p.total })) },
-              ].map(producto => {
-                const filas = [...(producto.filas ?? [])].sort((a,b) => b.valor - a.valor || a.punto_venta.localeCompare(b.punto_venta))
-                const maximo = Math.max(1, ...filas.map(p => p.valor))
-                return (
-                  <div key={producto.nombre} className={'overflow-hidden rounded-lg border ' + borde}>
-                    <h4 className={producto.color + ' px-3 py-2 text-sm font-bold text-white'}>{producto.nombre}</h4>
-                    <div className="space-y-2 p-3">
-                      {!producto.filas ? <p className={secundario + ' text-xs'}>Datos no disponibles</p> : !filas.length || filas.every(p => p.valor === 0) ? <p className={secundario + ' text-xs'}>Sin operaciones en el período</p> : filas.map((pdv,i) => (
-                        <div key={pdv.punto_venta_id}>
-                          <div className="flex items-baseline gap-2 text-xs">
-                            <span className={secundario + ' w-5 shrink-0 tabular-nums'}>{i + 1}.</span>
-                            <span className="min-w-0 flex-1" title={pdv.punto_venta}>{pdv.punto_venta.replace(/^PDV\s+/i, '')}</span>
-                            <span className={'shrink-0 font-bold tabular-nums ' + (pdv.valor < 0 ? 'text-red-600' : '')}>{formatoNumero.format(pdv.valor)}</span>
-                          </div>
-                          <div className={'ml-7 mt-1 h-1.5 overflow-hidden rounded ' + (oscuro ? 'bg-slate-700' : 'bg-gray-100')}>
-                            <div className={producto.color + ' h-full rounded'} style={{ width: Math.max(0, pdv.valor) / maximo * 100 + '%' }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+        {(canal === 'pdv' || canal === 'todos') && (() => {
+          const series = [
+            { nombre: 'BAF', color: '#095995', filas: datosPdv?.porPdv.map(p => ({ ...p, valor: p.totales.total })) },
+            { nombre: 'PORTA', color: '#e7192c', filas: movilPdv?.porPdv.map(p => ({ ...p, valor: p.porta })) },
+            { nombre: 'LÍNEA NUEVA', color: '#7342d7', filas: movilPdv?.porPdv.map(p => ({ ...p, valor: p.ln })) },
+            { nombre: 'FWA', color: '#ff9800', filas: movilPdv?.porPdv.map(p => ({ ...p, valor: p.fwa })) },
+            { nombre: 'CATER / EQUIPOS', color: '#008c84', filas: cater?.porPdv.map(p => ({ ...p, valor: p.total })) },
+            { nombre: '1175', color: '#6942c9', filas: r3?.porPdv.map(p => ({ ...p, valor: p.total })) },
+          ]
+          const visibles = series.filter(s => !productosOcultos.includes(s.nombre))
+          const puntos = new Map<string, string>()
+          for (const s of series) for (const p of s.filas ?? []) puntos.set(p.punto_venta_id, p.punto_venta)
+          const filas = [...puntos.entries()].sort((a,b) => a[1].localeCompare(b[1]))
+          const maximo = Math.max(1, ...visibles.flatMap(s => (s.filas ?? []).map(p => p.valor)))
+          const paso = Math.max(1, Math.ceil(maximo / 5))
+          const limite = paso * 5
+          return (
+            <section className={tarjeta + ' mb-4 rounded-xl border p-4'}>
+              <h3 className={'font-bold ' + tituloSeccion}>Resultados por Punto de Venta y producto</h3>
+              <p className={secundario + ' mt-1 text-xs'}>Exclusivamente PDV · Período seleccionado · Seleccioná un producto en la leyenda para mostrarlo u ocultarlo.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {series.map(s => <button key={s.nombre} type="button" aria-pressed={!productosOcultos.includes(s.nombre)} onClick={() => setProductosOcultos(prev => prev.includes(s.nombre) ? prev.filter(n => n !== s.nombre) : [...prev,s.nombre])} className={'flex items-center gap-2 rounded-md border px-2 py-1 text-xs ' + borde + (productosOcultos.includes(s.nombre) ? ' opacity-40 line-through' : '')}><span className="h-3 w-3 rounded-sm" style={{backgroundColor:s.color}}/>{s.nombre}{!s.filas && ' (sin datos)'}</button>)}
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <div className="min-w-[620px]">
+                  <div className={'grid grid-cols-[220px_minmax(0,1fr)] gap-3 text-xs ' + secundario}>
+                    <span>Punto de Venta</span>
+                    <div className="relative h-6 mr-10">{Array.from({length:6},(_,i) => <span key={i} className="absolute -translate-x-1/2 tabular-nums" style={{left:i*20+'%'}}>{formatoNumero.format(i*paso)}</span>)}</div>
                   </div>
-                )
-              })}
-            </div>
-          </section>
-        )}
+                  {filas.map(([id,nombre]) => (
+                    <div key={id} className={'grid grid-cols-[220px_minmax(0,1fr)] items-center gap-3 border-t py-2 ' + borde}>
+                      <span className="text-xs font-semibold">{nombre.replace(/^PDV\s+/i,'')}</span>
+                      <div className="relative space-y-1 mr-10">
+                        {Array.from({length:6},(_,i) => <div key={i} className={'pointer-events-none absolute inset-y-0 border-l opacity-40 ' + borde} style={{left:i*20+'%'}}/>)}
+                        {visibles.map(s => {
+                          const valor = s.filas?.find(p => p.punto_venta_id === id)?.valor ?? (s.filas ? 0 : null)
+                          return <div key={s.nombre} className="relative h-4" title={s.nombre + ': ' + (valor === null ? 'Sin datos' : formatoNumero.format(valor))}>
+                            <div className="h-full rounded-sm" style={{width:Math.max(0,valor ?? 0)/limite*100+'%',backgroundColor:s.color}}/>
+                            <span className={'absolute top-0 ml-1 text-[10px] font-semibold tabular-nums ' + (valor !== null && valor < 0 ? 'text-red-600' : '')} style={{left:Math.max(0,valor ?? 0)/limite*100+'%'}}>{valor === null ? '—' : formatoNumero.format(valor)}</span>
+                          </div>
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  {!filas.length && <p className={secundario + ' py-4 text-sm'}>Sin datos de PDV disponibles.</p>}
+                  {!visibles.length && <p className={secundario + ' py-4 text-sm'}>Seleccioná un producto para visualizar sus resultados.</p>}
+                </div>
+              </div>
+            </section>
+          )
+        })()}
 
         {canal === 'todos' && bafTodosListo && (
           <div className={tarjeta + ' mb-4 rounded-xl border p-4'}>
