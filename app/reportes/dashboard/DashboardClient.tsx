@@ -213,6 +213,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
   const [fechaInicio, setFechaInicio] = useState(() => hoyArgentina().slice(0, 7) + '-01')
   const [fechaFinal, setFechaFinal] = useState(() => hoyArgentina())
   const [canal, setCanal] = useState('call')
+  const [vistaPdv, setVistaPdv] = useState<'comparativo' | 'ranking'>('comparativo')
   const [r3, setR3] = useState<RespuestaR3 | null>(null)
   const [errorR3, setErrorR3] = useState('')
   const [cater, setCater] = useState<RespuestaCater | null>(null)
@@ -642,7 +643,16 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
           )
           return (
             <section className={tarjeta + ' mb-4 rounded-xl border p-4'}>
-              <h3 className={'font-bold ' + tituloSeccion}>Resultados por Punto de Venta y producto</h3>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className={'font-bold ' + tituloSeccion}>Resultados por Punto de Venta y producto</h3>
+                <div className={'inline-flex rounded-lg border p-1 ' + borde} role="group" aria-label="Vista de resultados PDV">
+                  {(['ranking','comparativo'] as const).map(vista => (
+                    <button key={vista} type="button" aria-pressed={vistaPdv === vista} onClick={() => setVistaPdv(vista)} className={'rounded-md px-3 py-1.5 text-xs font-bold ' + (vistaPdv === vista ? 'bg-[#194579] text-white' : secundario)}>{vista.toUpperCase()}</button>
+                  ))}
+                </div>
+              </div>
+              {vistaPdv === 'comparativo' ? (
+                <>
               <p className={secundario + ' mt-1 text-xs'}>Exclusivamente PDV · Barras a escala por producto · TOTAL OP excluye 1175</p>
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full min-w-[900px] table-fixed border-collapse text-xs">
@@ -668,6 +678,34 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
                   </tr></tfoot>
                 </table>
               </div>
+                </>
+              ) : (
+                <>
+                  <p className={secundario + ' mt-1 text-xs'}>Exclusivamente PDV · Orden descendente por producto · Período seleccionado</p>
+                  <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {series.map(s => {
+                      const ordenadas = [...(s.filas ?? [])].sort((a,b) => b.valor-a.valor || a.punto_venta.localeCompare(b.punto_venta))
+                      const max = Math.max(1,...ordenadas.map(p => p.valor))
+                      return (
+                        <div key={s.nombre} className={'overflow-hidden rounded-lg border ' + borde}>
+                          <h4 className="px-3 py-2 text-sm font-bold text-white" style={{backgroundColor:s.color}}>{s.nombre}</h4>
+                          <div className="space-y-2 p-3">
+                            {!s.filas ? <p className={secundario + ' text-xs'}>Datos no disponibles</p> : !ordenadas.length || ordenadas.every(p => p.valor === 0) ? <p className={secundario + ' text-xs'}>Sin operaciones en el período</p> : ordenadas.map((p,i) => (
+                              <div key={p.punto_venta_id}>
+                                <div className="flex items-baseline gap-2 text-xs">
+                                  <span className={secundario + ' w-5 shrink-0 tabular-nums'}>{i+1}.</span>
+                                  <span className="min-w-0 flex-1">{p.punto_venta.replace(/^PDV\s+/i,'')}</span>
+                                </div>
+                                <div className="ml-7 mt-1">{celda(p.valor,max,s.color)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
             </section>
           )
         })()}
