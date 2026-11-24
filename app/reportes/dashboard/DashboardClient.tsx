@@ -17,6 +17,13 @@ type RespuestaMovilPdv = {
   porPdv: { punto_venta_id: string; punto_venta: string; total_movil: number; porta: number; ln: number; fwa: number }[]
   inconsistencias: { punto_venta_id: string; punto_venta: string; total_movil: number; porta: number; ln: number; fwa: number }[]
 }
+type RespuestaR3 = {
+  desde: string
+  hasta: string
+  total: number
+  porPdv: { punto_venta_id: string; punto_venta: string; total: number }[]
+  diarios: Record<string, number>
+}
 type RespuestaCater = {
   desde: string
   hasta: string
@@ -206,6 +213,8 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
   const [fechaInicio, setFechaInicio] = useState(() => hoyArgentina().slice(0, 7) + '-01')
   const [fechaFinal, setFechaFinal] = useState(() => hoyArgentina())
   const [canal, setCanal] = useState('call')
+  const [r3, setR3] = useState<RespuestaR3 | null>(null)
+  const [errorR3, setErrorR3] = useState('')
   const [cater, setCater] = useState<RespuestaCater | null>(null)
   const [errorCater, setErrorCater] = useState('')
   const [datosPdv, setDatosPdv] = useState<RespuestaPdv | null>(null)
@@ -234,6 +243,27 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
       if (!controlador.signal.aborted) setCater(json as RespuestaCater)
     }).catch((err: unknown) => {
       if (!controlador.signal.aborted) setErrorCater(err instanceof Error ? err.message : 'Error al consultar CATER.')
+    })
+    return () => controlador.abort()
+  }, [periodo, fechaInicio, fechaFinal, canal, puedeVerTodos])
+
+  useEffect(() => {
+    setR3(null)
+    setErrorR3('')
+    if (!puedeVerTodos || (canal !== 'pdv' && canal !== 'todos')) return
+    const { desde, hasta } = periodo === 'personalizado'
+      ? { desde: fechaInicio, hasta: fechaFinal }
+      : rangoPeriodo(periodo)
+    if (!desde || !hasta || desde > hasta) return
+    const controlador = new AbortController()
+    fetch(`/api/dashboard/1175-pdv?desde=${desde}&hasta=${hasta}`, {
+      signal: controlador.signal, cache: 'no-store',
+    }).then(async respuesta => {
+      const json = await respuesta.json()
+      if (!respuesta.ok) throw new Error(json.error || 'Error al consultar 1175.')
+      if (!controlador.signal.aborted) setR3(json as RespuestaR3)
+    }).catch((err: unknown) => {
+      if (!controlador.signal.aborted) setErrorR3(err instanceof Error ? err.message : 'Error al consultar 1175.')
     })
     return () => controlador.abort()
   }, [periodo, fechaInicio, fechaFinal, canal, puedeVerTodos])
@@ -397,7 +427,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
     { nombre: 'LÍNEA NUEVA', icono: '▤', color: 'bg-[#7646d9]', activo: true },
     { nombre: 'FWA', icono: '⌁', color: 'bg-[#fa9800]', activo: true },
     { nombre: 'CATER / EQUIPOS', icono: '▣', color: 'bg-[#008c84]', activo: true },
-    { nombre: '1175', icono: '▤', color: 'bg-[#6942c9]', activo: false },
+    { nombre: '1175', icono: '▤', color: 'bg-[#6942c9]', activo: true },
   ]
   const bafTodosListo = canal === 'todos' && !!datos && !!datosPdv
   const bafTodos2 = (datos?.categorias.cargadas['2PLAY'] ?? 0) + (datosPdv?.totales['2PLAY'] ?? 0)
@@ -514,7 +544,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
           </label>
         </div>
 
-        {canal === 'todos' && <p className={'' + tarjeta + ' mb-4 rounded-xl border p-4 text-sm'}>BAF, PORTA, Línea Nueva y FWA consolidados: Call Lucom (cargadas) + Puntos de Venta (activaciones). CATER: exclusivamente PDV. 1175: pendiente de integración.</p>}
+        {canal === 'todos' && <p className={'' + tarjeta + ' mb-4 rounded-xl border p-4 text-sm'}>BAF, PORTA, Línea Nueva y FWA consolidados: Call Lucom (cargadas) + Puntos de Venta (activaciones). CATER y 1175: exclusivamente PDV.</p>}
         {canal === 'todos' && errorPlanes && <p role="alert" className="mb-4 text-sm font-semibold text-red-600">{errorPlanes}</p>}
         {error && <p role="alert" className="mb-4 text-sm font-semibold text-red-600">{error}</p>}
         {cargando && <p className={'' + secundario + ' mb-4 text-sm'}>Consultando indicadores BAF...</p>}
@@ -528,8 +558,8 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
                 <span className="text-sm">{producto.nombre}</span>
               </div>
               <div className="px-3 py-4 text-center">
-                <div className="text-3xl font-bold tabular-nums">{producto.nombre === 'CATER / EQUIPOS' ? (canal === 'call' ? '—' : cater ? formatoNumero.format(cater.total) : '—') : bafTodosListo && producto.nombre === 'BAF' ? formatoNumero.format(datos!.totales.cargadas + datosPdv!.totales.total) : canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(movilPdv.totales.porta + detallePlanes.totales.porta) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(movilPdv.totales.ln + detallePlanes.totales.ln) : canal === 'pdv' && producto.nombre === 'PORTA' && movilPdv ? formatoNumero.format(movilPdv.totales.porta) : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' && movilPdv ? formatoNumero.format(movilPdv.totales.ln) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'FWA' && Number.isFinite(movilPdv.totales.fwa) && Number.isFinite(detallePlanes.fwa) ? formatoNumero.format(movilPdv.totales.fwa + detallePlanes.fwa) : canal === 'pdv' && movilPdv && producto.nombre === 'FWA' && Number.isFinite(movilPdv.totales.fwa) ? formatoNumero.format(movilPdv.totales.fwa) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
-                <div className={'' + secundario + ' mt-1 min-h-8 text-xs leading-4'}>{producto.nombre === 'CATER / EQUIPOS' ? (canal === 'call' ? 'No aplica' : errorCater ? 'No disponible' : 'DIST · Fecha migración · PDV') : producto.nombre === 'BAF' ? (canal === 'todos' ? 'Call cargadas + PDV activadas' : canal === 'pdv' ? 'Activaciones · Fecha activación' : 'BAF cargadas · SDS validada') : canal === 'pdv' && producto.nombre === 'PORTA' ? 'Claro Trámites · Dia ID · Activado' : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' ? 'Activaciones móviles − PORTA · mismo período' : canal === 'todos' && ['PORTA', 'LÍNEA NUEVA'].includes(producto.nombre) ? 'Call cargadas + PDV activadas' : canal === 'todos' && producto.nombre === 'FWA' ? 'Call cargadas + PDV activadas' : canal === 'pdv' && producto.nombre === 'FWA' ? 'Activaciones · Fecha activación' : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
+                <div className="text-3xl font-bold tabular-nums">{producto.nombre === '1175' ? (canal === 'call' ? '—' : r3 ? formatoNumero.format(r3.total) : '—') : producto.nombre === 'CATER / EQUIPOS' ? (canal === 'call' ? '—' : cater ? formatoNumero.format(cater.total) : '—') : bafTodosListo && producto.nombre === 'BAF' ? formatoNumero.format(datos!.totales.cargadas + datosPdv!.totales.total) : canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(movilPdv.totales.porta + detallePlanes.totales.porta) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(movilPdv.totales.ln + detallePlanes.totales.ln) : canal === 'pdv' && producto.nombre === 'PORTA' && movilPdv ? formatoNumero.format(movilPdv.totales.porta) : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' && movilPdv ? formatoNumero.format(movilPdv.totales.ln) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'FWA' && Number.isFinite(movilPdv.totales.fwa) && Number.isFinite(detallePlanes.fwa) ? formatoNumero.format(movilPdv.totales.fwa + detallePlanes.fwa) : canal === 'pdv' && movilPdv && producto.nombre === 'FWA' && Number.isFinite(movilPdv.totales.fwa) ? formatoNumero.format(movilPdv.totales.fwa) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
+                <div className={'' + secundario + ' mt-1 min-h-8 text-xs leading-4'}>{producto.nombre === '1175' ? (canal === 'call' ? 'No aplica' : errorR3 ? 'No disponible' : 'R3 · Fecha primera carga · PDV') : producto.nombre === 'CATER / EQUIPOS' ? (canal === 'call' ? 'No aplica' : errorCater ? 'No disponible' : 'DIST · Fecha migración · PDV') : producto.nombre === 'BAF' ? (canal === 'todos' ? 'Call cargadas + PDV activadas' : canal === 'pdv' ? 'Activaciones · Fecha activación' : 'BAF cargadas · SDS validada') : canal === 'pdv' && producto.nombre === 'PORTA' ? 'Claro Trámites · Dia ID · Activado' : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' ? 'Activaciones móviles − PORTA · mismo período' : canal === 'todos' && ['PORTA', 'LÍNEA NUEVA'].includes(producto.nombre) ? 'Call cargadas + PDV activadas' : canal === 'todos' && producto.nombre === 'FWA' ? 'Call cargadas + PDV activadas' : canal === 'pdv' && producto.nombre === 'FWA' ? 'Activaciones · Fecha activación' : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
                 {canal === 'call' && detallePlanes && (producto.nombre === 'PORTA' || producto.nombre === 'LÍNEA NUEVA') && (
                   <ComposicionMovil
                     detalle={detallePlanes}
@@ -687,7 +717,6 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
                 </div>
               ) : <p className={secundario + ' mt-3 text-sm'}>{cargando ? 'Consultando móviles de PDV...' : 'Indicadores móviles no disponibles.'}</p>}
             </details>
-            <p className={secundario + ' text-xs'}>1175 de PDV: pendiente de integración.</p>
           </div>
         )}
         {(canal === 'pdv' || canal === 'todos') && (
@@ -713,6 +742,22 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
                 <div className={'flex justify-between border-t px-3 py-2 text-sm font-bold ' + borde}><span>TOTAL</span><span>{formatoNumero.format(cater.total)}</span></div>
               </div>
             ) : <p className={secundario + ' mt-3 text-sm'}>Consultando CATER...</p>}
+          </details>
+        )}
+        {(canal === 'pdv' || canal === 'todos') && (
+          <details className={tarjeta + ' group mb-4 rounded-xl border p-4'}>
+            <summary className={'flex cursor-pointer list-none items-center justify-between gap-2 font-bold [&::-webkit-details-marker]:hidden ' + tituloSeccion}><span>Detalle 1175 por Punto de Venta</span><span aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-90">▸</span></summary>
+            <p className={secundario + ' mt-1 text-xs'}>R3 · Local Claro Exclusivo · Fecha primera carga</p>
+            {errorR3 ? <p role="alert" className="mt-3 text-sm text-red-600">{errorR3}</p> : r3 ? (
+              <div className="mt-3 space-y-2">
+                {[...r3.porPdv].sort((a,b) => b.total - a.total || a.punto_venta.localeCompare(b.punto_venta)).map(pdv => (
+                  <div key={pdv.punto_venta_id} className={'flex justify-between gap-2 rounded-lg border px-3 py-2 text-sm ' + borde}>
+                    <span>{pdv.punto_venta}</span><span className="font-semibold tabular-nums">{formatoNumero.format(pdv.total)}</span>
+                  </div>
+                ))}
+                <div className={'flex justify-between border-t px-3 py-2 text-sm font-bold ' + borde}><span>TOTAL</span><span>{formatoNumero.format(r3.total)}</span></div>
+              </div>
+            ) : <p className={secundario + ' mt-3 text-sm'}>Consultando 1175...</p>}
           </details>
         )}
         {canal === 'call' && (<>
