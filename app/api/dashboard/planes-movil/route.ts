@@ -71,6 +71,7 @@ export async function GET(request: Request) {
     }
 
     const conteos = new Map<string, { plan: string; porta: number; ln: number }>()
+    const diarios: Record<string, Record<string, { porta: number; ln: number }>> = Object.create(null)
     let fwa = 0
     for (let pos = 0; pos < ids.length; pos += 200) {
       const { data: productos, error: errorProductos } = await admin.from('operacion_productos')
@@ -116,6 +117,10 @@ export async function GET(request: Request) {
         if (producto.tipo_producto === 'PORTA') fila.porta++
         else fila.ln++
         conteos.set(plan, fila)
+        const dia = diarios[fecha] ??= Object.create(null)
+        const diario = dia[plan] ??= { porta: 0, ln: 0 }
+        if (producto.tipo_producto === 'PORTA') diario.porta++
+        else diario.ln++
       }
     }
     const planes = [...conteos.values()].sort((a, b) => {
@@ -124,7 +129,7 @@ export async function GET(request: Request) {
       return na - nb || a.plan.localeCompare(b.plan, 'es')
     })
     const totales = planes.reduce((a, p) => ({ porta: a.porta + p.porta, ln: a.ln + p.ln }), { porta: 0, ln: 0 })
-    return NextResponse.json({ desde, hasta, planes, totales, fwa })
+    return NextResponse.json({ desde, hasta, planes, totales, fwa, diarios })
   } catch (error) {
     console.error('Dashboard detalle planes PORTA-LN', error)
     return NextResponse.json({ error: 'No se pudo consultar el detalle de planes PORTA-LN.' }, { status: 500 })
