@@ -49,13 +49,13 @@ export async function GET(request: Request) {
 
     const porPdv = (puntos ?? []).map(p => ({
       punto_venta_id: String(p.id), punto_venta: String(p.nombre),
-      total_movil: 0, porta: 0, ln: 0
+      total_movil: 0, porta: 0, ln: 0, fwa: 0
     }))
     const mapa = new Map(porPdv.map(p => [p.punto_venta_id, p]))
     const promociones = new Set(['3055','3065','4001','4095','5301'])
     for (let offset = 0; ; offset += LOTE) {
       const { data, error } = await admin.from('reporte_activaciones')
-        .select('id,punto_venta_id,promocion')
+        .select('id,punto_venta_id,promocion,bloque')
         .not('punto_venta_id','is',null)
         .gte('fecha_activ',desde).lte('fecha_activ',hasta)
         .order('id').range(offset,offset+LOTE-1)
@@ -63,6 +63,7 @@ export async function GET(request: Request) {
       for (const fila of data ?? []) {
         const pdv = mapa.get(String(fila.punto_venta_id))
         if (pdv && promociones.has(String(fila.promocion ?? '').trim())) pdv.total_movil++
+        if (pdv && String(fila.bloque ?? '').trim().toUpperCase() === 'FIFWA' && String(fila.promocion ?? '').trim() === '7020') pdv.fwa++
       }
       if (!data || data.length < LOTE) break
     }
@@ -83,8 +84,8 @@ export async function GET(request: Request) {
     }
     for (const pdv of porPdv) pdv.ln = pdv.total_movil - pdv.porta
     const totales = porPdv.reduce((t,p) => ({
-      total_movil:t.total_movil+p.total_movil, porta:t.porta+p.porta, ln:t.ln+p.ln
-    }), {total_movil:0,porta:0,ln:0})
+      total_movil:t.total_movil+p.total_movil, porta:t.porta+p.porta, ln:t.ln+p.ln, fwa:t.fwa+p.fwa
+    }), {total_movil:0,porta:0,ln:0,fwa:0})
     return NextResponse.json({desde,hasta,totales,porPdv,inconsistencias:porPdv.filter(p=>p.ln<0)})
   } catch (error) {
     console.error('Dashboard móvil PDV',error)
