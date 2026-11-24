@@ -10,6 +10,13 @@ type RespuestaPdv = {
   porPdv: { punto_venta_id: string; punto_venta: string; totales: TotalesPdv; vendedores: Record<string, TotalesPdv> }[]
   diarios: Record<string, TotalesPdv>
 }
+type RespuestaMovilPdv = {
+  desde: string
+  hasta: string
+  totales: { total_movil: number; porta: number; ln: number }
+  porPdv: { punto_venta_id: string; punto_venta: string; total_movil: number; porta: number; ln: number }[]
+  inconsistencias: { punto_venta_id: string; punto_venta: string; total_movil: number; porta: number; ln: number }[]
+}
 type Tema = 'ejecutivo' | 'oscuro' | 'compacto'
 type Indicador = 'ingresadas' | 'cargadas' | 'finalizadas' | 'canceladas'
 type Categoria = '2PLAY' | '3PLAY' | 'AÑADIR TV' | 'SIN CLASIFICAR'
@@ -81,6 +88,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
   const [fechaFinal, setFechaFinal] = useState(() => hoyArgentina())
   const [canal, setCanal] = useState('call')
   const [datosPdv, setDatosPdv] = useState<RespuestaPdv | null>(null)
+  const [movilPdv, setMovilPdv] = useState<RespuestaMovilPdv | null>(null)
   const [datos, setDatos] = useState<Respuesta | null>(null)
   const [comparacion, setComparacion] = useState<Respuesta | null>(null)
   const [detallePlanes, setDetallePlanes] = useState<DetallePlanes | null>(null)
@@ -92,6 +100,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
     if (canal === 'todos' && !puedeVerTodos) {
       setError('No tenés permisos para consultar todos los canales.')
       setDatosPdv(null)
+      setMovilPdv(null)
       setDatos(null)
       setComparacion(null)
       setDetallePlanes(null)
@@ -113,6 +122,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
     setCargando(true)
     setError('')
     setDatosPdv(null)
+    setMovilPdv(null)
     setDatos(null)
     setComparacion(null)
     setDetallePlanes(null)
@@ -126,10 +136,22 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
         return json as RespuestaPdv
       })
       if (canal === 'pdv') {
-        consultaPdv
-          .then(actual => { if (!controlador.signal.aborted) setDatosPdv(actual) })
-          .catch((err: unknown) => {
-            if (!controlador.signal.aborted) setError(err instanceof Error ? err.message : 'Error al consultar PDV.')
+        const consultaMovil = fetch(`/api/dashboard/movil-pdv?desde=${desde}&hasta=${hasta}`, {
+          signal: controlador.signal, cache: 'no-store',
+        }).then(async respuesta => {
+          const json = await respuesta.json()
+          if (!respuesta.ok) throw new Error(json.error || 'No se pudieron recuperar los móviles de PDV.')
+          return json as RespuestaMovilPdv
+        })
+        Promise.allSettled([consultaPdv, consultaMovil])
+          .then(([baf, movil]) => {
+            if (controlador.signal.aborted) return
+            if (baf.status === 'fulfilled') setDatosPdv(baf.value)
+            if (movil.status === 'fulfilled') setMovilPdv(movil.value)
+            const errores = [baf, movil]
+              .filter((resultado): resultado is PromiseRejectedResult => resultado.status === 'rejected')
+              .map(resultado => resultado.reason instanceof Error ? resultado.reason.message : 'Error al consultar PDV.')
+            if (errores.length) setError(errores.join(' · '))
           })
           .finally(() => { if (!controlador.signal.aborted) setCargando(false) })
         return () => controlador.abort()
@@ -343,8 +365,8 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
                 <span className="text-sm">{producto.nombre}</span>
               </div>
               <div className="px-3 py-4 text-center">
-                <div className="text-3xl font-bold tabular-nums">{bafTodosListo && producto.nombre === 'BAF' ? formatoNumero.format(datos!.totales.cargadas + datosPdv!.totales.total) : canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
-                <div className={'' + secundario + ' mt-1 text-xs'}>{producto.nombre === 'BAF' ? (canal === 'todos' ? 'Call cargadas + PDV activadas' : canal === 'pdv' ? 'Activaciones · Fecha activación' : 'BAF cargadas · SDS validada') : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
+                <div className="text-3xl font-bold tabular-nums">{bafTodosListo && producto.nombre === 'BAF' ? formatoNumero.format(datos!.totales.cargadas + datosPdv!.totales.total) : canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'pdv' && producto.nombre === 'PORTA' && movilPdv ? formatoNumero.format(movilPdv.totales.porta) : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' && movilPdv ? formatoNumero.format(movilPdv.totales.ln) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
+                <div className={'' + secundario + ' mt-1 text-xs'}>{producto.nombre === 'BAF' ? (canal === 'todos' ? 'Call cargadas + PDV activadas' : canal === 'pdv' ? 'Activaciones · Fecha activación' : 'BAF cargadas · SDS validada') : canal === 'pdv' && producto.nombre === 'PORTA' ? 'Claro Trámites · Dia ID · Activado' : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' ? 'Activaciones móviles − PORTA · mismo período' : canal === 'todos' && ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'Pendiente de consolidación' : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
                 {producto.nombre === 'BAF' && canal === 'todos' && bafTodosListo && (
                   <>
                     <div className={'mt-3 flex h-3 overflow-hidden rounded ' + (oscuro ? 'bg-slate-700' : 'bg-gray-200')}>
@@ -445,7 +467,40 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
                 </div>
               ) : <p className={secundario + ' mt-3 text-sm'}>{cargando ? 'Consultando Puntos de Venta...' : error ? 'No se pudieron cargar los datos.' : 'Sin datos disponibles.'}</p>}
             </div>
-            <p className={secundario + ' text-xs'}>PORTA, Línea Nueva, CATER y 1175 de PDV: pendientes de integración.</p>
+            <div className={tarjeta + ' rounded-xl border p-4'}>
+              <h3 className={'font-bold ' + tituloSeccion}>Detalle por Punto de Venta · PORTA y Línea Nueva</h3>
+              <p className={secundario + ' mt-1 text-xs'}>Total móvil: Activaciones (3055, 3065, 4001, 4095, 5301). PORTA: trámites activados por Dia ID. Línea Nueva: diferencia de ambos reportes para el mismo período y PDV.</p>
+              {movilPdv ? (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className={'border-b text-left text-xs ' + borde}>
+                      <th className="py-2 pr-2">Punto de Venta</th>
+                      <th className="px-2 py-2 text-right">Total móvil</th>
+                      <th className="px-2 py-2 text-right">PORTA</th>
+                      <th className="py-2 pl-2 text-right">LN</th>
+                    </tr></thead>
+                    <tbody>
+                      {[...movilPdv.porPdv].sort((a,b) => b.total_movil - a.total_movil || a.punto_venta.localeCompare(b.punto_venta)).map(pdv => (
+                        <tr key={pdv.punto_venta_id} className={'border-b ' + borde}>
+                          <td className="py-2 pr-2">{pdv.punto_venta}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{formatoNumero.format(pdv.total_movil)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{formatoNumero.format(pdv.porta)}</td>
+                          <td className={'py-2 pl-2 text-right tabular-nums ' + (pdv.ln < 0 ? 'font-bold text-red-600' : '')}>{formatoNumero.format(pdv.ln)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot><tr className="font-bold">
+                      <td className="pt-3 pr-2">TOTAL</td>
+                      <td className="px-2 pt-3 text-right tabular-nums">{formatoNumero.format(movilPdv.totales.total_movil)}</td>
+                      <td className="px-2 pt-3 text-right tabular-nums">{formatoNumero.format(movilPdv.totales.porta)}</td>
+                      <td className="pt-3 pl-2 text-right tabular-nums">{formatoNumero.format(movilPdv.totales.ln)}</td>
+                    </tr></tfoot>
+                  </table>
+                  {movilPdv.inconsistencias.length > 0 && <p role="alert" className="mt-3 text-sm font-semibold text-red-600">Atención: {movilPdv.inconsistencias.length} PDV con LN negativa. Revisar diferencias entre reportes.</p>}
+                </div>
+              ) : <p className={secundario + ' mt-3 text-sm'}>{cargando ? 'Consultando móviles de PDV...' : 'Indicadores móviles no disponibles.'}</p>}
+            </div>
+            <p className={secundario + ' text-xs'}>CATER y 1175 de PDV: pendientes de integración.</p>
           </div>
         )}
         {canal === 'call' && (<>
@@ -646,7 +701,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
           </div>
         </div>
         </>)}
-        <p className={'' + secundario + ' mt-4 text-xs'}>Dashboard en desarrollo. Los datos visibles corresponden a consultas reales de BAF; los módulos pendientes no muestran cifras simuladas.</p>
+        <p className={'' + secundario + ' mt-4 text-xs'}>Dashboard en desarrollo. Los indicadores disponibles se consultan en PGL y reportes Claro; los pendientes no muestran cifras simuladas.</p>
       </div>
     </section>
   )
