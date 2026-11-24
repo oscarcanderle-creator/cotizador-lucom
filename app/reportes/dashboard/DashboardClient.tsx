@@ -26,6 +26,7 @@ type DetallePlanes = {
   planes: { plan: string; porta: number; ln: number }[]
   totales: { porta: number; ln: number }
   fwa: number
+  diarios: Record<string, Record<string, { porta: number; ln: number }>>
 }
 type Respuesta = {
   desde: string
@@ -45,6 +46,117 @@ const indicadores: { clave: Indicador; titulo: string; descripcion: string }[] =
 ]
 const categorias: Categoria[] = ['2PLAY', '3PLAY', 'AÑADIR TV', 'SIN CLASIFICAR']
 const formatoNumero = new Intl.NumberFormat('es-AR')
+const coloresPlanes: Record<string, string> = {
+  '2 GB': '#64748b',
+  '4 GB': '#2563eb',
+  '7 GB': '#0d9488',
+  '10 GB': '#eab308',
+  '30 GB': '#9333ea',
+  '50 GB': '#e11d48',
+}
+const coloresAlternativos = ['#ea580c', '#0891b2', '#db2777', '#65a30d', '#7c3aed', '#0f766e', '#ca8a04', '#475569']
+
+function colorPlan(plan: string): string {
+  if (coloresPlanes[plan]) return coloresPlanes[plan]
+  let codigo = 0
+  for (const letra of plan) codigo = (codigo * 31 + letra.charCodeAt(0)) >>> 0
+  return coloresAlternativos[codigo % coloresAlternativos.length]
+}
+
+function diasEnRango(desde: string, hasta: string): string[] {
+  const fechas: string[] = []
+  const inicio = new Date(desde + 'T12:00:00Z')
+  const fin = new Date(hasta + 'T12:00:00Z')
+  if (Number.isNaN(inicio.valueOf()) || Number.isNaN(fin.valueOf())) return fechas
+  for (let tiempo = inicio.getTime(); tiempo <= fin.getTime() && fechas.length < 366; tiempo += 86400000) {
+    fechas.push(new Date(tiempo).toISOString().slice(0, 10))
+  }
+  return fechas
+}
+
+function ComposicionMovil({ detalle, negocio, fondo }: {
+  detalle: DetallePlanes; negocio: 'porta' | 'ln'; fondo: string
+}) {
+  const total = detalle.totales[negocio]
+  const planes = detalle.planes.filter(p => p[negocio] > 0)
+  if (!total) return <p className="mt-3 text-[11px] opacity-60">Sin planes para representar</p>
+  return (
+    <>
+      <div className={'mt-3 flex h-3 overflow-hidden rounded ' + fondo} aria-label={'Composición por plan de ' + (negocio === 'porta' ? 'PORTA' : 'Línea Nueva')}>
+        {planes.map(p => <div key={p.plan}
+          style={{ width: (p[negocio] / total * 100) + '%', backgroundColor: colorPlan(p.plan) }}
+          title={p.plan + ': ' + formatoNumero.format(p[negocio]) + ' (' + (p[negocio] / total * 100).toFixed(1) + '%)'}
+        />)}
+      </div>
+      <div className="mt-2 flex flex-wrap justify-center gap-x-2 gap-y-1">
+        {planes.map(p => <span key={p.plan} className="inline-flex items-center gap-1 text-[10px]" title={p.plan + ': ' + p[negocio] + ' ventas'}>
+          <i className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: colorPlan(p.plan) }} />
+          {p.plan} <strong>{formatoNumero.format(p[negocio])}</strong>
+        </span>)}
+      </div>
+    </>
+  )
+}
+
+function EvolucionMovil({ detalle, negocio, oscuro }: {
+  detalle: DetallePlanes; negocio: 'porta' | 'ln'; oscuro: boolean
+}) {
+  const [ocultos, setOcultos] = useState<string[]>([])
+  const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null)
+  const fechas = diasEnRango(detalle.desde, detalle.hasta)
+  const planes = detalle.planes.filter(p => p[negocio] > 0)
+  const visibles = planes.filter(p => !ocultos.includes(p.plan))
+  const maximo = Math.max(1, ...fechas.flatMap(fecha => visibles.map(plan => detalle.diarios?.[fecha]?.[plan.plan]?.[negocio] ?? 0)))
+  const alto = 200
+  const ancho = 640
+  const margenIzq = 40
+  const margenDer = 14
+  const margenArriba = 12
+  const margenAbajo = 30
+  const graficoAncho = ancho - margenIzq - margenDer
+  const graficoAlto = alto - margenArriba - margenAbajo
+  const x = (i: number) => margenIzq + (fechas.length <= 1 ? graficoAncho / 2 : i * graficoAncho / (fechas.length - 1))
+  const y = (valor: number) => margenArriba + graficoAlto * (1 - valor / maximo)
+  const ticks = [0, 1, 2, 3, 4].map(i => Math.round(maximo * i / 4))
+  const seleccionado = diaSeleccionado && fechas.includes(diaSeleccionado) ? diaSeleccionado : null
+  return (
+    <div className="min-w-0">
+      <h3 className={'font-bold ' + (oscuro ? 'text-sky-300' : 'text-[#1b5594]')}>{negocio === 'porta' ? 'PORTA' : 'Línea Nueva'} · Evolución diaria por plan</h3>
+      <p className={'mt-1 text-xs ' + (oscuro ? 'text-slate-300' : 'text-gray-500')}>CARGADO STL · Fecha Carga STL · Hacé clic en la leyenda para mostrar u ocultar planes.</p>
+      {fechas.length && planes.length ? (
+        <>
+          <svg viewBox={`0 0 ${ancho} ${alto}`} className="mt-3 w-full" role="img" aria-label={'Gráfico de líneas de ' + (negocio === 'porta' ? 'PORTA' : 'Línea Nueva') + ' por día y plan'}>
+            {ticks.map((valor, i) => <g key={i}>
+              <line x1={margenIzq} y1={y(valor)} x2={ancho - margenDer} y2={y(valor)} stroke="currentColor" strokeOpacity="0.14" />
+              <text x={margenIzq - 8} y={y(valor) + 4} textAnchor="end" fontSize="11" fill="currentColor">{valor}</text>
+            </g>)}
+            {fechas.map((fecha, i) => (i === 0 || i === fechas.length - 1 || i % Math.max(1, Math.ceil(fechas.length / 7)) === 0) &&
+              <text key={fecha} x={x(i)} y={alto - 8} textAnchor="middle" fontSize="10" fill="currentColor">{fecha.slice(8)}</text>)}
+            {visibles.map(plan => {
+              const puntos = fechas.map((fecha, i) => x(i) + ',' + y(detalle.diarios?.[fecha]?.[plan.plan]?.[negocio] ?? 0)).join(' ')
+              return <g key={plan.plan}>
+                {fechas.length > 1 && <polyline points={puntos} fill="none" stroke={colorPlan(plan.plan)} strokeWidth="2.8" strokeLinejoin="round" strokeLinecap="round" />}
+                {fechas.length === 1 && <circle cx={x(0)} cy={y(detalle.diarios?.[fechas[0]]?.[plan.plan]?.[negocio] ?? 0)} r="4" fill={colorPlan(plan.plan)} />}
+              </g>
+            })}
+            {seleccionado && <line x1={x(fechas.indexOf(seleccionado))} x2={x(fechas.indexOf(seleccionado))} y1={margenArriba} y2={alto-margenAbajo} stroke="currentColor" strokeDasharray="4 4" opacity="0.45" />}
+            {fechas.map((fecha, i) => <rect key={fecha} x={x(i) - graficoAncho / Math.max(fechas.length, 2) / 2} y={margenArriba} width={graficoAncho / Math.max(fechas.length, 2)} height={graficoAlto} fill="transparent" onMouseEnter={() => setDiaSeleccionado(fecha)} onClick={() => setDiaSeleccionado(fecha)}><title>{fecha + ': ' + visibles.map(p => p.plan + ' ' + (detalle.diarios?.[fecha]?.[p.plan]?.[negocio] ?? 0)).join(', ')}</title></rect>)}
+          </svg>
+          {seleccionado && <p className={'mt-1 text-xs ' + (oscuro ? 'text-slate-300' : 'text-gray-600')}>{seleccionado.slice(8, 10)}/{seleccionado.slice(5, 7)}: {visibles.map(p => p.plan + ' ' + (detalle.diarios?.[seleccionado]?.[p.plan]?.[negocio] ?? 0)).join(' · ') || 'Sin planes visibles'}</p>}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {planes.map(p => <button key={p.plan} type="button" onClick={() => setOcultos(actual => actual.includes(p.plan) ? actual.filter(n => n !== p.plan) : [...actual, p.plan])}
+              aria-pressed={!ocultos.includes(p.plan)}
+              className={'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs ' + (oscuro ? 'border-slate-600' : 'border-gray-200') + (ocultos.includes(p.plan) ? ' opacity-40' : '')}>
+              <span className="inline-block h-1 w-4 rounded" style={{ backgroundColor: colorPlan(p.plan) }} />
+              {p.plan} ({formatoNumero.format(p[negocio])})
+            </button>)}
+          </div>
+        </>
+      ) : <p className={'mt-4 text-sm ' + (oscuro ? 'text-slate-300' : 'text-gray-500')}>No hay datos para el período.</p>}
+    </div>
+  )
+}
+
 
 function hoyArgentina(): string {
   const partes = new Intl.DateTimeFormat('en-CA', {
@@ -388,6 +500,13 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
               <div className="px-3 py-4 text-center">
                 <div className="text-3xl font-bold tabular-nums">{bafTodosListo && producto.nombre === 'BAF' ? formatoNumero.format(datos!.totales.cargadas + datosPdv!.totales.total) : canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(movilPdv.totales.porta + detallePlanes.totales.porta) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(movilPdv.totales.ln + detallePlanes.totales.ln) : canal === 'pdv' && producto.nombre === 'PORTA' && movilPdv ? formatoNumero.format(movilPdv.totales.porta) : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' && movilPdv ? formatoNumero.format(movilPdv.totales.ln) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
                 <div className={'' + secundario + ' mt-1 text-xs'}>{producto.nombre === 'BAF' ? (canal === 'todos' ? 'Call cargadas + PDV activadas' : canal === 'pdv' ? 'Activaciones · Fecha activación' : 'BAF cargadas · SDS validada') : canal === 'pdv' && producto.nombre === 'PORTA' ? 'Claro Trámites · Dia ID · Activado' : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' ? 'Activaciones móviles − PORTA · mismo período' : canal === 'todos' && ['PORTA', 'LÍNEA NUEVA'].includes(producto.nombre) ? 'Call cargadas + PDV activadas' : canal === 'todos' && producto.nombre === 'FWA' ? 'Pendiente de consolidación' : canal === 'pdv' && producto.nombre === 'FWA' ? 'Pendiente de integración' : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
+                {canal === 'call' && detallePlanes && (producto.nombre === 'PORTA' || producto.nombre === 'LÍNEA NUEVA') && (
+                  <ComposicionMovil
+                    detalle={detallePlanes}
+                    negocio={producto.nombre === 'PORTA' ? 'porta' : 'ln'}
+                    fondo={oscuro ? 'bg-slate-700' : 'bg-gray-200'}
+                  />
+                )}
                 {producto.nombre === 'BAF' && canal === 'todos' && bafTodosListo && (
                   <>
                     <div className={'mt-3 flex h-3 overflow-hidden rounded ' + (oscuro ? 'bg-slate-700' : 'bg-gray-200')}>
@@ -542,6 +661,15 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
           </div>
         )}
         {canal === 'call' && (<>
+        <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {(['porta', 'ln'] as const).map(negocio => (
+            <div key={negocio} className={tarjeta + ' min-w-0 rounded-xl border p-4'}>
+              {errorPlanes ? <p role="alert" className="text-sm text-red-600">{errorPlanes}</p>
+                : detallePlanes ? <EvolucionMovil detalle={detallePlanes} negocio={negocio} oscuro={oscuro} />
+                : <p className={secundario + ' text-sm'}>Consultando evolución de planes...</p>}
+            </div>
+          ))}
+        </div>
         <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
             <h3 className={'font-bold ' + tituloSeccion}>Evolución diaria · BAF Call Lucom</h3>
