@@ -49,7 +49,7 @@ export async function GET() {
     }
 
     const limite = new Date(
-      Date.now() - 60 * 1000
+      Date.now() - 180 * 1000
     ).toISOString()
 
     const { data, error } = await auth.admin

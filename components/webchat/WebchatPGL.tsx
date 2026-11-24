@@ -249,13 +249,16 @@ export default function WebchatPGL() {
     let cancelado = false
 
     async function actualizarPresencia() {
-      if (document.visibilityState !== 'visible') return
 
       try {
-        await fetch('/api/webchat/presencia', {
+        const registro = await fetch('/api/webchat/presencia', {
           method: 'POST',
           cache: 'no-store',
         })
+
+        if (!registro.ok) {
+          console.error('Webchat: error al registrar presencia', registro.status)
+        }
 
         const respuesta = await fetch('/api/webchat/presencia', {
           cache: 'no-store',
@@ -286,11 +289,15 @@ export default function WebchatPGL() {
     }
 
     document.addEventListener('visibilitychange', alVolver)
+    window.addEventListener('focus', alVolver)
+    window.addEventListener('online', alVolver)
 
     return () => {
       cancelado = true
       window.clearInterval(intervalo)
       document.removeEventListener('visibilitychange', alVolver)
+      window.removeEventListener('focus', alVolver)
+      window.removeEventListener('online', alVolver)
     }
   }, [habilitado, usuarioId])
 
