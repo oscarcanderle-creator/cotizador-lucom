@@ -173,7 +173,9 @@ export async function leerXlsxDistribucionR3(
     (_, indice) => texto(hoja.getRow(1).getCell(indice + 1)),
   )
   if (
-    hoja.getRow(1).cellCount !== ENCABEZADOS_DISTRIBUCION_R3.length ||
+    !(hoja.getRow(1).cellCount === ENCABEZADOS_DISTRIBUCION_R3.length ||
+      (hoja.getRow(1).cellCount === ENCABEZADOS_DISTRIBUCION_R3.length + 1 &&
+        texto(hoja.getRow(1).getCell(16)) === 'Lote')) ||
     encabezados.some((valor, indice) => valor !== ENCABEZADOS_DISTRIBUCION_R3[indice])
   ) {
     throw new Error('Los encabezados no coinciden con Distribución R3.')
