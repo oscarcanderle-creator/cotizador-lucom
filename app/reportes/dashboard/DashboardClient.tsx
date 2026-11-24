@@ -428,7 +428,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
     { nombre: 'LÍNEA NUEVA', icono: '▤', color: 'bg-[#7646d9]', activo: true },
     { nombre: 'FWA', icono: '⌁', color: 'bg-[#fa9800]', activo: true },
     { nombre: 'CATER / EQUIPOS', icono: '▣', color: 'bg-[#008c84]', activo: true },
-    { nombre: '1175', icono: '▤', color: 'bg-[#6942c9]', activo: true },
+    { nombre: '1175', icono: '▤', color: 'bg-[#657b24]', activo: true },
   ]
   const bafTodosListo = canal === 'todos' && !!datos && !!datosPdv
   const bafTodos2 = (datos?.categorias.cargadas['2PLAY'] ?? 0) + (datosPdv?.totales['2PLAY'] ?? 0)
@@ -624,7 +624,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
             { nombre: 'LÍNEA NUEVA', color: '#7342d7', filas: movilPdv?.porPdv.map(p => ({ ...p, valor: p.ln })) },
             { nombre: 'FWA', color: '#ff9800', filas: movilPdv?.porPdv.map(p => ({ ...p, valor: p.fwa })) },
             { nombre: 'CATER / EQUIPOS', color: '#008c84', filas: cater?.porPdv.map(p => ({ ...p, valor: p.total })) },
-            { nombre: '1175', color: '#6942c9', filas: r3?.porPdv.map(p => ({ ...p, valor: p.total })) },
+            { nombre: '1175', color: '#657b24', filas: r3?.porPdv.map(p => ({ ...p, valor: p.total })) },
           ]
           const puntos = new Map<string, string>()
           for (const s of series) for (const p of s.filas ?? []) puntos.set(p.punto_venta_id, p.punto_venta)
