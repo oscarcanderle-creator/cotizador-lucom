@@ -180,11 +180,124 @@ function hoyArgentina(): string {
   const tomar = (tipo: string) => partes.find(p => p.type === tipo)?.value ?? ''
   return `${tomar('year')}-${tomar('month')}-${tomar('day')}`
 }
-function mesAnterior(desde: string) {
+function MedidorInstrumental({ actual, anterior, color, oscuro }: {
+  actual: number | null
+  anterior: number | null
+  color: string
+  oscuro: boolean
+}) {
+  const comparable = actual !== null && anterior !== null
+    && anterior >= 0 && actual >= 0
+
+  const maximo = Math.max(actual ?? 0, anterior ?? 0, 1)
+
+  const proporcion = comparable
+    ? anterior / maximo * 100
+    : 0
+
+  const anguloAnterior = Math.PI * (anterior ?? 0) / maximo
+
+  return (
+    <svg
+      viewBox="0 0 160 94"
+      className="mx-auto w-full max-w-[180px]"
+      role="img"
+      aria-label={'Valor actual: ' + (actual ?? 'No disponible')
+        + '. Anterior: ' + (anterior ?? 'No disponible')}
+    >
+      <path
+        d="M16 80 A64 64 0 0 1 144 80"
+        fill="none"
+        stroke={oscuro ? '#334155' : '#e5e7eb'}
+        strokeWidth="10"
+        strokeLinecap="round"
+      />
+      {comparable && proporcion > 0 && (
+        <path
+          d="M16 80 A64 64 0 0 1 144 80"
+          fill="none"
+          stroke={color}
+          strokeWidth="10"
+          strokeLinecap="round"
+          pathLength="100"
+          strokeDasharray={proporcion + ' 100'}
+        />
+      )}
+      {comparable && anterior > 0 && (
+        <g transform={
+          'translate('
+          + (80 - 64 * Math.cos(anguloAnterior)) + ' '
+          + (80 - 64 * Math.sin(anguloAnterior)) + ') rotate('
+          + (anguloAnterior * 180 / Math.PI - 90) + ')'
+        }>
+          <path
+            d="M-8 -10 L10 0 L-8 10 Z"
+            fill={color}
+            strokeLinejoin="round"
+          />
+        </g>
+      )}
+      <text
+        x="80" y="64"
+        textAnchor="middle"
+        fontSize="34"
+        fontWeight="700"
+        fill="currentColor"
+      >
+        {actual === null ? '—' : formatoNumero.format(actual)}
+      </text>
+      <text
+        x="80" y="82"
+        textAnchor="middle"
+        fontSize="11"
+        fill={oscuro ? '#94a3b8' : '#64748b'}
+      >
+        {anterior !== null
+          ? 'Ant. ' + formatoNumero.format(anterior)
+          : 'Sin comparación'}
+      </text>
+    </svg>
+  )
+}
+
+function IconoNegocio({ nombre }: { nombre: string }) {
+  const trazos: Record<string, string> = {
+    'BAF': 'M2 8a16 16 0 0 1 20 0 M5 12a11 11 0 0 1 14 0 M8 16a6 6 0 0 1 8 0 M12 20h.01',
+    'PORTA': 'M3 3h5l2 5-3 2a15 15 0 0 0 7 7l2-3 5 2v5C11 22 2 13 3 3 M15 3h6v6 M21 3l-7 7',
+    'LÍNEA NUEVA': 'M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2 M10 18h4 M12 7v6 M9 10h6',
+    'FWA': 'M12 10v12 M8 22h8 M9 13l3-3 3 3 M8 5a6 6 0 0 0 0 8 M16 5a6 6 0 0 1 0 8 M4 2a10 10 0 0 0 0 14 M20 2a10 10 0 0 1 0 14',
+    'CATER / EQUIPOS': 'M3 3h13v18H3z M7 17h5 M19 7h3v14h-3 M19 18h3',
+    '1175': 'M8 5h13 M8 12h13 M8 19h13 M2 5l1 1 2-3 M2 12l1 1 2-3 M2 19l1 1 2-3',
+  }
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-6 w-6 shrink-0"
+      aria-hidden="true"
+    >
+      <path d={trazos[nombre] ?? ''} />
+    </svg>
+  )
+}
+
+function mesAnterior(desde: string, dia?: number) {
   const [anio, mes] = desde.split('-').map(Number)
   const inicio = new Date(Date.UTC(anio, mes - 2, 1))
-  const fin = new Date(Date.UTC(anio, mes - 1, 0))
-  return { desde: inicio.toISOString().slice(0, 10), hasta: fin.toISOString().slice(0, 10) }
+  const ultimoDia = new Date(Date.UTC(anio, mes - 1, 0)).getUTCDate()
+  const fin = new Date(Date.UTC(
+    anio, mes - 2,
+    dia === undefined ? ultimoDia : Math.min(dia, ultimoDia)
+  ))
+  return {
+    desde: inicio.toISOString().slice(0, 10),
+    hasta: fin.toISOString().slice(0, 10)
+  }
 }
 function etiquetaMes(fecha: string) {
   return new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
@@ -209,6 +322,14 @@ function rangoPeriodo(periodo: string) {
 
 export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: boolean }) {
   const [tema, setTema] = useState<Tema>('ejecutivo')
+  const [temaVisual, setTemaVisual] = useState<'clasico' | 'ejecutivo' | 'instrumental'>('clasico')
+
+  useEffect(() => {
+    const guardado = localStorage.getItem('pgl-dashboard-tema-visual')
+    if (guardado === 'clasico' || guardado === 'ejecutivo' || guardado === 'instrumental') {
+      setTemaVisual(guardado)
+    }
+  }, [])
   const [periodo, setPeriodo] = useState('mes')
   const [fechaInicio, setFechaInicio] = useState(() => hoyArgentina().slice(0, 7) + '-01')
   const [fechaFinal, setFechaFinal] = useState(() => hoyArgentina())
@@ -222,6 +343,14 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
   const [movilPdv, setMovilPdv] = useState<RespuestaMovilPdv | null>(null)
   const [datos, setDatos] = useState<Respuesta | null>(null)
   const [comparacion, setComparacion] = useState<Respuesta | null>(null)
+  const [comparacionComercial, setComparacionComercial] = useState<{
+    baf: number | null
+    porta: number | null
+    ln: number | null
+    desde: string
+    hasta: string
+  } | null>(null)
+  const [errorComparacion, setErrorComparacion] = useState('')
   const [detallePlanes, setDetallePlanes] = useState<DetallePlanes | null>(null)
   const [errorPlanes, setErrorPlanes] = useState('')
   const [cargando, setCargando] = useState(false)
@@ -369,8 +498,6 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
         .finally(() => { if (!controlador.signal.aborted) setCargando(false) })
       return () => controlador.abort()
     }
-    const comparar = periodo === 'mes' || periodo === 'anterior'
-    const anterior = mesAnterior(desde)
     async function consultar(inicio: string, fin: string): Promise<Respuesta> {
       const respuesta = await fetch(`/api/dashboard/baf?desde=${inicio}&hasta=${fin}`, {
         signal: controlador.signal, cache: 'no-store',
@@ -390,14 +517,10 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
       .catch((err: unknown) => {
         if (!controlador.signal.aborted) setErrorPlanes(err instanceof Error ? err.message : 'Error al consultar planes.')
       })
-    Promise.all([
-      consultar(desde, hasta),
-      comparar ? consultar(anterior.desde, anterior.hasta) : Promise.resolve(null),
-    ])
-      .then(([actual, previo]) => {
+    consultar(desde, hasta)
+      .then(actual => {
         if (!controlador.signal.aborted) {
           setDatos(actual)
-          setComparacion(previo)
         }
       })
       .catch((err: unknown) => {
@@ -408,6 +531,75 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
       .finally(() => { if (!controlador.signal.aborted) setCargando(false) })
     return () => controlador.abort()
   }, [periodo, fechaInicio, fechaFinal, canal, puedeVerTodos])
+
+  useEffect(() => {
+    setComparacion(null)
+    setComparacionComercial(null)
+    setErrorComparacion('')
+
+    if (periodo !== 'mes' && periodo !== 'anterior') return
+    if (canal !== 'call' && !puedeVerTodos) return
+
+    const { desde, hasta } = rangoPeriodo(periodo)
+    const anterior = mesAnterior(
+      desde,
+      periodo === 'mes' ? Number(hasta.slice(-2)) : undefined
+    )
+    const controlador = new AbortController()
+
+    async function consultar<T>(ruta: string): Promise<T> {
+      const respuesta = await fetch(
+        `/api/dashboard/${ruta}?desde=${anterior.desde}&hasta=${anterior.hasta}`,
+        { signal: controlador.signal, cache: 'no-store' }
+      )
+      if (!respuesta.ok) throw new Error('Error al consultar ' + ruta)
+      return respuesta.json() as Promise<T>
+    }
+
+    Promise.allSettled([
+      canal !== 'pdv' ? consultar<Respuesta>('baf') : Promise.resolve(null),
+      canal !== 'call' ? consultar<RespuestaPdv>('baf-pdv') : Promise.resolve(null),
+      canal !== 'pdv' ? consultar<DetallePlanes>('planes-movil') : Promise.resolve(null),
+      canal !== 'call' ? consultar<RespuestaMovilPdv>('movil-pdv') : Promise.resolve(null),
+    ]).then(([bc, bp, mc, mp]) => {
+      if (controlador.signal.aborted) return
+
+      const bafCall = bc.status === 'fulfilled' ? bc.value : null
+      const bafPdv = bp.status === 'fulfilled' ? bp.value : null
+      const movilCall = mc.status === 'fulfilled' ? mc.value : null
+      const movilPdv = mp.status === 'fulfilled' ? mp.value : null
+
+      const bafListo =
+        (canal === 'pdv' || !!bafCall) &&
+        (canal === 'call' || !!bafPdv)
+
+      const movilListo =
+        (canal === 'pdv' || !!movilCall) &&
+        (canal === 'call' || !!movilPdv)
+
+      setComparacion(bafCall)
+
+      setComparacionComercial({
+        baf: bafListo
+          ? (bafCall?.totales.cargadas ?? 0) + (bafPdv?.totales.total ?? 0)
+          : null,
+        porta: movilListo
+          ? (movilCall?.totales.porta ?? 0) + (movilPdv?.totales.porta ?? 0)
+          : null,
+        ln: movilListo
+          ? (movilCall?.totales.ln ?? 0) + (movilPdv?.totales.ln ?? 0)
+          : null,
+        desde: anterior.desde,
+        hasta: anterior.hasta,
+      })
+
+      if (!bafListo || !movilListo) {
+        setErrorComparacion('Comparacion historica parcialmente no disponible.')
+      }
+    })
+
+    return () => controlador.abort()
+  }, [periodo, canal, puedeVerTodos])
 
   const oscuro = tema === 'oscuro'
   const fondo = oscuro ? 'bg-[#101827] text-white' : 'bg-gray-50 text-gray-900'
@@ -462,9 +654,45 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
     return acumulado
   }, { ingresadas: 0, cargadas: 0, finalizadas: 0, canceladas: 0 })
   const concilia = datos && indicadores.every(indicador => totalCanales[indicador.clave] === datos.totales[indicador.clave])
+  function valorComercialActual(nombre: string): number | null {
+    if (nombre === 'BAF') {
+      if (canal === 'todos') {
+        return datos && datosPdv
+          ? datos.totales.cargadas + datosPdv.totales.total
+          : null
+      }
+      return canal === 'pdv'
+        ? datosPdv?.totales.total ?? null
+        : datos?.totales.cargadas ?? null
+    }
+
+    const clave = nombre === 'PORTA' ? 'porta'
+      : nombre === 'LÍNEA NUEVA' ? 'ln' : null
+
+    if (!clave) return null
+
+    if (canal === 'todos') {
+      return detallePlanes && movilPdv
+        ? detallePlanes.totales[clave] + movilPdv.totales[clave]
+        : null
+    }
+
+    return canal === 'pdv'
+      ? movilPdv?.totales[clave] ?? null
+      : detallePlanes?.totales[clave] ?? null
+  }
+
+  function valorComercialAnterior(nombre: string): number | null {
+    if (!comparacionComercial) return null
+    if (nombre === 'BAF') return comparacionComercial.baf
+    if (nombre === 'PORTA') return comparacionComercial.porta
+    if (nombre === 'LÍNEA NUEVA') return comparacionComercial.ln
+    return null
+  }
+
   const barras = [
-    { nombre: datos ? etiquetaMes(datos.desde) : 'Mes seleccionado', dos: b2, tres: b3, total: sumaPlay },
     { nombre: comparacion ? etiquetaMes(comparacion.desde) : 'Mes anterior', dos: previo2, tres: previo3, total: totalPrevio },
+    { nombre: datos ? etiquetaMes(datos.desde) : 'Mes seleccionado', dos: b2, tres: b3, total: sumaPlay },
   ]
 
   return (
@@ -538,9 +766,19 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold">
-            Canales de venta / PDV
-            <select disabled className={'' + control + ' rounded-lg border px-3 py-2 font-normal opacity-60'}>
-              <option>Próxima etapa</option>
+            Tema visual
+            <select
+              value={temaVisual}
+              onChange={e => {
+                const nuevo = e.target.value as 'clasico' | 'ejecutivo' | 'instrumental'
+                setTemaVisual(nuevo)
+                localStorage.setItem('pgl-dashboard-tema-visual', nuevo)
+              }}
+              className={control + ' rounded-lg border px-3 py-2 font-normal'}
+            >
+              <option value="clasico">Clásico</option>
+              <option value="ejecutivo">Ejecutivo</option>
+              <option value="instrumental">Instrumental</option>
             </select>
           </label>
         </div>
@@ -553,14 +791,100 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
         {/* Tarjetas comunes Call y PDV */}
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {productos.map(producto => (
-            <div key={producto.nombre} className={'' + tarjeta + ' overflow-hidden rounded-xl border shadow-sm'}>
-              <div className={'' + producto.color + ' flex items-center justify-between px-3 py-3 font-bold text-white'}>
-                <span className="text-lg">{producto.icono}</span>
+            <div key={producto.nombre}
+              className={tarjeta + ' relative overflow-hidden rounded-xl border shadow-sm ' +
+                (temaVisual === 'ejecutivo' ? 'pb-1' : '')}>
+              {temaVisual === 'ejecutivo' && (
+                <div className={producto.color + ' absolute inset-x-0 bottom-0 h-1'} />
+              )}
+              <div className={'flex items-center justify-between gap-2 px-3 py-2 font-bold ' +
+                (temaVisual === 'clasico' ? producto.color + ' text-white' : '')}>
+                {temaVisual === 'clasico' ? (
+                  <IconoNegocio nombre={producto.nombre} />
+                ) : (
+                  <span className={producto.color + ' inline-flex rounded-lg p-1.5 text-white'}>
+                    <IconoNegocio nombre={producto.nombre} />
+                  </span>
+                )}
                 <span className="text-sm">{producto.nombre}</span>
               </div>
-              <div className="px-3 py-4 text-center">
-                <div className="text-3xl font-bold tabular-nums">{producto.nombre === '1175' ? (canal === 'call' ? '—' : r3 ? formatoNumero.format(r3.total) : '—') : producto.nombre === 'CATER / EQUIPOS' ? (canal === 'call' ? '—' : cater ? formatoNumero.format(cater.total) : '—') : bafTodosListo && producto.nombre === 'BAF' ? formatoNumero.format(datos!.totales.cargadas + datosPdv!.totales.total) : canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(movilPdv.totales.porta + detallePlanes.totales.porta) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(movilPdv.totales.ln + detallePlanes.totales.ln) : canal === 'pdv' && producto.nombre === 'PORTA' && movilPdv ? formatoNumero.format(movilPdv.totales.porta) : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' && movilPdv ? formatoNumero.format(movilPdv.totales.ln) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'FWA' && Number.isFinite(movilPdv.totales.fwa) && Number.isFinite(detallePlanes.fwa) ? formatoNumero.format(movilPdv.totales.fwa + detallePlanes.fwa) : canal === 'pdv' && movilPdv && producto.nombre === 'FWA' && Number.isFinite(movilPdv.totales.fwa) ? formatoNumero.format(movilPdv.totales.fwa) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
-                <div className={'' + secundario + ' mt-1 min-h-8 text-xs leading-4'}>{producto.nombre === '1175' ? (canal === 'call' ? 'No aplica' : errorR3 ? 'No disponible' : 'R3 · Fecha primera carga · PDV') : producto.nombre === 'CATER / EQUIPOS' ? (canal === 'call' ? 'No aplica' : errorCater ? 'No disponible' : 'DIST · Fecha migración · PDV') : producto.nombre === 'BAF' ? (canal === 'todos' ? 'Call cargadas + PDV activadas' : canal === 'pdv' ? 'Activaciones · Fecha activación' : 'BAF cargadas · SDS validada') : canal === 'pdv' && producto.nombre === 'PORTA' ? 'Claro Trámites · Dia ID · Activado' : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' ? 'Activaciones móviles − PORTA · mismo período' : canal === 'todos' && ['PORTA', 'LÍNEA NUEVA'].includes(producto.nombre) ? 'Call cargadas + PDV activadas' : canal === 'todos' && producto.nombre === 'FWA' ? 'Call cargadas + PDV activadas' : canal === 'pdv' && producto.nombre === 'FWA' ? 'Activaciones · Fecha activación' : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
+              <div className="px-3 py-2 text-center">
+                {['BAF', 'PORTA', 'LÍNEA NUEVA'].includes(producto.nombre)
+                  && (periodo === 'mes' || periodo === 'anterior') ? (() => {
+                    const actual = valorComercialActual(producto.nombre)
+                    const anterior = valorComercialAnterior(producto.nombre)
+                    const variacion = actual !== null && anterior !== null && anterior > 0
+                      ? (actual - anterior) / anterior * 100
+                      : null
+
+                    return (
+                      <div>
+                        {temaVisual === 'instrumental' ? (
+                          <>
+                            <MedidorInstrumental
+                              actual={actual}
+                              anterior={anterior}
+                              color={producto.color.slice(4, -1)}
+                              oscuro={oscuro}
+                            />
+                            <div className={'text-xs font-semibold ' + (
+                              variacion === null || variacion === 0 ? secundario
+                              : variacion > 0 ? 'text-emerald-500' : 'text-red-500'
+                            )}>
+                              {variacion === null
+                                ? 'Sin base comparable'
+                                : (variacion > 0 ? '▲ +' : variacion < 0 ? '▼ ' : '— ')
+                                  + variacion.toLocaleString('es-AR', {
+                                    minimumFractionDigits: 1,
+                                    maximumFractionDigits: 1
+                                  }) + '%'}
+                            </div>
+                          </>
+                        ) : (
+                        <div className="flex items-center justify-between gap-2 px-1">
+                          <div className="text-4xl font-bold tracking-tight tabular-nums">
+                            {actual === null ? '—' : formatoNumero.format(actual)}
+                          </div>
+                          <div className="text-right">
+                            <div className={secundario + ' text-xs tabular-nums'}>
+                              Ant. {anterior === null ? '—' : formatoNumero.format(anterior)}
+                            </div>
+                            <div className={'mt-0.5 text-[11px] font-semibold tabular-nums ' + (
+                              variacion === null || variacion === 0 ? secundario
+                              : variacion > 0 ? 'text-emerald-500' : 'text-red-500'
+                            )}>
+                              {variacion === null
+                                ? anterior === 0 ? 'Sin base'
+                                  : errorComparacion ? 'No disponible' : '—'
+                                : (variacion > 0 ? '▲ +' : variacion < 0 ? '▼ ' : '— ')
+                                  + variacion.toLocaleString('es-AR', {
+                                    minimumFractionDigits: 1,
+                                    maximumFractionDigits: 1
+                                  }) + '%'}
+                            </div>
+                          </div>
+                        </div>
+                        )}
+                      </div>
+                    )
+                  })() : (
+                temaVisual === 'instrumental' ? (
+                  <MedidorInstrumental
+                    actual={(() => {
+                      const valor = producto.nombre === '1175' ? (canal === 'call' ? '—' : r3 ? formatoNumero.format(r3.total) : '—') : producto.nombre === 'CATER / EQUIPOS' ? (canal === 'call' ? '—' : cater ? formatoNumero.format(cater.total) : '—') : bafTodosListo && producto.nombre === 'BAF' ? formatoNumero.format(datos!.totales.cargadas + datosPdv!.totales.total) : canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(movilPdv.totales.porta + detallePlanes.totales.porta) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(movilPdv.totales.ln + detallePlanes.totales.ln) : canal === 'pdv' && producto.nombre === 'PORTA' && movilPdv ? formatoNumero.format(movilPdv.totales.porta) : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' && movilPdv ? formatoNumero.format(movilPdv.totales.ln) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'FWA' && Number.isFinite(movilPdv.totales.fwa) && Number.isFinite(detallePlanes.fwa) ? formatoNumero.format(movilPdv.totales.fwa + detallePlanes.fwa) : canal === 'pdv' && movilPdv && producto.nombre === 'FWA' && Number.isFinite(movilPdv.totales.fwa) ? formatoNumero.format(movilPdv.totales.fwa) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'
+                      return valor === '—'
+                        ? null
+                        : Number(valor.replace(/\./g, ''))
+                    })()}
+                    anterior={null}
+                    color={producto.color.slice(4, -1)}
+                    oscuro={oscuro}
+                  />
+                ) : (
+                  <div className="px-1 text-left text-4xl font-bold tracking-tight tabular-nums">{producto.nombre === '1175' ? (canal === 'call' ? '—' : r3 ? formatoNumero.format(r3.total) : '—') : producto.nombre === 'CATER / EQUIPOS' ? (canal === 'call' ? '—' : cater ? formatoNumero.format(cater.total) : '—') : bafTodosListo && producto.nombre === 'BAF' ? formatoNumero.format(datos!.totales.cargadas + datosPdv!.totales.total) : canal === 'pdv' && producto.nombre === 'BAF' && datosPdv ? formatoNumero.format(datosPdv.totales.total) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(movilPdv.totales.porta + detallePlanes.totales.porta) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(movilPdv.totales.ln + detallePlanes.totales.ln) : canal === 'pdv' && producto.nombre === 'PORTA' && movilPdv ? formatoNumero.format(movilPdv.totales.porta) : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' && movilPdv ? formatoNumero.format(movilPdv.totales.ln) : canal === 'call' && producto.nombre === 'BAF' && datos ? formatoNumero.format(datos.totales.cargadas) : canal === 'call' && detallePlanes && producto.nombre === 'PORTA' ? formatoNumero.format(detallePlanes.totales.porta) : canal === 'call' && detallePlanes && producto.nombre === 'LÍNEA NUEVA' ? formatoNumero.format(detallePlanes.totales.ln) : canal === 'todos' && movilPdv && detallePlanes && producto.nombre === 'FWA' && Number.isFinite(movilPdv.totales.fwa) && Number.isFinite(detallePlanes.fwa) ? formatoNumero.format(movilPdv.totales.fwa + detallePlanes.fwa) : canal === 'pdv' && movilPdv && producto.nombre === 'FWA' && Number.isFinite(movilPdv.totales.fwa) ? formatoNumero.format(movilPdv.totales.fwa) : canal === 'call' && detallePlanes && producto.nombre === 'FWA' ? formatoNumero.format(Number.isFinite(detallePlanes.fwa) ? detallePlanes.fwa : 0) : '—'}</div>
+                )
+                )}
+                <div className={'' + secundario + ' mt-1 text-[10px] leading-3'}>{producto.nombre === '1175' ? (canal === 'call' ? 'No aplica' : errorR3 ? 'No disponible' : 'R3 · Fecha primera carga · PDV') : producto.nombre === 'CATER / EQUIPOS' ? (canal === 'call' ? 'No aplica' : errorCater ? 'No disponible' : 'DIST · Fecha migración · PDV') : producto.nombre === 'BAF' ? (canal === 'todos' ? 'Call cargadas + PDV activadas' : canal === 'pdv' ? 'Activaciones · Fecha activación' : 'BAF cargadas · SDS validada') : canal === 'pdv' && producto.nombre === 'PORTA' ? 'Claro Trámites · Dia ID · Activado' : canal === 'pdv' && producto.nombre === 'LÍNEA NUEVA' ? 'Activaciones móviles − PORTA · mismo período' : canal === 'todos' && ['PORTA', 'LÍNEA NUEVA'].includes(producto.nombre) ? 'Call cargadas + PDV activadas' : canal === 'todos' && producto.nombre === 'FWA' ? 'Call cargadas + PDV activadas' : canal === 'pdv' && producto.nombre === 'FWA' ? 'Activaciones · Fecha activación' : ['PORTA', 'LÍNEA NUEVA', 'FWA'].includes(producto.nombre) ? 'CARGADO STL · Fecha Carga STL' : 'Pendiente de integración'}</div>
                 {canal === 'call' && detallePlanes && (producto.nombre === 'PORTA' || producto.nombre === 'LÍNEA NUEVA') && (
                   <ComposicionMovil
                     detalle={detallePlanes}
@@ -899,7 +1223,7 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
             )}
           </div>
           <div className={'' + tarjeta + ' rounded-xl border p-4'}>
-            <h3 className={'font-bold ' + tituloSeccion}>Composición comercial BAF</h3>
+            <h3 className={'font-bold ' + tituloSeccion}>Evolutivo BAF</h3>
             <p className={'' + secundario + ' mt-1 text-xs'}>Ventas cargadas · 2PLAY y 3PLAY. El resto se informa por separado.</p>
             {comparacion && datos ? (
               <div className="mt-4 space-y-5">
