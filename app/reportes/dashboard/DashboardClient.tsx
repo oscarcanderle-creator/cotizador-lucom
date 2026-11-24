@@ -213,7 +213,6 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
   const [fechaInicio, setFechaInicio] = useState(() => hoyArgentina().slice(0, 7) + '-01')
   const [fechaFinal, setFechaFinal] = useState(() => hoyArgentina())
   const [canal, setCanal] = useState('call')
-  const [productosOcultos, setProductosOcultos] = useState<string[]>([])
   const [r3, setR3] = useState<RespuestaR3 | null>(null)
   const [errorR3, setErrorR3] = useState('')
   const [cater, setCater] = useState<RespuestaCater | null>(null)
@@ -626,44 +625,48 @@ export default function DashboardClient({ puedeVerTodos }: { puedeVerTodos: bool
             { nombre: 'CATER / EQUIPOS', color: '#008c84', filas: cater?.porPdv.map(p => ({ ...p, valor: p.total })) },
             { nombre: '1175', color: '#6942c9', filas: r3?.porPdv.map(p => ({ ...p, valor: p.total })) },
           ]
-          const visibles = series.filter(s => !productosOcultos.includes(s.nombre))
           const puntos = new Map<string, string>()
           for (const s of series) for (const p of s.filas ?? []) puntos.set(p.punto_venta_id, p.punto_venta)
           const filas = [...puntos.entries()].sort((a,b) => a[1].localeCompare(b[1]))
-          const maximo = Math.max(1, ...visibles.flatMap(s => (s.filas ?? []).map(p => p.valor)))
-          const paso = Math.max(1, Math.ceil(maximo / 5))
-          const limite = paso * 5
+          const valor = (s: typeof series[number], id: string) => s.filas ? (s.filas.find(p => p.punto_venta_id === id)?.valor ?? 0) : null
+          const comerciales = series.filter(s => s.nombre !== '1175')
+          const totalOp = (id: string) => comerciales.every(s => s.filas) ? comerciales.reduce((n,s) => n + (valor(s,id) ?? 0),0) : null
+          const maxTotal = Math.max(1,...filas.map(([id]) => totalOp(id) ?? 0))
+          const celda = (n: number | null, max: number, color: string) => (
+            <div className="flex items-center gap-1.5">
+              <div className={'h-3 flex-1 overflow-hidden rounded-sm ' + (oscuro ? 'bg-slate-700' : 'bg-gray-100')}>
+                <div className="h-full rounded-sm" style={{backgroundColor:color,width:Math.max(0,n ?? 0)/max*100+'%'}}/>
+              </div>
+              <span className={'w-8 shrink-0 text-right text-xs font-semibold tabular-nums ' + (n !== null && n < 0 ? 'text-red-600' : '')}>{n === null ? '—' : formatoNumero.format(n)}</span>
+            </div>
+          )
           return (
             <section className={tarjeta + ' mb-4 rounded-xl border p-4'}>
               <h3 className={'font-bold ' + tituloSeccion}>Resultados por Punto de Venta y producto</h3>
-              <p className={secundario + ' mt-1 text-xs'}>Exclusivamente PDV · Período seleccionado · Seleccioná un producto en la leyenda para mostrarlo u ocultarlo.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {series.map(s => <button key={s.nombre} type="button" aria-pressed={!productosOcultos.includes(s.nombre)} onClick={() => setProductosOcultos(prev => prev.includes(s.nombre) ? prev.filter(n => n !== s.nombre) : [...prev,s.nombre])} className={'flex items-center gap-2 rounded-md border px-2 py-1 text-xs ' + borde + (productosOcultos.includes(s.nombre) ? ' opacity-40 line-through' : '')}><span className="h-3 w-3 rounded-sm" style={{backgroundColor:s.color}}/>{s.nombre}{!s.filas && ' (sin datos)'}</button>)}
-              </div>
-              <div className="mt-4 overflow-x-auto">
-                <div className="min-w-[620px]">
-                  <div className={'grid grid-cols-[220px_minmax(0,1fr)] gap-3 text-xs ' + secundario}>
-                    <span>Punto de Venta</span>
-                    <div className="relative h-6 mr-10">{Array.from({length:6},(_,i) => <span key={i} className="absolute -translate-x-1/2 tabular-nums" style={{left:i*20+'%'}}>{formatoNumero.format(i*paso)}</span>)}</div>
-                  </div>
-                  {filas.map(([id,nombre]) => (
-                    <div key={id} className={'grid grid-cols-[220px_minmax(0,1fr)] items-center gap-3 border-t py-2 ' + borde}>
-                      <span className="text-xs font-semibold">{nombre.replace(/^PDV\s+/i,'')}</span>
-                      <div className="relative space-y-1 mr-10">
-                        {Array.from({length:6},(_,i) => <div key={i} className={'pointer-events-none absolute inset-y-0 border-l opacity-40 ' + borde} style={{left:i*20+'%'}}/>)}
-                        {visibles.map(s => {
-                          const valor = s.filas?.find(p => p.punto_venta_id === id)?.valor ?? (s.filas ? 0 : null)
-                          return <div key={s.nombre} className="relative h-4" title={s.nombre + ': ' + (valor === null ? 'Sin datos' : formatoNumero.format(valor))}>
-                            <div className="h-full rounded-sm" style={{width:Math.max(0,valor ?? 0)/limite*100+'%',backgroundColor:s.color}}/>
-                            <span className={'absolute top-0 ml-1 text-[10px] font-semibold tabular-nums ' + (valor !== null && valor < 0 ? 'text-red-600' : '')} style={{left:Math.max(0,valor ?? 0)/limite*100+'%'}}>{valor === null ? '—' : formatoNumero.format(valor)}</span>
-                          </div>
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                  {!filas.length && <p className={secundario + ' py-4 text-sm'}>Sin datos de PDV disponibles.</p>}
-                  {!visibles.length && <p className={secundario + ' py-4 text-sm'}>Seleccioná un producto para visualizar sus resultados.</p>}
-                </div>
+              <p className={secundario + ' mt-1 text-xs'}>Exclusivamente PDV · Barras a escala por producto · TOTAL OP excluye 1175</p>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[900px] table-fixed border-collapse text-xs">
+                  <thead><tr>
+                    <th className="w-[24%] rounded-tl-md bg-[#194579] px-2 py-3 text-left text-white">PUNTO DE VENTA</th>
+                    {series.map(s => <th key={s.nombre} className="px-1 py-3 text-center text-white" style={{backgroundColor:s.color}}>{s.nombre}</th>)}
+                    <th className="rounded-tr-md bg-[#194579] px-1 py-3 text-center text-white">TOTAL OP</th>
+                  </tr></thead>
+                  <tbody>
+                    {filas.map(([id,nombre],i) => (
+                      <tr key={id} className={'border-b ' + borde + (i%2 ? ' ' + fondoSuave : '')}>
+                        <th scope="row" className="px-2 py-3 text-left font-semibold">{nombre.replace(/^PDV\s+/i,'')}</th>
+                        {series.map(s => <td key={s.nombre} className="px-2 py-3">{celda(valor(s,id),Math.max(1,...(s.filas ?? []).map(p => p.valor)),s.color)}</td>)}
+                        <td className="px-2 py-3">{celda(totalOp(id),maxTotal,'#194579')}</td>
+                      </tr>
+                    ))}
+                    {!filas.length && <tr><td colSpan={8} className="p-4 text-center">Sin datos de PDV disponibles.</td></tr>}
+                  </tbody>
+                  <tfoot><tr className="bg-[#194579] font-bold text-white">
+                    <th className="px-2 py-3 text-left">TOTAL POR NEGOCIO</th>
+                    {series.map(s => <td key={s.nombre} className="px-2 py-3 text-right tabular-nums">{s.filas ? formatoNumero.format(s.filas.reduce((n,p) => n+p.valor,0)) : '—'}</td>)}
+                    <td className="px-2 py-3 text-right tabular-nums">{comerciales.every(s => s.filas) ? formatoNumero.format(filas.reduce((n,[id]) => n+(totalOp(id) ?? 0),0)) : '—'}</td>
+                  </tr></tfoot>
+                </table>
               </div>
             </section>
           )
