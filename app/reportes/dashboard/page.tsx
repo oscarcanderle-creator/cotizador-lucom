@@ -48,7 +48,7 @@ export default async function DashboardPage() {
 
         <div className="mt-6">
           <h1 className="text-3xl font-bold text-gray-900">
-            Dashboard Comercial
+            Dashboard
           </h1>
           <p className="mt-2 text-gray-600">
             Panel de indicadores y análisis de resultados comerciales
@@ -57,7 +57,10 @@ export default async function DashboardPage() {
         </div>
 
         <div className="mt-8">
-          <DashboardClient puedeVerTodos={['ADMIN', 'SUPERVISOR', 'BBOO'].includes(profile.rol)} />
+          <DashboardClient
+            puedeVerTodos={['ADMIN', 'SUPERVISOR', 'BBOO'].includes(profile.rol)}
+            puedeVerGestion={['ADMIN', 'SUPERVISOR'].includes(profile.rol)}
+          />
         </div>
       </div>
     </main>
