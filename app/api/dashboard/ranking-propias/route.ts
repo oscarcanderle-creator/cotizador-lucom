@@ -86,7 +86,7 @@ export async function GET(request: Request) {
         const detalles=new Map((d.data??[]).map(x=>[String(x.producto_operacion_id),x]))
         for(const p of productos) {
           const gestion=gestiones.get(String(p.id))
-          const nombre=referidas ? responsables.get(String(p.responsable_id)) : operaciones.get(p.operacion_id)
+          const nombre=referidas ? (responsables.get(String(p.responsable_id)) ?? 'SIN RESPONSABLE L1') : operaciones.get(p.operacion_id)
           if(!gestion || !nombre) continue
           if(detalles.get(String(p.id))?.es_fwa===true || esFwa(p.plan_snapshot) || esFwa(gestion.plan_cargado)) continue
           const estado=nombres.get(String(gestion.estado_bboo_id))??''
@@ -115,7 +115,7 @@ export async function GET(request: Request) {
         const porProducto=new Map((gestiones??[]).map(g=>[String(g.producto_operacion_id),g]))
         for(const p of productos) {
           const g=porProducto.get(String(p.id))
-          const nombre=referidas ? responsables.get(String(p.responsable_id)) : operaciones.get(p.operacion_id)
+          const nombre=referidas ? (responsables.get(String(p.responsable_id)) ?? 'SIN RESPONSABLE L1') : operaciones.get(p.operacion_id)
           if(!g || !nombre || !g.sds?.trim() || codigosBaf.get(String(g.estado_baf_id))!=='CARGADO') continue
           const fecha=fechaArgentina(g.fecha_gestion)
           if(!fecha || fecha<desde || fecha>hasta) continue
