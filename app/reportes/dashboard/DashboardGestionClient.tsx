@@ -575,7 +575,7 @@ export default function DashboardGestionClient({
     return () => controlador.abort()
   }, [periodo, desde, hasta, grupo, vendedor])
 
-  const [ranking, setRanking] = useState<{ vendedor:string; porta:number; ln:number }[] | null>(null)
+  const [ranking, setRanking] = useState<{ vendedor:string; porta:number; ln:number; baf:number }[] | null>(null)
   const [errorRanking, setErrorRanking] = useState('')
   useEffect(() => {
     setRanking(null)
@@ -882,8 +882,8 @@ export default function DashboardGestionClient({
         <h3 className="text-lg font-bold">Ranking de ventas propias</h3>
         <p className="mb-3 text-xs opacity-70">Vendedores L1 · Ventas concretadas · Período seleccionado</p>
         {grupo && grupo !== 'L1' ? <p className="text-sm opacity-70">Este ranking corresponde exclusivamente al grupo L1.</p> : errorRanking ? <p className="text-sm text-red-500">{errorRanking}</p> : !ranking ? <p className="text-sm opacity-70">Consultando ranking…</p> : (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {([{clave:'porta',nombre:'PORTABILIDAD',color:'#e7192c',fecha:'Fecha de portación'}, {clave:'ln',nombre:'LÍNEA NUEVA',color:'#7342d7',fecha:'Fecha carga STL'}] as const).map(n => {
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            {([{clave:'baf',nombre:'BAF',color:'#095995',fecha:'Fecha gestión'}, {clave:'porta',nombre:'PORTABILIDAD',color:'#e7192c',fecha:'Fecha de portación'}, {clave:'ln',nombre:'LÍNEA NUEVA',color:'#7342d7',fecha:'Fecha carga STL'}] as const).map(n => {
               const filas = ranking.filter(f => f[n.clave] > 0).sort((a,b) => b[n.clave]-a[n.clave] || a.vendedor.localeCompare(b.vendedor,'es'))
               const max = Math.max(1,...filas.map(f => f[n.clave]))
               return <div key={n.clave} className={tarjeta + ' overflow-hidden rounded-xl border'}>
@@ -902,7 +902,7 @@ export default function DashboardGestionClient({
                       <div className="h-full rounded-full" style={{width:(100*f[n.clave]/max)+'%',backgroundColor:n.color}}/>
                     </div>
                   </div>)}
-                  <p className="text-[10px] opacity-60">{n.fecha} · FWA excluido</p>
+                  <p className="text-[10px] opacity-60">{n.fecha}{n.clave === 'baf' ? ' · Estado CARGADO · SDS informada' : ' · FWA excluido'}</p>
                 </div>
               </div>
             })}
