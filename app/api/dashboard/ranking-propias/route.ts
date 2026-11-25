@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     if (!fechaValida(desde) || !fechaValida(hasta) || desde > hasta) return NextResponse.json({ error: 'Período inválido.' }, { status: 400 })
     const admin = createAdminClient()
     const operaciones = new Map<string,string>()
-    const conteos = new Map<string,{ vendedor:string; porta:number; ln:number; baf:number }>()
+    const conteos = new Map<string,{ vendedor:string; porta:number; ln:number; baf:number; bafFinalizadas:number }>()
     if (grupo && grupo !== 'L1') return NextResponse.json({ desde,hasta,filas:[] })
     for (let offset=0;;offset+=LOTE) {
       const {data,error}=await admin.from('operaciones').select('id_operacion,vendedor').ilike('vendedor','L1 %').order('id_operacion').range(offset,offset+LOTE-1)
@@ -82,7 +82,7 @@ export async function GET(request: Request) {
           if(porta ? estado!=='ACTIVA NRO PORTADO' : !estado.includes('LINEA NUEVA ACTIVA')) continue
           const fecha=fechaArgentina(porta?gestion.fecha_porta:gestion.fecha_carga_stl)
           if(!fecha || fecha<desde || fecha>hasta) continue
-          const fila=conteos.get(nombre)??{vendedor:nombre,porta:0,ln:0,baf:0}
+          const fila=conteos.get(nombre)??{vendedor:nombre,porta:0,ln:0,baf:0,bafFinalizadas:0}
           if(porta) fila.porta++
           else fila.ln++
           conteos.set(nombre,fila)
@@ -98,7 +98,7 @@ export async function GET(request: Request) {
         const {data:productos,error}=await admin.from('operacion_productos').select('id,operacion_id').in('operacion_id',ids.slice(pos,pos+100)).eq('tipo_producto','BAF').eq('activo',true).order('id').range(offset,offset+LOTE-1)
         if(error) throw error
         if(!productos?.length) break
-        const {data:gestiones,error:errorGestion}=await admin.from('gestion_producto_baf').select('producto_operacion_id,sds,fecha_gestion,estado_baf_id').in('producto_operacion_id',productos.map(p=>p.id))
+        const {data:gestiones,error:errorGestion}=await admin.from('gestion_producto_baf').select('producto_operacion_id,sds,fecha_gestion,estado_baf_id,estado_claro').in('producto_operacion_id',productos.map(p=>p.id))
         if(errorGestion) throw errorGestion
         const porProducto=new Map((gestiones??[]).map(g=>[String(g.producto_operacion_id),g]))
         for(const p of productos) {
@@ -107,8 +107,9 @@ export async function GET(request: Request) {
           if(!g || !nombre || !g.sds?.trim() || codigosBaf.get(String(g.estado_baf_id))!=='CARGADO') continue
           const fecha=fechaArgentina(g.fecha_gestion)
           if(!fecha || fecha<desde || fecha>hasta) continue
-          const fila=conteos.get(nombre)??{vendedor:nombre,porta:0,ln:0,baf:0}
+          const fila=conteos.get(nombre)??{vendedor:nombre,porta:0,ln:0,baf:0,bafFinalizadas:0}
           fila.baf++
+          if(String(g.estado_claro??'').trim().toUpperCase()==='FINALIZADA') fila.bafFinalizadas++
           conteos.set(nombre,fila)
         }
         if(productos.length<LOTE) break
