@@ -41,16 +41,28 @@ export async function GET(request: Request) {
     const grupo = searchParams.get('grupo') ?? ''
     const vendedor = searchParams.get('vendedor') ?? ''
     if (!fechaValida(desde) || !fechaValida(hasta) || desde > hasta) return NextResponse.json({ error: 'Período inválido.' }, { status: 400 })
+    const referidas = searchParams.get('modalidad') === 'referidas'
     const admin = createAdminClient()
+    const responsables = new Map<string,string>()
+    if (referidas) {
+      for(let offset=0;;offset+=LOTE) {
+        const {data,error}=await admin.from('profiles').select('id,vendedor').ilike('vendedor','L1 %').order('id').range(offset,offset+LOTE-1)
+        if(error) throw error
+        for(const p of data??[]) if(siglaVendedor(p.vendedor)==='L1') responsables.set(String(p.id),String(p.vendedor).trim())
+        if(!data || data.length<LOTE) break
+      }
+    }
     const operaciones = new Map<string,string>()
     const conteos = new Map<string,{ vendedor:string; porta:number; ln:number; baf:number; bafFinalizadas:number }>()
-    if (grupo && grupo !== 'L1') return NextResponse.json({ desde,hasta,filas:[] })
+    if (!referidas && grupo && grupo !== 'L1') return NextResponse.json({ desde,hasta,filas:[] })
     for (let offset=0;;offset+=LOTE) {
-      const {data,error}=await admin.from('operaciones').select('id_operacion,vendedor').ilike('vendedor','L1 %').order('id_operacion').range(offset,offset+LOTE-1)
+      let consulta=admin.from('operaciones').select('id_operacion,vendedor').order('id_operacion').range(offset,offset+LOTE-1)
+      if(!referidas) consulta=consulta.ilike('vendedor','L1 %')
+      const {data,error}=await consulta
       if(error) throw error
       for(const o of data??[]) {
         const nombre=String(o.vendedor??'').trim()
-        if(siglaVendedor(nombre)==='L1' && (!vendedor || vendedor===nombre)) operaciones.set(o.id_operacion,nombre)
+        if(referidas ? (siglaVendedor(nombre)!=='L1' && (!grupo || siglaVendedor(nombre)===grupo) && (!vendedor || vendedor===nombre)) : (siglaVendedor(nombre)==='L1' && (!vendedor || vendedor===nombre))) operaciones.set(o.id_operacion,nombre)
       }
       if(!data || data.length<LOTE) break
     }
@@ -60,7 +72,7 @@ export async function GET(request: Request) {
     const ids=[...operaciones.keys()]
     for(let pos=0;pos<ids.length;pos+=100) {
       for(let offset=0;;offset+=LOTE) {
-        const {data:productos,error}=await admin.from('operacion_productos').select('id,operacion_id,tipo_producto,plan_snapshot').in('operacion_id',ids.slice(pos,pos+100)).in('tipo_producto',['PORTA','LINEA_NUEVA']).eq('activo',true).order('id').range(offset,offset+LOTE-1)
+        const {data:productos,error}=await admin.from('operacion_productos').select('id,operacion_id,tipo_producto,plan_snapshot,responsable_id').in('operacion_id',ids.slice(pos,pos+100)).in('tipo_producto',['PORTA','LINEA_NUEVA']).eq('activo',true).order('id').range(offset,offset+LOTE-1)
         if(error) throw error
         if(!productos?.length) break
         const pids=productos.map(p=>p.id)
@@ -74,7 +86,7 @@ export async function GET(request: Request) {
         const detalles=new Map((d.data??[]).map(x=>[String(x.producto_operacion_id),x]))
         for(const p of productos) {
           const gestion=gestiones.get(String(p.id))
-          const nombre=operaciones.get(p.operacion_id)
+          const nombre=referidas ? responsables.get(String(p.responsable_id)) : operaciones.get(p.operacion_id)
           if(!gestion || !nombre) continue
           if(detalles.get(String(p.id))?.es_fwa===true || esFwa(p.plan_snapshot) || esFwa(gestion.plan_cargado)) continue
           const estado=nombres.get(String(gestion.estado_bboo_id))??''
@@ -95,7 +107,7 @@ export async function GET(request: Request) {
     const codigosBaf=new Map((estadosBaf??[]).map(e=>[String(e.id),String(e.codigo??'').trim().toUpperCase()]))
     for(let pos=0;pos<ids.length;pos+=100) {
       for(let offset=0;;offset+=LOTE) {
-        const {data:productos,error}=await admin.from('operacion_productos').select('id,operacion_id').in('operacion_id',ids.slice(pos,pos+100)).eq('tipo_producto','BAF').eq('activo',true).order('id').range(offset,offset+LOTE-1)
+        const {data:productos,error}=await admin.from('operacion_productos').select('id,operacion_id,responsable_id').in('operacion_id',ids.slice(pos,pos+100)).eq('tipo_producto','BAF').eq('activo',true).order('id').range(offset,offset+LOTE-1)
         if(error) throw error
         if(!productos?.length) break
         const {data:gestiones,error:errorGestion}=await admin.from('gestion_producto_baf').select('producto_operacion_id,sds,fecha_gestion,estado_baf_id,estado_claro').in('producto_operacion_id',productos.map(p=>p.id))
@@ -103,7 +115,7 @@ export async function GET(request: Request) {
         const porProducto=new Map((gestiones??[]).map(g=>[String(g.producto_operacion_id),g]))
         for(const p of productos) {
           const g=porProducto.get(String(p.id))
-          const nombre=operaciones.get(p.operacion_id)
+          const nombre=referidas ? responsables.get(String(p.responsable_id)) : operaciones.get(p.operacion_id)
           if(!g || !nombre || !g.sds?.trim() || codigosBaf.get(String(g.estado_baf_id))!=='CARGADO') continue
           const fecha=fechaArgentina(g.fecha_gestion)
           if(!fecha || fecha<desde || fecha>hasta) continue
