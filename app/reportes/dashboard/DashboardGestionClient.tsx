@@ -580,7 +580,7 @@ export default function DashboardGestionClient({
   useEffect(() => {
     setRanking(null)
     setErrorRanking('')
-    if (!desde || !hasta || desde > hasta || (grupo && grupo !== 'L1')) return
+    if (!desde || !hasta || desde > hasta) return
     const controller = new AbortController()
     const params = new URLSearchParams({desde,hasta,grupo,vendedor})
     fetch('/api/dashboard/ranking-propias?' + params, {signal:controller.signal,cache:'no-store'})
@@ -755,6 +755,125 @@ export default function DashboardGestionClient({
         </label>
       </div>
 
+      <section className="mb-5">
+        <h3 className="mb-3 text-lg font-bold">Resultados comerciales</h3>
+        <p className="mb-2 text-xs opacity-70">{desde} – {hasta}</p>
+        {errorRanking || errorReferidas ? <p role="alert" className="text-sm text-red-500">{errorRanking || errorReferidas}</p> : !ranking || !referidas ? <p className="text-sm opacity-70">Consultando resultados comerciales…</p> : <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {([{clave:'baf',nombre:'BAF CARGADAS',color:'#095995'}, {clave:'bafFinalizadas',nombre:'BAF FINALIZADAS',color:'#095995'}, {clave:'porta',nombre:'PORTA PORTADAS',color:'#e7192c'}, {clave:'ln',nombre:'LN ACTIVAS',color:'#7342d7'}] as const).map(n => {
+              const propias=ranking.reduce((s,f)=>s+f[n.clave],0)
+              const refs=referidas.reduce((s,f)=>s+f[n.clave],0)
+              const sinResponsable=referidas.filter(f=>f.vendedor==='SIN RESPONSABLE L1').reduce((s,f)=>s+f[n.clave],0)
+              const total=propias+refs
+              const porcentaje=(v:number)=>total ? (100*v/total).toLocaleString('es-AR',{maximumFractionDigits:1})+'%' : '—'
+              return <div key={n.clave} className={tarjeta+' overflow-hidden rounded-xl border'}>
+                <div className="px-3 py-2 text-center text-xs font-bold" style={tema==='clasico'?{backgroundColor:n.color,color:'#fff'}:{borderBottom:'3px solid '+n.color}}>{n.nombre}</div>
+                <div className="space-y-3 p-3">
+                  <div className="text-4xl font-bold tabular-nums">{formato.format(total)}</div>
+                  <div className="flex h-3 overflow-hidden rounded-full bg-gray-200">
+                    <div style={{width:(total?100*propias/total:0)+'%',backgroundColor:n.color}}/>
+                    <div style={{width:(total?100*refs/total:0)+'%',backgroundColor:'#94a3b8'}}/>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div><span className="opacity-70">Propias</span><div className="text-lg font-bold">{formato.format(propias)}</div><span>{porcentaje(propias)}</span></div>
+                    <div><span className="opacity-70">Referidas</span><div className="text-lg font-bold">{formato.format(refs)}</div><span>{porcentaje(refs)}</span></div>
+                  </div>
+                  {sinResponsable>0 && <p className="text-xs opacity-70">Referidas sin responsable L1: {formato.format(sinResponsable)}</p>}
+                </div>
+              </div>
+            })}
+          </div>
+          <div className={tarjeta+' mt-3 rounded-xl border p-4'}>
+            <h4 className="mb-3 text-sm font-bold">BAF · Finalización de instalaciones</h4>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {([{nombre:'Total',filas:[...ranking,...referidas]}, {nombre:'Propias',filas:ranking}, {nombre:'Referidas',filas:referidas}]).map(n=>{
+                const cargadas=n.filas.reduce((s,f)=>s+f.baf,0)
+                const finalizadas=n.filas.reduce((s,f)=>s+f.bafFinalizadas,0)
+                const ratio=cargadas?100*finalizadas/cargadas:null
+                return <div key={n.nombre}>
+                  <div className="flex items-center justify-between text-sm"><span>{n.nombre}</span><strong>{ratio===null?'—':ratio.toLocaleString('es-AR',{maximumFractionDigits:1})+'%'}</strong></div>
+                  <div className="relative my-2 h-3 rounded-full bg-slate-300">
+                    <div className="h-full rounded-full" style={{width:(ratio??0)+'%',backgroundColor:'#095995'}}/>
+                    <div className="absolute inset-y-0 w-0.5 bg-amber-600" style={{left:'85%'}}/>
+                  </div>
+                  <p className="text-xs opacity-70">{finalizadas} de {cargadas} · No finalizadas: {cargadas-finalizadas}</p>
+                </div>
+              })}
+            </div>
+            <p className="mt-3 text-xs opacity-70">Referencia habitual: 85% de finalización. Las no finalizadas pueden incluir instalaciones pendientes. Cohorte por fecha de gestión.</p>
+          </div>
+          <p className="mt-2 text-xs opacity-70">FWA pendiente de definición comercial; excluido de LN.</p>
+        </>}
+      </section>
+
+      <section className="mt-5">
+        <h3 className="text-lg font-bold">Ranking de ventas propias</h3>
+        <p className="mb-3 text-xs opacity-70">Vendedores L1 · Ventas concretadas · Período seleccionado</p>
+        {grupo && grupo !== 'L1' ? <p className="text-sm opacity-70">Este ranking corresponde exclusivamente al grupo L1.</p> : errorRanking ? <p className="text-sm text-red-500">{errorRanking}</p> : !ranking ? <p className="text-sm opacity-70">Consultando ranking…</p> : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {([{clave:'baf',nombre:'BAF CARGADAS',color:'#095995',fecha:'Fecha gestión'}, {clave:'bafFinalizadas',nombre:'BAF FINALIZADAS',color:'#095995',fecha:'Fecha gestión'}, {clave:'porta',nombre:'PORTABILIDAD',color:'#e7192c',fecha:'Fecha de portación'}, {clave:'ln',nombre:'LÍNEA NUEVA',color:'#7342d7',fecha:'Fecha carga STL'}] as const).map(n => {
+              const filas = ranking.filter(f => f[n.clave] > 0).sort((a,b) => b[n.clave]-a[n.clave] || a.vendedor.localeCompare(b.vendedor,'es'))
+              const max = Math.max(1,...filas.map(f => f[n.clave]))
+              return <div key={n.clave} className={tarjeta + ' overflow-hidden rounded-xl border'}>
+                <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm font-bold" style={{backgroundColor:n.color,color:'#fff'}}>
+                  <span>{n.nombre}</span><span>{filas.reduce((s,f)=>s+f[n.clave],0)}</span>
+                </div>
+                <div className="space-y-3 p-3">
+                  {!filas.length && <p className="text-sm opacity-70">Sin ventas en el período.</p>}
+                  {filas.map((f,i) => <div key={f.vendedor}>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="w-6 shrink-0 opacity-60">{i+1}.</span>
+                      <span className="min-w-0 flex-1 break-words">{f.vendedor.replace(/<[^>]*>/g,'').trim().toUpperCase()}</span>
+                      <span className="font-bold tabular-nums">{f[n.clave]}</span>
+                    </div>
+                    <div className={'ml-8 mt-1 h-2 rounded-full ' + (oscuro?'bg-slate-700':'bg-gray-100')}>
+                      <div className="h-full rounded-full" style={{width:(100*f[n.clave]/max)+'%',backgroundColor:n.color}}/>
+                    </div>
+                  </div>)}
+                  <p className="text-[10px] opacity-60">{n.fecha}{n.clave === 'baf' ? ' · Estado CARGADO · SDS informada' : n.clave === 'bafFinalizadas' ? ' · CARGADO · Claro FINALIZADA · SDS informada' : ' · FWA excluido'}</p>
+                </div>
+              </div>
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="mt-5">
+        <h3 className="text-lg font-bold">Ranking de ventas referidas</h3>
+        <p className="mb-3 text-xs opacity-70">Responsables de gestión L1 · Vendedor externo a L1 · Período seleccionado</p>
+        {errorReferidas ? <p className="text-sm text-red-500">{errorReferidas}</p> : !referidas ? <p className="text-sm opacity-70">Consultando ranking…</p> : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {([{clave:'baf',nombre:'BAF CARGADAS',color:'#095995',fecha:'Fecha gestión'}, {clave:'bafFinalizadas',nombre:'BAF FINALIZADAS',color:'#095995',fecha:'Fecha gestión'}, {clave:'porta',nombre:'PORTABILIDAD',color:'#e7192c',fecha:'Fecha de portación'}, {clave:'ln',nombre:'LÍNEA NUEVA',color:'#7342d7',fecha:'Fecha carga STL'}] as const).map(n => {
+              const filas = referidas.filter(f => f[n.clave] > 0 && f.vendedor !== 'SIN RESPONSABLE L1').sort((a,b) => b[n.clave]-a[n.clave] || a.vendedor.localeCompare(b.vendedor,'es'))
+              const max = Math.max(1,...filas.map(f => f[n.clave]))
+              return <div key={n.clave} className={tarjeta + ' overflow-hidden rounded-xl border'}>
+                <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm font-bold" style={{backgroundColor:n.color,color:'#fff'}}>
+                  <span>{n.nombre}</span><span>{filas.reduce((s,f)=>s+f[n.clave],0)}</span>
+                </div>
+                <div className="space-y-3 p-3">
+                  {!filas.length && <p className="text-sm opacity-70">Sin ventas en el período.</p>}
+                  {filas.map((f,i) => <div key={f.vendedor}>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="w-6 shrink-0 opacity-60">{i+1}.</span>
+                      <span className="min-w-0 flex-1 break-words">{f.vendedor.replace(/<[^>]*>/g,'').trim().toUpperCase()}</span>
+                      <span className="font-bold tabular-nums">{f[n.clave]}</span>
+                    </div>
+                    <div className={'ml-8 mt-1 h-2 rounded-full ' + (oscuro?'bg-slate-700':'bg-gray-100')}>
+                      <div className="h-full rounded-full" style={{width:(100*f[n.clave]/max)+'%',backgroundColor:n.color}}/>
+                    </div>
+                  </div>)}
+                  <p className="text-xs opacity-70">Sin responsable L1: {referidas.filter(f=>f.vendedor==='SIN RESPONSABLE L1').reduce((s,f)=>s+f[n.clave],0)}</p>
+                  <p className="text-[10px] opacity-60">{n.fecha}{n.clave === 'baf' ? ' · Estado CARGADO · SDS informada' : n.clave === 'bafFinalizadas' ? ' · CARGADO · Claro FINALIZADA · SDS informada' : ' · FWA excluido'}</p>
+                </div>
+              </div>
+            })}
+          </div>
+        )}
+      </section>
+
+      <details className="mt-5">
+        <summary className="cursor-pointer text-sm font-semibold">Ventas ingresadas · Información complementaria</summary>
+        <div className="mt-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-lg font-bold">
           Ventas ingresadas
@@ -896,69 +1015,8 @@ export default function DashboardGestionClient({
         })}
       </div>
 
-      <section className="mt-5">
-        <h3 className="text-lg font-bold">Ranking de ventas propias</h3>
-        <p className="mb-3 text-xs opacity-70">Vendedores L1 · Ventas concretadas · Período seleccionado</p>
-        {grupo && grupo !== 'L1' ? <p className="text-sm opacity-70">Este ranking corresponde exclusivamente al grupo L1.</p> : errorRanking ? <p className="text-sm text-red-500">{errorRanking}</p> : !ranking ? <p className="text-sm opacity-70">Consultando ranking…</p> : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {([{clave:'baf',nombre:'BAF CARGADAS',color:'#095995',fecha:'Fecha gestión'}, {clave:'bafFinalizadas',nombre:'BAF FINALIZADAS',color:'#095995',fecha:'Fecha gestión'}, {clave:'porta',nombre:'PORTABILIDAD',color:'#e7192c',fecha:'Fecha de portación'}, {clave:'ln',nombre:'LÍNEA NUEVA',color:'#7342d7',fecha:'Fecha carga STL'}] as const).map(n => {
-              const filas = ranking.filter(f => f[n.clave] > 0).sort((a,b) => b[n.clave]-a[n.clave] || a.vendedor.localeCompare(b.vendedor,'es'))
-              const max = Math.max(1,...filas.map(f => f[n.clave]))
-              return <div key={n.clave} className={tarjeta + ' overflow-hidden rounded-xl border'}>
-                <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm font-bold" style={{backgroundColor:n.color,color:'#fff'}}>
-                  <span>{n.nombre}</span><span>{filas.reduce((s,f)=>s+f[n.clave],0)}</span>
-                </div>
-                <div className="space-y-3 p-3">
-                  {!filas.length && <p className="text-sm opacity-70">Sin ventas en el período.</p>}
-                  {filas.map((f,i) => <div key={f.vendedor}>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="w-6 shrink-0 opacity-60">{i+1}.</span>
-                      <span className="min-w-0 flex-1 break-words">{f.vendedor}</span>
-                      <span className="font-bold tabular-nums">{f[n.clave]}</span>
-                    </div>
-                    <div className={'ml-8 mt-1 h-2 rounded-full ' + (oscuro?'bg-slate-700':'bg-gray-100')}>
-                      <div className="h-full rounded-full" style={{width:(100*f[n.clave]/max)+'%',backgroundColor:n.color}}/>
-                    </div>
-                  </div>)}
-                  <p className="text-[10px] opacity-60">{n.fecha}{n.clave === 'baf' ? ' · Estado CARGADO · SDS informada' : n.clave === 'bafFinalizadas' ? ' · CARGADO · Claro FINALIZADA · SDS informada' : ' · FWA excluido'}</p>
-                </div>
-              </div>
-            })}
-          </div>
-        )}
-      </section>
-
-      <section className="mt-5">
-        <h3 className="text-lg font-bold">Ranking de ventas referidas</h3>
-        <p className="mb-3 text-xs opacity-70">Responsables de gestión L1 · Vendedor externo a L1 · Período seleccionado</p>
-        {errorReferidas ? <p className="text-sm text-red-500">{errorReferidas}</p> : !referidas ? <p className="text-sm opacity-70">Consultando ranking…</p> : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {([{clave:'baf',nombre:'BAF CARGADAS',color:'#095995',fecha:'Fecha gestión'}, {clave:'bafFinalizadas',nombre:'BAF FINALIZADAS',color:'#095995',fecha:'Fecha gestión'}, {clave:'porta',nombre:'PORTABILIDAD',color:'#e7192c',fecha:'Fecha de portación'}, {clave:'ln',nombre:'LÍNEA NUEVA',color:'#7342d7',fecha:'Fecha carga STL'}] as const).map(n => {
-              const filas = referidas.filter(f => f[n.clave] > 0).sort((a,b) => b[n.clave]-a[n.clave] || a.vendedor.localeCompare(b.vendedor,'es'))
-              const max = Math.max(1,...filas.map(f => f[n.clave]))
-              return <div key={n.clave} className={tarjeta + ' overflow-hidden rounded-xl border'}>
-                <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm font-bold" style={{backgroundColor:n.color,color:'#fff'}}>
-                  <span>{n.nombre}</span><span>{filas.reduce((s,f)=>s+f[n.clave],0)}</span>
-                </div>
-                <div className="space-y-3 p-3">
-                  {!filas.length && <p className="text-sm opacity-70">Sin ventas en el período.</p>}
-                  {filas.map((f,i) => <div key={f.vendedor}>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="w-6 shrink-0 opacity-60">{i+1}.</span>
-                      <span className="min-w-0 flex-1 break-words">{f.vendedor}</span>
-                      <span className="font-bold tabular-nums">{f[n.clave]}</span>
-                    </div>
-                    <div className={'ml-8 mt-1 h-2 rounded-full ' + (oscuro?'bg-slate-700':'bg-gray-100')}>
-                      <div className="h-full rounded-full" style={{width:(100*f[n.clave]/max)+'%',backgroundColor:n.color}}/>
-                    </div>
-                  </div>)}
-                  <p className="text-[10px] opacity-60">{n.fecha}{n.clave === 'baf' ? ' · Estado CARGADO · SDS informada' : n.clave === 'bafFinalizadas' ? ' · CARGADO · Claro FINALIZADA · SDS informada' : ' · FWA excluido'}</p>
-                </div>
-              </div>
-            })}
-          </div>
-        )}
-      </section>
+        </div>
+      </details>
 
       <p className="mt-4 text-xs opacity-60">
         Fuente: operaciones y productos registrados en PGL.
