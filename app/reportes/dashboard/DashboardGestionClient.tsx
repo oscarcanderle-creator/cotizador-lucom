@@ -575,6 +575,13 @@ export default function DashboardGestionClient({
     return () => controlador.abort()
   }, [periodo, desde, hasta, grupo, vendedor])
 
+  const [vistaRanking,setVistaRanking]=useState<'comparativo'|'ranking'|'consolidado'>('comparativo')
+  const [negocioRanking,setNegocioRanking]=useState<'baf'|'bafFinalizadas'|'porta'|'ln'>('baf')
+  const [ordenRanking,setOrdenRanking]=useState<'vendedor'|'baf'|'bafFinalizadas'|'porta'|'ln'>('vendedor')
+  useEffect(()=>{
+    const guardada=localStorage.getItem('pgl-dashboard-ranking-vista')
+    if(guardada==='comparativo'||guardada==='ranking'||guardada==='consolidado') setVistaRanking(guardada)
+  },[])
   const [ranking, setRanking] = useState<{ vendedor:string; porta:number; ln:number; baf:number; bafFinalizadas:number }[] | null>(null)
   const [errorRanking, setErrorRanking] = useState('')
   useEffect(() => {
@@ -807,6 +814,72 @@ export default function DashboardGestionClient({
       </section>
 
       <section className="mt-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-lg font-bold">Producción por vendedor</h3>
+          <div className="flex flex-wrap gap-1">
+            {(['comparativo','ranking','consolidado'] as const).map(v=><button key={v} type="button" aria-pressed={vistaRanking===v} onClick={()=>{setVistaRanking(v);localStorage.setItem('pgl-dashboard-ranking-vista',v)}} className={'rounded-lg border px-3 py-1.5 text-xs font-semibold '+(vistaRanking===v?'border-blue-600 bg-blue-600 text-white':control)}>{v.toUpperCase()}</button>)}
+          </div>
+        </div>
+        {vistaRanking!=='ranking' && (errorRanking||errorReferidas ? <p role="alert" className="text-sm text-red-500">{errorRanking||errorReferidas}</p> : !ranking||!referidas ? <p className="text-sm opacity-70">Consultando rankings…</p> : (()=>{
+          const columnas=[{clave:'baf',nombre:'BAF CARGADAS',color:'#095995'},{clave:'bafFinalizadas',nombre:'BAF FINALIZADAS',color:'#095995'},{clave:'porta',nombre:'PORTABILIDAD',color:'#e7192c'},{clave:'ln',nombre:'LÍNEA NUEVA',color:'#7342d7'}] as const
+          const nombre=(v:string)=>v.replace(/<[^>]*>/g,'').trim().toUpperCase()
+          const asignadas=referidas.filter(f=>f.vendedor!=='SIN RESPONSABLE L1')
+          const sinAsignar=referidas.filter(f=>f.vendedor==='SIN RESPONSABLE L1')
+          if(vistaRanking==='comparativo') return <div className="space-y-3">
+            {[{titulo:'Ventas propias',filas:ranking,pendientes:[] as typeof ranking},{titulo:'Ventas referidas',filas:asignadas,pendientes:sinAsignar}].map(m=>{
+              const filas=[...m.filas].sort((a,b)=>ordenRanking==='vendedor'?nombre(a.vendedor).localeCompare(nombre(b.vendedor),'es'):b[ordenRanking]-a[ordenRanking]||nombre(a.vendedor).localeCompare(nombre(b.vendedor),'es'))
+              return <div key={m.titulo} className={tarjeta+' overflow-hidden rounded-xl border'}>
+                <h4 className="px-3 py-2 text-sm font-bold">{m.titulo}</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[600px] table-fixed text-xs">
+                    <thead><tr>
+                      <th className="w-1/4 px-3 py-2 text-left"><button type="button" onClick={()=>setOrdenRanking('vendedor')}>Vendedor {ordenRanking==='vendedor'?'↑':''}</button></th>
+                      {columnas.map(n=><th key={n.clave} style={{backgroundColor:n.color,color:'#fff'}} className="px-2 py-2"><button type="button" className="w-full" onClick={()=>setOrdenRanking(n.clave)}>{n.nombre} {ordenRanking===n.clave?'↓':''}</button></th>)}
+                    </tr></thead>
+                    <tbody>
+                      {filas.map(f=><tr key={f.vendedor} className={'border-t '+(oscuro?'border-slate-700':'border-gray-100')}>
+                        <td className="px-3 py-1.5 font-medium">{nombre(f.vendedor)}</td>
+                        {columnas.map(n=><td key={n.clave} className="px-3 py-1.5"><div className="flex items-center gap-2"><div className={'h-2 flex-1 rounded-full '+(oscuro?'bg-slate-700':'bg-gray-100')}><div className="h-full rounded-full" style={{backgroundColor:n.color,width:(100*f[n.clave]/Math.max(1,...filas.map(x=>x[n.clave])))+'%'}}/></div><span className="w-8 text-right font-semibold tabular-nums">{f[n.clave]||'–'}</span></div></td>)}
+                      </tr>)}
+                      {!filas.length&&<tr><td colSpan={5} className="p-3 opacity-70">Sin ventas en el período.</td></tr>}
+                    </tbody>
+                    <tfoot className={'border-t font-bold '+(oscuro?'border-slate-600 bg-slate-900':'border-gray-200 bg-gray-50')}>
+                      <tr><td className="px-3 py-2">TOTAL RANKING</td>{columnas.map(n=><td key={n.clave} className="px-3 py-2 text-right tabular-nums">{formato.format(filas.reduce((s,f)=>s+f[n.clave],0))}</td>)}</tr>
+                      {m.pendientes.length>0&&<tr className="font-normal opacity-70"><td className="px-3 py-2">Sin responsable L1</td>{columnas.map(n=><td key={n.clave} className="px-3 py-2 text-right">{formato.format(m.pendientes.reduce((s,f)=>s+f[n.clave],0))}</td>)}</tr>}
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            })}
+          </div>
+          const personas=new Map<string,{nombre:string;propias:number;referidas:number}>()
+          for(const [modalidad,filas] of [['propias',ranking],['referidas',asignadas]] as const) for(const f of filas){
+            const clave=nombre(f.vendedor)
+            const persona=personas.get(clave)??{nombre:clave,propias:0,referidas:0}
+            persona[modalidad]+=f[negocioRanking]
+            personas.set(clave,persona)
+          }
+          const filas=[...personas.values()].filter(f=>f.propias+f.referidas>0).sort((a,b)=>(b.propias+b.referidas)-(a.propias+a.referidas)||a.nombre.localeCompare(b.nombre,'es'))
+          const max=Math.max(1,...filas.map(f=>f.propias+f.referidas))
+          const color=columnas.find(n=>n.clave===negocioRanking)?.color??'#095995'
+          return <div className={tarjeta+' rounded-xl border p-3'}>
+            <div className="mb-3 flex flex-wrap gap-1">{columnas.map(n=><button key={n.clave} type="button" aria-pressed={negocioRanking===n.clave} onClick={()=>setNegocioRanking(n.clave)} className={'rounded-md border px-3 py-1.5 text-xs font-bold '+(negocioRanking===n.clave?'text-white':control)} style={negocioRanking===n.clave?{backgroundColor:n.color,borderColor:n.color}:undefined}>{n.nombre}</button>)}</div>
+            <div className="mb-3 flex gap-4 text-xs"><span><i className="mr-1 inline-block h-2 w-3 rounded" style={{backgroundColor:color}}/>Propias</span><span><i className="mr-1 inline-block h-2 w-3 rounded bg-slate-400"/>Referidas</span></div>
+            <div className="space-y-1.5">{filas.map(f=><div key={f.nombre} className="grid grid-cols-[minmax(90px,1fr)_3fr_70px] items-center gap-2 text-xs">
+              <span className="font-medium">{f.nombre}</span>
+              <div className="flex h-5 overflow-hidden rounded" style={{width:(100*(f.propias+f.referidas)/max)+'%'}}>
+                {f.propias>0&&<div title={'Propias: '+f.propias} className="flex items-center justify-center text-white" style={{width:(100*f.propias/(f.propias+f.referidas))+'%',backgroundColor:color}}>{f.propias}</div>}
+                {f.referidas>0&&<div title={'Referidas: '+f.referidas} className="flex flex-1 items-center justify-center bg-slate-400 text-slate-950">{f.referidas}</div>}
+              </div><span className="text-right font-bold tabular-nums">{f.propias+f.referidas}</span>
+            </div>)}</div>
+            {!filas.length&&<p className="text-xs opacity-70">Sin ventas en el período.</p>}
+            <div className="mt-3 flex flex-wrap justify-between gap-2 border-t pt-2 text-xs font-bold"><span>Propias: {filas.reduce((s,f)=>s+f.propias,0)}</span><span>Referidas: {filas.reduce((s,f)=>s+f.referidas,0)}</span><span>Total ranking: {filas.reduce((s,f)=>s+f.propias+f.referidas,0)}</span></div>
+            {sinAsignar.length>0&&<p className="mt-2 text-xs opacity-70">Sin responsable L1 (fuera del ranking): {sinAsignar.reduce((s,f)=>s+f[negocioRanking],0)}</p>}
+          </div>
+        })())}
+      </section>
+      {vistaRanking==='ranking'&&<>
+      <section className="mt-5">
         <h3 className="text-lg font-bold">Ranking de ventas propias</h3>
         <p className="mb-3 text-xs opacity-70">Vendedores L1 · Ventas concretadas · Período seleccionado</p>
         {grupo && grupo !== 'L1' ? <p className="text-sm opacity-70">Este ranking corresponde exclusivamente al grupo L1.</p> : errorRanking ? <p className="text-sm text-red-500">{errorRanking}</p> : !ranking ? <p className="text-sm opacity-70">Consultando ranking…</p> : (
@@ -871,6 +944,7 @@ export default function DashboardGestionClient({
         )}
       </section>
 
+      </>}
       <details className="mt-5">
         <summary className="cursor-pointer text-sm font-semibold">Ventas ingresadas · Información complementaria</summary>
         <div className="mt-3">
