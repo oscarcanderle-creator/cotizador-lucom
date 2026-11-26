@@ -837,7 +837,7 @@ export default function DashboardGestionClient({
                       {columnas.map(n=><th key={n.clave} style={{backgroundColor:n.color,color:'#fff'}} className="px-2 py-2"><button type="button" className="w-full" onClick={()=>setOrdenRanking(n.clave)}>{n.nombre} {ordenRanking===n.clave?'↓':''}</button></th>)}
                     </tr></thead>
                     <tbody>
-                      {filas.map(f=><tr key={f.vendedor} className={'border-t '+(oscuro?'border-slate-700':'border-gray-100')}>
+                      {filas.map(f=><tr key={f.vendedor} className={'border-t '+(oscuro?'border-slate-700':'border-slate-200 odd:bg-white even:bg-slate-50 hover:!bg-blue-100 transition-colors')}>
                         <td className="px-3 py-1.5 font-medium">{nombre(f.vendedor)}</td>
                         {columnas.map(n=><td key={n.clave} className="px-3 py-1.5"><div className="flex items-center gap-2"><div className={'h-2 flex-1 rounded-full '+(oscuro?'bg-slate-700':'bg-gray-100')}><div className="h-full rounded-full" style={{backgroundColor:n.color,width:(100*f[n.clave]/Math.max(1,...filas.map(x=>x[n.clave])))+'%'}}/></div><span className="w-8 text-right font-semibold tabular-nums">{f[n.clave]||'–'}</span></div></td>)}
                       </tr>)}
