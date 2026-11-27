@@ -52,7 +52,7 @@ function MedidorCancelaciones({ valor }: { valor: number | null }) {
     return [120 - r * Math.cos(a), 108 - r * Math.sin(a)]
   }
   return (
-    <svg viewBox="0 0 240 154" className="mx-auto w-full max-w-[330px]" role="img"
+    <svg viewBox="0 0 240 154" className="mx-auto w-full max-w-[205px]" role="img"
       aria-label={valor === null ? 'Sin porcentaje de cancelaciones' : 'Cancelaciones: ' + valor.toFixed(2) + '%'}>
       {tramos.map(tramo => {
         const [x1, y1] = punto(tramo.inicio, 87)
@@ -101,27 +101,26 @@ export default function DashboardBafGestionClient({ oscuro }: { oscuro: boolean 
   const panel = oscuro ? 'border-slate-700 bg-slate-900 text-slate-100' : 'border-slate-200 bg-white text-slate-800'
   const tenue = oscuro ? 'text-slate-400' : 'text-slate-500'
   const accent = tema === 'instrumental' ? '#7c3aed' : tema === 'ejecutivo' ? '#0d9488' : '#2563eb'
-  const f = datos?.fija
+  const f = datos?.periodo === periodo ? datos.fija : undefined
   const historico = datos?.historico ?? []
   const maxGrafico = Math.max(1, ...historico.flatMap(m => [m.preventas_ok, m.finalizadas]))
   const estado = clasificacion(f?.porcentaje_canceladas ?? null)
   const excluidas = datos?.control.excluidas.reduce((s, x) => s + x.cantidad, 0) ?? 0
   const tarjeta = (nombre: string, valor: number | undefined, nota: string, color?: string) => (
-    <div className={'rounded-xl border p-4 ' + panel}>
+    <div className={'rounded-lg border px-3 py-2 ' + panel}>
       <div className={'text-xs font-bold uppercase tracking-wide ' + tenue}>{nombre}</div>
-      <div className="mt-2 text-3xl font-bold tabular-nums" style={{ color: color ?? accent }}>
+      <div className="mt-0.5 text-2xl font-bold tabular-nums" style={{ color: color ?? accent }}>
         {valor === undefined ? '—' : nf.format(valor)}
       </div>
-      <div className={'mt-2 text-xs ' + tenue}>{nota}</div>
+      <div className={'mt-0.5 text-[11px] leading-tight ' + tenue}>{nota}</div>
     </div>
   )
   return (
-    <section className={'space-y-5 p-4 sm:p-6 ' + (oscuro ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800')}>
-      <div className={'flex flex-wrap items-end justify-between gap-3 rounded-xl border p-4 ' + panel}>
+    <section className={'space-y-3 p-3 sm:p-4 ' + (oscuro ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800')}>
+      <div className={'flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 ' + panel}>
         <div>
-          <h3 className="text-xl font-bold">Gestión BAF · Agencia</h3>
+          <h3 className="text-base font-bold">Gestión BAF · Agencia</h3>
           <p className={'mt-1 text-xs ' + tenue}>2PLAY y 3PLAY · CALL + PDV · AÑADIR TV excluido</p>
-          <p className={'mt-1 text-xs ' + tenue}>Origen: Reporte FIJA importado en PGL</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -141,42 +140,46 @@ export default function DashboardBafGestionClient({ oscuro }: { oscuro: boolean 
           </label>
         </div>
       </div>
-      <p className={'rounded-lg border px-4 py-3 text-sm ' + (oscuro ? 'border-amber-700 bg-amber-950/40 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-900')}>
-        Información operativa provisional. No constituye cierre oficial para comisiones; el cierre mensual auditado aún no está implementado.
+      <p className={'rounded-md border px-3 py-1.5 text-xs ' + (oscuro ? 'border-amber-700 bg-amber-950/40 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-900')}>
+        Datos provisionales · No válidos como cierre oficial de comisiones.
       </p>
       {cargando && <p role="status" className="text-sm">Consultando Reporte FIJA…</p>}
       {error && <p role="alert" className="rounded-lg border border-red-300 p-3 text-sm text-red-600">{error}</p>}
-      {datos && <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-          <div className={'rounded-xl border p-4 lg:col-span-2 ' + panel}>
+      {datos && datos.periodo === periodo && <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(220px,1fr)_2fr]">
+          <div className={'rounded-lg border p-3 ' + panel}>
             <div className={'text-xs font-bold uppercase tracking-wide ' + tenue}>Indicador de cancelaciones · {etiquetaMes(periodo)}</div>
             <MedidorCancelaciones valor={f?.porcentaje_canceladas ?? null} />
             <div className="text-center text-sm font-bold" style={{ color: estado.color }}>{estado.texto}</div>
             <p className={'mt-1 text-center text-xs ' + tenue}>Canceladas / (Finalizadas + Canceladas) · fecha de instalación</p>
           </div>
-          {tarjeta('Backlog · asignadas', f?.backlog, 'Total pendiente actual, sin filtro por fecha', '#d97706')}
-          {tarjeta('Preventas OK', f?.preventas_ok, 'Fecha de carga del mes seleccionado')}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {tarjeta('Backlog', f?.backlog, 'Asignadas actuales', '#d97706')}
+            {tarjeta('Preventas OK', f?.preventas_ok, 'Fecha de carga')}
+            {tarjeta('Finalizadas', f?.finalizadas, 'Fecha de instalación', '#16a34a')}
+            {tarjeta('Canceladas', f?.canceladas, 'Fecha de instalación', '#dc2626')}
+            {tarjeta('Cierres totales', f ? f.finalizadas + f.canceladas : undefined, 'Finalizadas + Canceladas')}
+            {tarjeta('Desvío', undefined, 'Pendiente de integración')}
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {tarjeta('Finalizadas', f?.finalizadas, 'Fecha de instalación del mes', '#16a34a')}
-          {tarjeta('Canceladas', f?.canceladas, 'Fecha de instalación del mes', '#dc2626')}
-          {tarjeta('Cierres totales', f ? f.finalizadas + f.canceladas : undefined, 'Finalizadas + Canceladas')}
-        </div>
-        <div className={'rounded-xl border p-4 ' + panel}>
+        <div className={'rounded-lg border p-3 ' + panel}>
           <h4 className="font-bold">Evolución histórica BAF · 2026</h4>
           <p className={'mt-1 text-xs ' + tenue}>Histórico aportado por la agencia: Preventas OK y Finalizadas. No se reconstruyen cancelaciones históricas.</p>
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+          <div className="mt-2 flex gap-1 overflow-x-auto pb-1">
             {historico.map(m => {
               const mes = m.periodo.slice(0, 7)
               return <button key={m.periodo} type="button" onClick={() => setPeriodo(mes)}
                 title={`${etiquetaMes(mes)} · Preventas ${m.preventas_ok} · Finalizadas ${m.finalizadas}`}
-                className={'min-w-[58px] flex-1 rounded-lg border px-1 pb-2 pt-3 transition hover:ring-2 ' +
-                  (mes === periodo ? 'border-blue-500 ring-1 ring-blue-500' : (oscuro ? 'border-slate-700' : 'border-slate-200'))}>
-                <div className="flex h-28 items-end justify-center gap-1">
-                  <span className="w-4 rounded-t" style={{ height: (m.preventas_ok / maxGrafico * 100) + '%', backgroundColor: accent }} />
-                  <span className="w-4 rounded-t bg-green-600" style={{ height: (m.finalizadas / maxGrafico * 100) + '%' }} />
+                className={'min-w-[68px] flex-1 rounded-t px-1 pb-1 pt-5 transition hover:bg-blue-500/10 ' +
+                  (mes === periodo ? 'bg-blue-500/10 border-b-2 border-blue-500' : 'border-b-2 border-transparent')}>
+                <div className="flex h-24 items-end justify-center gap-1">
+                  {[{ valor: m.preventas_ok, color: accent }, { valor: m.finalizadas, color: '#16a34a' }].map((b, i) => (
+                    <span key={i} className="relative w-5 rounded-t" style={{ height: (b.valor / maxGrafico * 100) + '%', backgroundColor: b.color }}>
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 pb-0.5 text-[10px] font-semibold tabular-nums" style={{ color: b.color }}>{nf.format(b.valor)}</span>
+                    </span>
+                  ))}
                 </div>
-                <div className="mt-2 text-center text-[11px] font-semibold">{mes.slice(5)}</div>
+                <div className="mt-1 text-center text-[11px] font-semibold">{etiquetaMes(mes).slice(0, 3).toUpperCase()}</div>
               </button>
             })}
           </div>
@@ -194,11 +197,11 @@ export default function DashboardBafGestionClient({ oscuro }: { oscuro: boolean 
             </div>
           })()}
         </div>
-        <div className={'rounded-xl border p-4 ' + panel}>
+        <div className={'rounded-lg border p-3 ' + panel}>
           <h4 className="font-bold">Motivos de cancelación · {etiquetaMes(periodo)}</h4>
-          <p className={'mb-4 mt-1 text-xs ' + tenue}>Clasificación de responsabilidades pendiente de validación.</p>
+          <p className={'mb-2 mt-1 text-xs ' + tenue}>Clasificación de responsabilidades pendiente de validación.</p>
           {!datos.motivos.length && <p className={'text-sm ' + tenue}>Sin cancelaciones registradas para este período.</p>}
-          <div className="space-y-3">
+          <div className="grid gap-x-6 gap-y-2 md:grid-cols-2">
             {datos.motivos.map(item => (
               <div key={item.motivo}>
                 <div className="flex justify-between gap-3 text-xs"><span>{item.motivo}</span><strong>{nf.format(item.cantidad)}</strong></div>
@@ -209,7 +212,7 @@ export default function DashboardBafGestionClient({ oscuro }: { oscuro: boolean 
             ))}
           </div>
         </div>
-        <div className={'rounded-xl border p-4 ' + panel}>
+        <div className={'rounded-lg border p-3 ' + panel}>
           <button type="button" aria-expanded={verControl} onClick={() => setVerControl(v => !v)}
             className="text-sm font-semibold underline underline-offset-4">
             {verControl ? 'Ocultar' : 'Mostrar'} controles de integridad de FIJA
