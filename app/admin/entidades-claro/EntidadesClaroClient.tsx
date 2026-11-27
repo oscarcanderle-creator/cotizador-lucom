@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import NuevaEntidadClaro, { type UsuarioDisponible } from './NuevaEntidadClaro'
 
 type Codigo = {
   id: string
@@ -24,13 +25,18 @@ type Entidad = {
   punto_venta_nombre: string
   fecha_alta: string | null
   fecha_baja: string | null
+  observaciones: string | null
   entidades_claro_codigos: Codigo[]
 }
 
 export default function EntidadesClaroClient({
   entidades,
+  usuarios,
+  usuariosEdicion,
 }: {
   entidades: Entidad[]
+  usuarios: UsuarioDisponible[]
+  usuariosEdicion: (UsuarioDisponible & { activo: boolean })[]
 }) {
   const [buscar, setBuscar] = useState('')
   const [tipo, setTipo] = useState('TODOS')
@@ -98,7 +104,8 @@ export default function EntidadesClaroClient({
 
   return (
     <section className="space-y-5">
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
         <a href="/admin" className="text-sm text-gray-500 hover:text-red-600">
           ← Volver a Administración
         </a>
@@ -108,6 +115,9 @@ export default function EntidadesClaroClient({
         <p className="mt-1 text-sm text-gray-500">
           Maestro de titulares y códigos comerciales.
         </p>
+        </div>
+
+        <NuevaEntidadClaro usuarios={usuarios} />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -191,7 +201,7 @@ export default function EntidadesClaroClient({
         <table className="w-full text-sm text-left text-gray-700">
           <thead className="bg-gray-100 text-xs text-gray-600">
             <tr>
-              {['Titular', 'Tipo', 'DNI', 'Códigos Claro', 'Usuario PGL', 'Estado'].map(t => (
+              {['Titular', 'Tipo', 'DNI', 'Códigos Claro', 'Usuario PGL', 'Estado', 'Acciones'].map(t => (
                 <th key={t} className="px-4 py-3 whitespace-nowrap">
                   {t}
                 </th>
@@ -233,11 +243,29 @@ export default function EntidadesClaroClient({
                     {e.activo ? 'Activo' : 'Inactivo'}
                   </span>
                 </td>
+
+                <td className="px-4 py-3">
+                  {e.tipo !== 'PDV' &&
+                   !e.punto_venta_id &&
+                   !e.asesor_pdv_id ? (
+                    <NuevaEntidadClaro
+                      entidad={e}
+                      usuarios={usuariosEdicion.filter(u =>
+                        u.id === e.profile_id ||
+                        usuarios.some(disponible => disponible.id === u.id)
+                      )}
+                    />
+                  ) : (
+                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                      Solo lectura
+                    </span>
+                  )}
+                </td>
               </tr>
             ))}
             {filtradas.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-gray-500">
+                <td colSpan={7} className="p-8 text-center text-gray-500">
                   No se encontraron entidades.
                 </td>
               </tr>

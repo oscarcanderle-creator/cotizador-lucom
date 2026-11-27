@@ -40,6 +40,7 @@ export default async function EntidadesClaroPage() {
       asesor_pdv_id,
       fecha_alta,
       fecha_baja,
+      observaciones,
       entidades_claro_codigos (
         id,
         tipo_codigo,
@@ -59,7 +60,7 @@ export default async function EntidadesClaroPage() {
 
   const { data: usuarios, error: errorUsuarios } = await admin
     .from('profiles')
-    .select('id, nombre, vendedor')
+    .select('id, nombre, vendedor, dni_vendedor, rol, activo')
 
   if (errorUsuarios) {
     throw new Error('No se pudieron consultar los usuarios PGL.')
@@ -94,6 +95,32 @@ export default async function EntidadesClaroPage() {
       : ''
   }))
 
+  const perfilesVinculados = new Set(
+    registros.map(e => e.profile_id).filter(Boolean)
+  )
+
+  const usuariosEdicion = (usuarios ?? []).map(u => ({
+    id: u.id,
+    nombre: u.nombre || '',
+    vendedor: u.vendedor || '',
+    dni: u.dni_vendedor ? String(u.dni_vendedor) : '',
+    rol: u.rol,
+    activo: u.activo
+  }))
+
+  const usuariosDisponibles = (usuarios ?? [])
+    .filter(u => u.activo && !perfilesVinculados.has(u.id))
+    .map(u => ({
+      id: u.id,
+      nombre: u.nombre || '',
+      vendedor: u.vendedor || '',
+      dni: u.dni_vendedor ? String(u.dni_vendedor) : '',
+      rol: u.rol
+    }))
+    .sort((a, b) =>
+      (a.vendedor || a.nombre).localeCompare(b.vendedor || b.nombre)
+    )
+
   return (
     <main className="min-h-screen bg-gray-50">
       <AppHeader
@@ -103,7 +130,11 @@ export default async function EntidadesClaroPage() {
       />
 
       <div className="max-w-7xl mx-auto px-4 py-6 sm:p-8">
-        <EntidadesClaroClient entidades={registros} />
+        <EntidadesClaroClient
+          entidades={registros}
+          usuarios={usuariosDisponibles}
+          usuariosEdicion={usuariosEdicion}
+        />
       </div>
     </main>
   )
