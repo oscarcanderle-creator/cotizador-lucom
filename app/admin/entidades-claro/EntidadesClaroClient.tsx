@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import NuevaEntidadClaro, { type UsuarioDisponible } from './NuevaEntidadClaro'
+import BajaReactivarEntidad from './BajaReactivarEntidad'
 
 type Codigo = {
   id: string
@@ -248,13 +249,31 @@ export default function EntidadesClaroClient({
                   {e.tipo !== 'PDV' &&
                    !e.punto_venta_id &&
                    !e.asesor_pdv_id ? (
-                    <NuevaEntidadClaro
-                      entidad={e}
-                      usuarios={usuariosEdicion.filter(u =>
-                        u.id === e.profile_id ||
-                        usuarios.some(disponible => disponible.id === u.id)
-                      )}
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <NuevaEntidadClaro
+                        entidad={e}
+                        usuarios={usuariosEdicion.filter(u =>
+                          u.id === e.profile_id ||
+                          usuarios.some(disponible => disponible.id === u.id)
+                        )}
+                      />
+                      <BajaReactivarEntidad
+                        entidad={{
+                          id: e.id,
+                          nombre: e.nombre,
+                          activo: e.activo,
+                          fecha_alta: e.fecha_alta,
+                          fecha_baja: e.fecha_baja,
+                          codigos: e.entidades_claro_codigos.map(c => ({
+                            id: c.id,
+                            tipo_codigo: c.tipo_codigo,
+                            codigo: c.codigo,
+                            activo: c.activo,
+                            vigente_hasta: c.vigente_hasta,
+                          }))
+                        }}
+                      />
+                    </div>
                   ) : (
                     <span className="text-xs text-gray-400 whitespace-nowrap">
                       Solo lectura
