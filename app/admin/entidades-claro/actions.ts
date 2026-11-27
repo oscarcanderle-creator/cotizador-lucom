@@ -125,3 +125,89 @@ export async function editarEntidadClaro(formData: FormData) {
     mensaje: 'Entidad Claro actualizada correctamente.'
   }
 }
+
+export async function darBajaEntidadClaro(formData: FormData) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { ok: false, mensaje: 'La sesión ha expirado.' }
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('rol, activo')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile || !profile.activo || profile.rol !== 'ADMIN') {
+    return { ok: false, mensaje: 'No tenés permisos para realizar esta operación.' }
+  }
+
+  const entidadId = String(formData.get('entidad_id') ?? '').trim()
+  const fecha = String(formData.get('fecha') ?? '').trim()
+  const motivo = String(formData.get('motivo') ?? '').trim()
+
+  if (!entidadId || !fecha || !motivo) {
+    return { ok: false, mensaje: 'Completá la fecha y el motivo de baja.' }
+  }
+
+  const { error } = await supabase.rpc('dar_baja_entidad_claro', {
+    p_entidad_id: entidadId,
+    p_fecha_baja: fecha,
+    p_motivo: motivo,
+  })
+
+  if (error) {
+    return { ok: false, mensaje: error.message }
+  }
+
+  revalidatePath('/admin/entidades-claro')
+  return { ok: true, mensaje: 'Entidad Claro y códigos activos dados de baja correctamente.' }
+}
+
+export async function reactivarEntidadClaro(formData: FormData) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { ok: false, mensaje: 'La sesión ha expirado.' }
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('rol, activo')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile || !profile.activo || profile.rol !== 'ADMIN') {
+    return { ok: false, mensaje: 'No tenés permisos para realizar esta operación.' }
+  }
+
+  const entidadId = String(formData.get('entidad_id') ?? '').trim()
+  const fecha = String(formData.get('fecha') ?? '').trim()
+  const motivo = String(formData.get('motivo') ?? '').trim()
+  const codigosIds = formData.getAll('codigos_ids')
+    .filter((valor): valor is string => typeof valor === 'string' && valor.length > 0)
+
+  if (!entidadId || !fecha || !motivo || codigosIds.length === 0) {
+    return {
+      ok: false,
+      mensaje: 'Indicá fecha, motivo y al menos un código a reactivar.'
+    }
+  }
+
+  const { error } = await supabase.rpc('reactivar_entidad_claro', {
+    p_entidad_id: entidadId,
+    p_fecha_reactivacion: fecha,
+    p_motivo: motivo,
+    p_codigos_ids: codigosIds,
+  })
+
+  if (error) {
+    return { ok: false, mensaje: error.message }
+  }
+
+  revalidatePath('/admin/entidades-claro')
+  return { ok: true, mensaje: 'Entidad Claro reactivada con los códigos seleccionados.' }
+}
