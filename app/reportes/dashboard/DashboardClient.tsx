@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import DashboardGestionClient from './DashboardGestionClient'
+import DashboardBafGestionClient from './DashboardBafGestionClient'
 import DashboardObjetivos from './DashboardObjetivos'
 
 type TotalesPdv = { '2PLAY': number; '3PLAY': number; 'AÑADIR TV': number; total: number }
@@ -326,7 +327,7 @@ export default function DashboardClient({ puedeVerTodos, puedeVerGestion }: {
   puedeVerTodos: boolean
   puedeVerGestion: boolean
 }) {
-  const [vistaDashboard, setVistaDashboard] = useState<'agencia' | 'call'>('agencia')
+  const [vistaDashboard, setVistaDashboard] = useState<'agencia' | 'call' | 'baf'>('agencia')
   const [mostrarObjetivos, setMostrarObjetivos] = useState(false)
   const [versionObjetivos, setVersionObjetivos] = useState(0)
   const [tema, setTema] = useState<Tema>('ejecutivo')
@@ -710,10 +711,10 @@ export default function DashboardClient({ puedeVerTodos, puedeVerGestion }: {
           <div className="border-r border-blue-300/50 pr-5 text-2xl font-black italic tracking-tight">Lucom</div>
           <div>
             <h2 className="text-2xl font-bold leading-tight">
-              {vistaDashboard === 'agencia' ? 'Ventas y Activaciones' : 'Gestión de Ventas'}
+              {vistaDashboard === 'agencia' ? 'Ventas y Activaciones' : vistaDashboard === 'call' ? 'Gestión de Ventas' : 'Gestión BAF'}
             </h2>
             <p className="text-sm text-blue-100">
-              {vistaDashboard === 'agencia' ? 'Call Lucom + Puntos de Venta' : 'Call Lucom'}
+              {vistaDashboard === 'agencia' ? 'Call Lucom + Puntos de Venta' : vistaDashboard === 'call' ? 'Call Lucom' : 'Agencia · CALL + PDV · Internet'}
             </p>
           </div>
         </div>
@@ -741,11 +742,12 @@ export default function DashboardClient({ puedeVerTodos, puedeVerGestion }: {
             <select
               aria-label="Seleccionar Dashboard"
               value={vistaDashboard}
-              onChange={e => setVistaDashboard(e.target.value === 'call' ? 'call' : 'agencia')}
+              onChange={e => setVistaDashboard(e.target.value === 'call' ? 'call' : e.target.value === 'baf' ? 'baf' : 'agencia')}
               className="rounded-lg border border-blue-200/50 bg-[#17457e] px-3 py-2 text-sm font-semibold text-white outline-none"
             >
               <option value="agencia">Agencia</option>
               <option value="call">Call Lucom</option>
+              <option value="baf">Gestión BAF</option>
             </select>
           )}
           <div className="text-right text-xs text-blue-100">
@@ -774,7 +776,11 @@ export default function DashboardClient({ puedeVerTodos, puedeVerGestion }: {
         />
       )}
 
-      <div className={vistaDashboard === 'call' ? 'hidden' : 'p-4 sm:p-5'}>
+      {vistaDashboard === 'baf' && puedeVerGestion && (
+        <DashboardBafGestionClient oscuro={oscuro} />
+      )}
+
+      <div className={vistaDashboard !== 'agencia' ? 'hidden' : 'p-4 sm:p-5'}>
         <div className={'' + tarjeta + ' mb-4 grid grid-cols-1 gap-3 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-3'}>
           <label className="flex flex-col gap-1 text-sm font-semibold">
             Rango de fechas
