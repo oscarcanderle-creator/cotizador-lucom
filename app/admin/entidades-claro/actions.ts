@@ -275,3 +275,37 @@ export async function gestionarCodigoClaro(formData: FormData) {
   revalidatePath('/admin/entidades-claro')
   return { ok: true, mensaje: 'Código actualizado correctamente.' }
 }
+
+export async function consultarHistorialClaro(tipo: 'titular' | 'codigo', id: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('La sesión ha expirado.')
+  const { data: profile } = await supabase.from('profiles')
+    .select('rol, activo').eq('id', user.id).single()
+  if (!profile?.activo || profile.rol !== 'ADMIN') throw new Error('Operación no autorizada.')
+  if (!['titular', 'codigo'].includes(tipo) || !/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Consulta inválida.')
+  const admin = createAdminClient()
+  if (tipo === 'codigo') {
+    const { data, error } = await admin.from('entidades_claro_vigencias')
+      .select('id,vigente_desde,vigente_hasta,motivo_apertura,motivo_cierre,created_at')
+      .eq('codigo_id', id).order('vigente_desde', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+    if (error) throw new Error('No se pudieron consultar las vigencias.')
+    return { vigencias: data ?? [], eventos: [] }
+  }
+  const { data, error } = await admin.from('entidades_claro_historial')
+    .select('id,accion,usuario_id,datos_anteriores,datos_nuevos,created_at')
+    .eq('tabla', 'entidades_claro').eq('registro_id', id)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error('No se pudo consultar la auditoría.')
+  const ids = [...new Set((data ?? []).map(e => e.usuario_id).filter(Boolean))]
+  const nombres = new Map<string, string>()
+  if (ids.length) {
+    const { data: usuarios, error: errorUsuarios } = await admin.from('profiles').select('id,nombre').in('id', ids)
+    if (errorUsuarios) throw new Error('No se pudieron consultar los autores.')
+    for (const u of usuarios ?? []) nombres.set(u.id, u.nombre || u.id)
+  }
+  return { vigencias: [], eventos: (data ?? []).map(e => ({
+    ...e, usuario: e.usuario_id ? nombres.get(e.usuario_id) || e.usuario_id : 'Sin usuario registrado'
+  })) }
+}
