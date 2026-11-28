@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import NuevaEntidadClaro, { type UsuarioDisponible } from './NuevaEntidadClaro'
 import BajaReactivarEntidad from './BajaReactivarEntidad'
+import GestionCodigosClaro from './GestionCodigosClaro'
 
 type Codigo = {
   id: string
@@ -257,6 +258,7 @@ export default function EntidadesClaroClient({
                           usuarios.some(disponible => disponible.id === u.id)
                         )}
                       />
+                      <GestionCodigosClaro entidad={e} />
                       <BajaReactivarEntidad
                         entidad={{
                           id: e.id,
