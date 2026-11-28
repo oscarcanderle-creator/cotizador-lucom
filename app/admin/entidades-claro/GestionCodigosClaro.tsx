@@ -20,7 +20,7 @@ export default function GestionCodigosClaro({ entidad }: { entidad: Entidad }) {
   const [abierto, setAbierto] = useState(false)
   const [accion, setAccion] = useState<Accion | null>(null)
   const [codigoId, setCodigoId] = useState('')
-  const [tipo, setTipo] = useState('ENTIDAD')
+  const [tipo, setTipo] = useState('IDENTITY')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [exito, setExito] = useState('')
@@ -35,7 +35,7 @@ export default function GestionCodigosClaro({ entidad }: { entidad: Entidad }) {
   function elegir(a: Accion | null, id = '') {
     setAccion(a)
     setCodigoId(id)
-    setTipo('ENTIDAD')
+    setTipo('IDENTITY')
     setError('')
     setExito('')
   }
@@ -106,8 +106,8 @@ export default function GestionCodigosClaro({ entidad }: { entidad: Entidad }) {
                   <h3 className="font-semibold text-gray-900">{accion === 'alta' ? 'Agregar código' : accion === 'baja' ? 'Dar de baja código' : 'Reactivar código'} {seleccionado?.codigo}</h3>
                   <fieldset disabled={guardando} className="space-y-3">
                     {accion === 'alta' && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <label className="block text-sm">Tipo<select name="tipo_codigo" className={campo} value={tipo} onChange={e => setTipo(e.target.value)}><option>ENTIDAD</option><option>POS</option></select></label>
-                      <label className="block text-sm">Código<input name="codigo" required className={campo + ' uppercase'} pattern={tipo === 'ENTIDAD' ? '(AGE|AGET|AGEP)[0-9]+' : undefined} onChange={e => { e.target.value = e.target.value.toUpperCase() }} /></label>
+                      <label className="block text-sm">Tipo<select name="tipo_codigo" className={campo} value={tipo} onChange={e => setTipo(e.target.value)}><option value="IDENTITY">Entidad Claro (IDENTITY)</option><option value="POS_1175">POS (1175)</option></select></label>
+                      <label className="block text-sm">Código<input name="codigo" required className={campo + ' uppercase'} pattern={tipo === 'IDENTITY' ? '(AGE|AGET|AGEP)[0-9]+' : '[0-9]+'} inputMode={tipo === 'POS_1175' ? 'numeric' : 'text'} placeholder={tipo === 'IDENTITY' ? 'AGE / AGET / AGEP' : 'Solo números'} onChange={e => { e.target.value = e.target.value.toUpperCase() }} /></label>
                     </div>}
                     <label className="block text-sm">Fecha de {accion === 'alta' ? 'alta' : accion === 'baja' ? 'baja' : 'reactivación'}<input name="fecha" type="date" defaultValue={hoy} max={hoy} required className={campo}/></label>
                     <label className="block text-sm">Motivo<textarea name="motivo" required rows={3} className={campo}/></label>
