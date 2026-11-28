@@ -1,0 +1,156 @@
+categoria,tabla,nombre,definicion
+COLUMNAS,entidades_claro,activo,"{""tipo"": ""boolean"", ""default"": ""true"", ""not_null"": true}"
+COLUMNAS,entidades_claro,asesor_pdv_id,"{""tipo"": ""uuid"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro,created_at,"{""tipo"": ""timestamp with time zone"", ""default"": ""now()"", ""not_null"": true}"
+COLUMNAS,entidades_claro,dni,"{""tipo"": ""text"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro,fecha_alta,"{""tipo"": ""date"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro,fecha_baja,"{""tipo"": ""date"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro,id,"{""tipo"": ""uuid"", ""default"": ""gen_random_uuid()"", ""not_null"": true}"
+COLUMNAS,entidades_claro,nombre,"{""tipo"": ""text"", ""default"": null, ""not_null"": true}"
+COLUMNAS,entidades_claro,observaciones,"{""tipo"": ""text"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro,profile_id,"{""tipo"": ""uuid"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro,punto_venta_id,"{""tipo"": ""uuid"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro,tipo,"{""tipo"": ""text"", ""default"": null, ""not_null"": true}"
+COLUMNAS,entidades_claro,updated_at,"{""tipo"": ""timestamp with time zone"", ""default"": ""now()"", ""not_null"": true}"
+COLUMNAS,entidades_claro_codigos,activo,"{""tipo"": ""boolean"", ""default"": ""true"", ""not_null"": true}"
+COLUMNAS,entidades_claro_codigos,codigo,"{""tipo"": ""text"", ""default"": null, ""not_null"": true}"
+COLUMNAS,entidades_claro_codigos,created_at,"{""tipo"": ""timestamp with time zone"", ""default"": ""now()"", ""not_null"": true}"
+COLUMNAS,entidades_claro_codigos,entidad_id,"{""tipo"": ""uuid"", ""default"": null, ""not_null"": true}"
+COLUMNAS,entidades_claro_codigos,id,"{""tipo"": ""uuid"", ""default"": ""gen_random_uuid()"", ""not_null"": true}"
+COLUMNAS,entidades_claro_codigos,observaciones,"{""tipo"": ""text"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro_codigos,tipo_codigo,"{""tipo"": ""text"", ""default"": null, ""not_null"": true}"
+COLUMNAS,entidades_claro_codigos,updated_at,"{""tipo"": ""timestamp with time zone"", ""default"": ""now()"", ""not_null"": true}"
+COLUMNAS,entidades_claro_codigos,vigente_desde,"{""tipo"": ""date"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro_codigos,vigente_hasta,"{""tipo"": ""date"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro_historial,accion,"{""tipo"": ""text"", ""default"": null, ""not_null"": true}"
+COLUMNAS,entidades_claro_historial,created_at,"{""tipo"": ""timestamp with time zone"", ""default"": ""now()"", ""not_null"": true}"
+COLUMNAS,entidades_claro_historial,datos_anteriores,"{""tipo"": ""jsonb"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro_historial,datos_nuevos,"{""tipo"": ""jsonb"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro_historial,id,"{""tipo"": ""uuid"", ""default"": ""gen_random_uuid()"", ""not_null"": true}"
+COLUMNAS,entidades_claro_historial,registro_id,"{""tipo"": ""uuid"", ""default"": null, ""not_null"": true}"
+COLUMNAS,entidades_claro_historial,tabla,"{""tipo"": ""text"", ""default"": null, ""not_null"": true}"
+COLUMNAS,entidades_claro_historial,usuario_id,"{""tipo"": ""uuid"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro_vigencias,codigo_id,"{""tipo"": ""uuid"", ""default"": null, ""not_null"": true}"
+COLUMNAS,entidades_claro_vigencias,created_at,"{""tipo"": ""timestamp with time zone"", ""default"": ""now()"", ""not_null"": true}"
+COLUMNAS,entidades_claro_vigencias,id,"{""tipo"": ""uuid"", ""default"": ""gen_random_uuid()"", ""not_null"": true}"
+COLUMNAS,entidades_claro_vigencias,motivo_apertura,"{""tipo"": ""text"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro_vigencias,motivo_cierre,"{""tipo"": ""text"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro_vigencias,updated_at,"{""tipo"": ""timestamp with time zone"", ""default"": ""now()"", ""not_null"": true}"
+COLUMNAS,entidades_claro_vigencias,vigente_desde,"{""tipo"": ""date"", ""default"": null, ""not_null"": false}"
+COLUMNAS,entidades_claro_vigencias,vigente_hasta,"{""tipo"": ""date"", ""default"": null, ""not_null"": false}"
+INDICES,entidades_claro,entidades_claro_asesor_unique,CREATE UNIQUE INDEX entidades_claro_asesor_unique ON public.entidades_claro USING btree (asesor_pdv_id) WHERE (asesor_pdv_id IS NOT NULL)
+INDICES,entidades_claro,entidades_claro_dni_idx,CREATE INDEX entidades_claro_dni_idx ON public.entidades_claro USING btree (dni)
+INDICES,entidades_claro,entidades_claro_pdv_idx,CREATE INDEX entidades_claro_pdv_idx ON public.entidades_claro USING btree (punto_venta_id)
+INDICES,entidades_claro,entidades_claro_pkey,CREATE UNIQUE INDEX entidades_claro_pkey ON public.entidades_claro USING btree (id)
+INDICES,entidades_claro,entidades_claro_profile_unique,CREATE UNIQUE INDEX entidades_claro_profile_unique ON public.entidades_claro USING btree (profile_id) WHERE (profile_id IS NOT NULL)
+INDICES,entidades_claro,entidades_claro_tipo_idx,"CREATE INDEX entidades_claro_tipo_idx ON public.entidades_claro USING btree (tipo, activo)"
+INDICES,entidades_claro_codigos,entidades_claro_codigos_busqueda_idx,"CREATE INDEX entidades_claro_codigos_busqueda_idx ON public.entidades_claro_codigos USING btree (tipo_codigo, upper(btrim(codigo)))"
+INDICES,entidades_claro_codigos,entidades_claro_codigos_pkey,CREATE UNIQUE INDEX entidades_claro_codigos_pkey ON public.entidades_claro_codigos USING btree (id)
+INDICES,entidades_claro_codigos,entidades_claro_codigos_titular_idx,CREATE INDEX entidades_claro_codigos_titular_idx ON public.entidades_claro_codigos USING btree (entidad_id)
+INDICES,entidades_claro_codigos,entidades_claro_identidad_unique,"CREATE UNIQUE INDEX entidades_claro_identidad_unique ON public.entidades_claro_codigos USING btree (upper(btrim(codigo))) WHERE (tipo_codigo = ANY (ARRAY['IDENTITY'::text, 'ENTIDAD_HIJA'::text]))"
+INDICES,entidades_claro_codigos,entidades_claro_pos_unique,CREATE UNIQUE INDEX entidades_claro_pos_unique ON public.entidades_claro_codigos USING btree (upper(btrim(codigo))) WHERE (tipo_codigo = 'POS_1175'::text)
+INDICES,entidades_claro_historial,entidades_claro_historial_pkey,CREATE UNIQUE INDEX entidades_claro_historial_pkey ON public.entidades_claro_historial USING btree (id)
+INDICES,entidades_claro_historial,entidades_claro_historial_registro_idx,"CREATE INDEX entidades_claro_historial_registro_idx ON public.entidades_claro_historial USING btree (tabla, registro_id, created_at DESC)"
+INDICES,entidades_claro_vigencias,entidades_claro_vigencias_abierta_unique,CREATE UNIQUE INDEX entidades_claro_vigencias_abierta_unique ON public.entidades_claro_vigencias USING btree (codigo_id) WHERE (vigente_hasta IS NULL)
+INDICES,entidades_claro_vigencias,entidades_claro_vigencias_codigo_idx,CREATE INDEX entidades_claro_vigencias_codigo_idx ON public.entidades_claro_vigencias USING btree (codigo_id)
+INDICES,entidades_claro_vigencias,entidades_claro_vigencias_no_superpuestas,"CREATE INDEX entidades_claro_vigencias_no_superpuestas ON public.entidades_claro_vigencias USING gist (codigo_id, daterange(vigente_desde, vigente_hasta, '[)'::text))"
+INDICES,entidades_claro_vigencias,entidades_claro_vigencias_pkey,CREATE UNIQUE INDEX entidades_claro_vigencias_pkey ON public.entidades_claro_vigencias USING btree (id)
+PERMISOS_FUNCIONES,actualizar_fecha_entidades_claro,,"{postgres=X/postgres,service_role=X/postgres}"
+PERMISOS_FUNCIONES,agregar_codigo_claro,"p_entidad_id uuid, p_tipo_codigo text, p_codigo text, p_fecha_a","{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+PERMISOS_FUNCIONES,crear_entidad_claro,"p_nombre text, p_tipo text, p_dni text, p_profile_id uuid, p_co","{postgres=X/postgres,authenticated=X/postgres}"
+PERMISOS_FUNCIONES,crear_vigencia_codigo_claro,,"{postgres=X/postgres,service_role=X/postgres}"
+PERMISOS_FUNCIONES,dar_baja_codigo_claro,"p_codigo_id uuid, p_fecha_baja date, p_motivo text","{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+PERMISOS_FUNCIONES,dar_baja_entidad_claro,"p_entidad_id uuid, p_fecha_baja date, p_motivo text","{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+PERMISOS_FUNCIONES,editar_codigo_claro,"p_codigo_id uuid, p_nuevo_codigo text, p_motivo text","{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+PERMISOS_FUNCIONES,editar_entidad_claro,"p_entidad_id uuid, p_nombre text, p_tipo text, p_dni text, p_pr","{postgres=X/postgres,authenticated=X/postgres}"
+PERMISOS_FUNCIONES,reactivar_codigo_claro,"p_codigo_id uuid, p_fecha_reactivacion date, p_motivo text","{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+PERMISOS_FUNCIONES,reactivar_entidad_claro,"p_entidad_id uuid, p_fecha_reactivacion date, p_motivo text, p_","{postgres=X/postgres,service_role=X/postgres,authenticated=X/postgres}"
+PERMISOS_FUNCIONES,registrar_historial_entidades_claro,,"{postgres=X/postgres,service_role=X/postgres}"
+PERMISOS_FUNCIONES,sincronizar_dni_desde_entidad_claro,,"{postgres=X/postgres,service_role=X/postgres}"
+PERMISOS_TABLAS,entidades_claro,postgres,REFERENCES
+PERMISOS_TABLAS,entidades_claro,postgres,TRIGGER
+PERMISOS_TABLAS,entidades_claro,postgres,SELECT
+PERMISOS_TABLAS,entidades_claro,postgres,INSERT
+PERMISOS_TABLAS,entidades_claro,postgres,UPDATE
+PERMISOS_TABLAS,entidades_claro,postgres,DELETE
+PERMISOS_TABLAS,entidades_claro,postgres,TRUNCATE
+PERMISOS_TABLAS,entidades_claro,service_role,UPDATE
+PERMISOS_TABLAS,entidades_claro,service_role,INSERT
+PERMISOS_TABLAS,entidades_claro,service_role,SELECT
+PERMISOS_TABLAS,entidades_claro,service_role,DELETE
+PERMISOS_TABLAS,entidades_claro,service_role,TRUNCATE
+PERMISOS_TABLAS,entidades_claro,service_role,REFERENCES
+PERMISOS_TABLAS,entidades_claro,service_role,TRIGGER
+PERMISOS_TABLAS,entidades_claro_codigos,postgres,UPDATE
+PERMISOS_TABLAS,entidades_claro_codigos,postgres,TRIGGER
+PERMISOS_TABLAS,entidades_claro_codigos,postgres,REFERENCES
+PERMISOS_TABLAS,entidades_claro_codigos,postgres,TRUNCATE
+PERMISOS_TABLAS,entidades_claro_codigos,postgres,DELETE
+PERMISOS_TABLAS,entidades_claro_codigos,postgres,INSERT
+PERMISOS_TABLAS,entidades_claro_codigos,postgres,SELECT
+PERMISOS_TABLAS,entidades_claro_codigos,service_role,INSERT
+PERMISOS_TABLAS,entidades_claro_codigos,service_role,TRIGGER
+PERMISOS_TABLAS,entidades_claro_codigos,service_role,REFERENCES
+PERMISOS_TABLAS,entidades_claro_codigos,service_role,TRUNCATE
+PERMISOS_TABLAS,entidades_claro_codigos,service_role,DELETE
+PERMISOS_TABLAS,entidades_claro_codigos,service_role,UPDATE
+PERMISOS_TABLAS,entidades_claro_codigos,service_role,SELECT
+PERMISOS_TABLAS,entidades_claro_historial,postgres,SELECT
+PERMISOS_TABLAS,entidades_claro_historial,postgres,TRIGGER
+PERMISOS_TABLAS,entidades_claro_historial,postgres,REFERENCES
+PERMISOS_TABLAS,entidades_claro_historial,postgres,TRUNCATE
+PERMISOS_TABLAS,entidades_claro_historial,postgres,DELETE
+PERMISOS_TABLAS,entidades_claro_historial,postgres,UPDATE
+PERMISOS_TABLAS,entidades_claro_historial,postgres,INSERT
+PERMISOS_TABLAS,entidades_claro_historial,service_role,TRUNCATE
+PERMISOS_TABLAS,entidades_claro_historial,service_role,INSERT
+PERMISOS_TABLAS,entidades_claro_historial,service_role,SELECT
+PERMISOS_TABLAS,entidades_claro_historial,service_role,UPDATE
+PERMISOS_TABLAS,entidades_claro_historial,service_role,DELETE
+PERMISOS_TABLAS,entidades_claro_historial,service_role,REFERENCES
+PERMISOS_TABLAS,entidades_claro_historial,service_role,TRIGGER
+PERMISOS_TABLAS,entidades_claro_vigencias,postgres,TRUNCATE
+PERMISOS_TABLAS,entidades_claro_vigencias,postgres,TRIGGER
+PERMISOS_TABLAS,entidades_claro_vigencias,postgres,REFERENCES
+PERMISOS_TABLAS,entidades_claro_vigencias,postgres,UPDATE
+PERMISOS_TABLAS,entidades_claro_vigencias,postgres,DELETE
+PERMISOS_TABLAS,entidades_claro_vigencias,postgres,INSERT
+PERMISOS_TABLAS,entidades_claro_vigencias,postgres,SELECT
+PERMISOS_TABLAS,entidades_claro_vigencias,service_role,TRUNCATE
+PERMISOS_TABLAS,entidades_claro_vigencias,service_role,TRIGGER
+PERMISOS_TABLAS,entidades_claro_vigencias,service_role,DELETE
+PERMISOS_TABLAS,entidades_claro_vigencias,service_role,REFERENCES
+PERMISOS_TABLAS,entidades_claro_vigencias,service_role,INSERT
+PERMISOS_TABLAS,entidades_claro_vigencias,service_role,SELECT
+PERMISOS_TABLAS,entidades_claro_vigencias,service_role,UPDATE
+RESTRICCIONES,entidades_claro,entidades_claro_asesor_pdv_id_fkey,FOREIGN KEY (asesor_pdv_id) REFERENCES asesores_pdv(id) ON DELETE RESTRICT
+RESTRICCIONES,entidades_claro,entidades_claro_dni_check,"CHECK (((dni IS NULL) OR (dni ~ '^[0-9]{7,8}$'::text)))"
+RESTRICCIONES,entidades_claro,entidades_claro_fechas_validas,CHECK (((fecha_baja IS NULL) OR (fecha_alta IS NULL) OR (fecha_baja >= fecha_alta)))
+RESTRICCIONES,entidades_claro,entidades_claro_nombre_check,CHECK ((btrim(nombre) <> ''::text))
+RESTRICCIONES,entidades_claro,entidades_claro_pkey,PRIMARY KEY (id)
+RESTRICCIONES,entidades_claro,entidades_claro_profile_id_fkey,FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE SET NULL
+RESTRICCIONES,entidades_claro,entidades_claro_punto_venta_id_fkey,FOREIGN KEY (punto_venta_id) REFERENCES puntos_venta(id) ON DELETE RESTRICT
+RESTRICCIONES,entidades_claro,entidades_claro_tipo_check,"CHECK ((tipo = ANY (ARRAY['CALL'::text, 'TERRENO'::text, 'BBOO'::text, 'PDV'::text, 'AGENCIA'::text])))"
+RESTRICCIONES,entidades_claro_codigos,entidades_claro_codigos_codigo_check,CHECK ((btrim(codigo) <> ''::text))
+RESTRICCIONES,entidades_claro_codigos,entidades_claro_codigos_entidad_id_fkey,FOREIGN KEY (entidad_id) REFERENCES entidades_claro(id) ON DELETE RESTRICT
+RESTRICCIONES,entidades_claro_codigos,entidades_claro_codigos_fechas_validas,CHECK (((vigente_hasta IS NULL) OR (vigente_desde IS NULL) OR (vigente_hasta >= vigente_desde)))
+RESTRICCIONES,entidades_claro_codigos,entidades_claro_codigos_pkey,PRIMARY KEY (id)
+RESTRICCIONES,entidades_claro_codigos,entidades_claro_codigos_tipo_codigo_check,"CHECK ((tipo_codigo = ANY (ARRAY['IDENTITY'::text, 'POS_1175'::text, 'SUBAGENTE'::text, 'ENTIDAD_HIJA'::text])))"
+RESTRICCIONES,entidades_claro_historial,entidades_claro_historial_accion_check,"CHECK ((accion = ANY (ARRAY['INSERT'::text, 'UPDATE'::text, 'DELETE'::text])))"
+RESTRICCIONES,entidades_claro_historial,entidades_claro_historial_pkey,PRIMARY KEY (id)
+RESTRICCIONES,entidades_claro_vigencias,entidades_claro_vigencias_codigo_id_fkey,FOREIGN KEY (codigo_id) REFERENCES entidades_claro_codigos(id) ON DELETE RESTRICT
+RESTRICCIONES,entidades_claro_vigencias,entidades_claro_vigencias_fechas_check,CHECK (((vigente_desde IS NULL) OR (vigente_hasta IS NULL) OR (vigente_hasta >= vigente_desde)))
+RESTRICCIONES,entidades_claro_vigencias,entidades_claro_vigencias_no_superpuestas,"EXCLUDE USING gist (codigo_id WITH =, daterange(vigente_desde, vigente_hasta, '[)'::text) WITH &&)"
+RESTRICCIONES,entidades_claro_vigencias,entidades_claro_vigencias_pkey,PRIMARY KEY (id)
+RLS,entidades_claro,seguridad,"{""forzada"": false, ""habilitada"": true}"
+RLS,entidades_claro_codigos,seguridad,"{""forzada"": false, ""habilitada"": true}"
+RLS,entidades_claro_historial,seguridad,"{""forzada"": false, ""habilitada"": true}"
+RLS,entidades_claro_vigencias,seguridad,"{""forzada"": false, ""habilitada"": true}"
+TRIGGERS,entidades_claro,auditoria_entidades_claro,CREATE TRIGGER auditoria_entidades_claro AFTER INSERT OR DELETE OR UPDATE ON public.entidades_claro FOR EACH ROW EXECUTE FUNCTION registrar_historial_entidades_claro()
+TRIGGERS,entidades_claro,fecha_entidades_claro,CREATE TRIGGER fecha_entidades_claro BEFORE UPDATE ON public.entidades_claro FOR EACH ROW EXECUTE FUNCTION actualizar_fecha_entidades_claro()
+TRIGGERS,entidades_claro,sincronizar_dni_entidad_claro,"CREATE TRIGGER sincronizar_dni_entidad_claro BEFORE INSERT OR UPDATE OF dni, profile_id ON public.entidades_claro FOR EACH ROW EXECUTE FUNCTION sincronizar_dni_desde_entidad_claro()"
+TRIGGERS,entidades_claro_codigos,auditoria_entidades_claro_codigos,CREATE TRIGGER auditoria_entidades_claro_codigos AFTER INSERT OR DELETE OR UPDATE ON public.entidades_claro_codigos FOR EACH ROW EXECUTE FUNCTION registrar_historial_entidades_claro()
+TRIGGERS,entidades_claro_codigos,entidades_claro_codigo_vigencia_inicial,CREATE TRIGGER entidades_claro_codigo_vigencia_inicial AFTER INSERT ON public.entidades_claro_codigos FOR EACH ROW EXECUTE FUNCTION crear_vigencia_codigo_claro()
+TRIGGERS,entidades_claro_codigos,fecha_entidades_claro_codigos,CREATE TRIGGER fecha_entidades_claro_codigos BEFORE UPDATE ON public.entidades_claro_codigos FOR EACH ROW EXECUTE FUNCTION actualizar_fecha_entidades_claro()
+TRIGGERS,entidades_claro_vigencias,entidades_claro_vigencias_auditoria,CREATE TRIGGER entidades_claro_vigencias_auditoria AFTER INSERT OR DELETE OR UPDATE ON public.entidades_claro_vigencias FOR EACH ROW EXECUTE FUNCTION registrar_historial_entidades_claro()
+TRIGGERS,entidades_claro_vigencias,entidades_claro_vigencias_updated_at,CREATE TRIGGER entidades_claro_vigencias_updated_at BEFORE UPDATE ON public.entidades_claro_vigencias FOR EACH ROW EXECUTE FUNCTION actualizar_fecha_entidades_claro()

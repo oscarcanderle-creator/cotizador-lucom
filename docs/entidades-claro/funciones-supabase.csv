@@ -1,0 +1,1605 @@
+funcion,definicion
+actualizar_fecha_entidades_claro,"CREATE OR REPLACE FUNCTION public.actualizar_fecha_entidades_claro()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+BEGIN
+    NEW.updated_at := now();
+    RETURN NEW;
+END;
+$function$
+"
+agregar_codigo_claro,"CREATE OR REPLACE FUNCTION public.agregar_codigo_claro(p_entidad_id uuid, p_tipo_codigo text, p_codigo text, p_fecha_alta date, p_motivo text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+    v_usuario_id uuid := auth.uid();
+    v_entidad public.entidades_claro%ROWTYPE;
+    v_codigo_id uuid;
+    v_tipo text := UPPER(BTRIM(p_tipo_codigo));
+    v_codigo text := NULLIF(UPPER(BTRIM(p_codigo)), '');
+    v_motivo text := NULLIF(BTRIM(p_motivo), '');
+BEGIN
+    IF v_usuario_id IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE id = v_usuario_id
+          AND rol = 'ADMIN'
+          AND activo = true
+    ) THEN
+        RAISE EXCEPTION 'Operación no autorizada'
+            USING ERRCODE = '42501';
+    END IF;
+
+    SELECT *
+    INTO v_entidad
+    FROM public.entidades_claro
+    WHERE id = p_entidad_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Entidad Claro inexistente';
+    END IF;
+
+    IF NOT v_entidad.activo THEN
+        RAISE EXCEPTION
+            'No se pueden agregar códigos a un titular inactivo';
+    END IF;
+
+    IF v_entidad.tipo = 'PDV'
+       OR v_entidad.punto_venta_id IS NOT NULL
+       OR v_entidad.asesor_pdv_id IS NOT NULL
+    THEN
+        RAISE EXCEPTION
+            'El mantenimiento de códigos PDV todavía no está habilitado';
+    END IF;
+
+    IF v_tipo IS NULL
+       OR v_tipo NOT IN ('IDENTITY', 'POS_1175')
+    THEN
+        RAISE EXCEPTION 'Tipo de código no habilitado';
+    END IF;
+
+    IF v_codigo IS NULL THEN
+        RAISE EXCEPTION 'Debe indicar el código comercial';
+    END IF;
+
+    IF v_motivo IS NULL THEN
+        RAISE EXCEPTION 'Debe indicar el motivo del alta';
+    END IF;
+
+    IF p_fecha_alta IS NULL THEN
+        RAISE EXCEPTION 'Debe indicar la fecha de alta';
+    END IF;
+
+    IF p_fecha_alta >
+        (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+    THEN
+        RAISE EXCEPTION 'La fecha de alta no puede ser futura';
+    END IF;
+
+    IF v_entidad.fecha_alta IS NOT NULL
+       AND p_fecha_alta < v_entidad.fecha_alta
+    THEN
+        RAISE EXCEPTION
+            'La fecha del código es anterior al alta del titular';
+    END IF;
+
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_historial h
+        WHERE h.tabla = 'entidades_claro'
+          AND h.registro_id = p_entidad_id
+          AND h.datos_nuevos ->> 'evento' =
+              'REACTIVACION_TITULAR'
+          AND (
+              h.datos_nuevos ->> 'fecha_reactivacion'
+          )::date > p_fecha_alta
+    ) THEN
+        RAISE EXCEPTION
+            'La fecha es anterior a la última reactivación del titular';
+    END IF;
+
+    IF v_tipo = 'IDENTITY' THEN
+
+        IF v_codigo !~ '^(AGE|AGET|AGEP)[0-9]+$' THEN
+            RAISE EXCEPTION
+                'La entidad debe comenzar con AGE, AGET o AGEP';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM public.entidades_claro_codigos
+            WHERE tipo_codigo IN ('IDENTITY', 'ENTIDAD_HIJA')
+              AND UPPER(BTRIM(codigo)) = v_codigo
+        ) THEN
+            RAISE EXCEPTION
+                'La entidad Claro ya se encuentra registrada';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM public.entidades_claro_codigos
+            WHERE tipo_codigo IN ('IDENTITY', 'ENTIDAD_HIJA')
+              AND BTRIM(codigo) = regexp_replace(
+                  v_codigo,
+                  '^(AGET|AGEP|AGE)',
+                  ''
+              )
+        ) THEN
+            RAISE EXCEPTION
+                'Existe una entidad con el mismo número sin prefijo';
+        END IF;
+
+    ELSE
+
+        IF v_codigo !~ '^[0-9]+$' THEN
+            RAISE EXCEPTION
+                'El número de POS debe contener solamente dígitos';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM public.entidades_claro_codigos
+            WHERE tipo_codigo = 'POS_1175'
+              AND UPPER(BTRIM(codigo)) = v_codigo
+        ) THEN
+            RAISE EXCEPTION
+                'El número de POS ya se encuentra registrado';
+        END IF;
+
+    END IF;
+
+    INSERT INTO public.entidades_claro_codigos (
+        entidad_id,
+        tipo_codigo,
+        codigo,
+        vigente_desde,
+        activo
+    )
+    VALUES (
+        p_entidad_id,
+        v_tipo,
+        v_codigo,
+        p_fecha_alta,
+        true
+    )
+    RETURNING id INTO v_codigo_id;
+
+    UPDATE public.entidades_claro_vigencias
+    SET motivo_apertura = v_motivo
+    WHERE codigo_id = v_codigo_id
+      AND vigente_hasta IS NULL;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION
+            'No se generó la vigencia inicial del código';
+    END IF;
+
+    RETURN v_codigo_id;
+END;
+$function$
+"
+crear_entidad_claro,"CREATE OR REPLACE FUNCTION public.crear_entidad_claro(p_nombre text, p_tipo text, p_dni text, p_profile_id uuid, p_codigo text, p_pos text, p_fecha_alta date, p_observaciones text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+    v_usuario_id uuid := auth.uid();
+    v_entidad_id uuid;
+    v_nombre text;
+    v_tipo text;
+    v_dni text;
+    v_codigo text;
+    v_pos text;
+BEGIN
+    IF v_usuario_id IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE id = v_usuario_id
+          AND rol = 'ADMIN'
+          AND activo = true
+    ) THEN
+        RAISE EXCEPTION 'No tenés permisos para crear entidades Claro.'
+            USING ERRCODE = '42501';
+    END IF;
+
+    v_nombre := NULLIF(BTRIM(p_nombre), '');
+    v_tipo := UPPER(BTRIM(p_tipo));
+    v_dni := NULLIF(BTRIM(p_dni), '');
+    v_codigo := NULLIF(UPPER(BTRIM(p_codigo)), '');
+    v_pos := NULLIF(BTRIM(p_pos), '');
+
+    IF v_nombre IS NULL THEN
+        RAISE EXCEPTION 'El nombre del titular es obligatorio.';
+    END IF;
+
+    IF v_tipo IS NULL OR v_tipo NOT IN (
+        'CALL', 'TERRENO', 'BBOO', 'AGENCIA'
+    ) THEN
+        RAISE EXCEPTION 'Tipo de entidad no habilitado para esta operación.';
+    END IF;
+
+    IF v_dni IS NOT NULL
+       AND v_dni !~ '^[0-9]{7,8}$' THEN
+        RAISE EXCEPTION 'El DNI debe contener 7 u 8 dígitos.';
+    END IF;
+
+    IF v_codigo IS NULL THEN
+        RAISE EXCEPTION 'La entidad Claro es obligatoria.';
+    END IF;
+
+    IF v_codigo !~ '^(AGE|AGET|AGEP)[0-9]+$' THEN
+        RAISE EXCEPTION
+            'La entidad debe comenzar con AGE, AGET o AGEP, seguido de su número.';
+    END IF;
+
+    IF p_fecha_alta IS NULL THEN
+        RAISE EXCEPTION 'La fecha de alta es obligatoria.';
+    END IF;
+
+    IF v_tipo IN ('CALL', 'TERRENO')
+       AND p_profile_id IS NULL THEN
+        RAISE EXCEPTION 'Debés seleccionar un usuario PGL.';
+    END IF;
+
+    IF p_profile_id IS NOT NULL THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM public.profiles
+            WHERE id = p_profile_id
+              AND activo = true
+        ) THEN
+            RAISE EXCEPTION 'El usuario PGL no existe o está inactivo.';
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM public.profiles p
+            WHERE p.id = p_profile_id
+              AND p.activo = true
+              AND (
+                  (v_tipo = 'CALL'
+                   AND UPPER(BTRIM(p.vendedor)) LIKE 'L1 %')
+                  OR
+                  (v_tipo = 'TERRENO'
+                   AND UPPER(BTRIM(p.vendedor)) LIKE 'LT %')
+                  OR
+                  (v_tipo = 'BBOO'
+                   AND p.rol = 'BBOO')
+                  OR
+                  v_tipo = 'AGENCIA'
+              )
+        ) THEN
+            RAISE EXCEPTION
+                'El usuario PGL no corresponde al tipo de entidad seleccionado.';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM public.entidades_claro
+            WHERE profile_id = p_profile_id
+        ) THEN
+            RAISE EXCEPTION
+                'El usuario PGL ya tiene un titular asociado.';
+        END IF;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_codigos
+        WHERE tipo_codigo IN ('IDENTITY', 'ENTIDAD_HIJA')
+          AND UPPER(BTRIM(codigo)) = v_codigo
+    ) THEN
+        RAISE EXCEPTION 'La entidad Claro ya se encuentra registrada.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_codigos
+        WHERE tipo_codigo IN ('IDENTITY', 'ENTIDAD_HIJA')
+          AND BTRIM(codigo) = regexp_replace(
+              v_codigo,
+              '^(AGET|AGEP|AGE)',
+              ''
+          )
+    ) THEN
+        RAISE EXCEPTION
+            'Existe una entidad con el mismo número sin prefijo. Revisá el registro existente.';
+    END IF;
+
+    INSERT INTO public.entidades_claro (
+        nombre,
+        tipo,
+        dni,
+        profile_id,
+        fecha_alta,
+        activo,
+        observaciones
+    )
+    VALUES (
+        v_nombre,
+        v_tipo,
+        v_dni,
+        p_profile_id,
+        p_fecha_alta,
+        true,
+        NULLIF(BTRIM(p_observaciones), '')
+    )
+    RETURNING id INTO v_entidad_id;
+
+    INSERT INTO public.entidades_claro_codigos (
+        entidad_id,
+        tipo_codigo,
+        codigo,
+        vigente_desde,
+        activo
+    )
+    VALUES (
+        v_entidad_id,
+        'IDENTITY',
+        v_codigo,
+        p_fecha_alta,
+        true
+    );
+
+    IF v_pos IS NOT NULL THEN
+        INSERT INTO public.entidades_claro_codigos (
+            entidad_id,
+            tipo_codigo,
+            codigo,
+            vigente_desde,
+            activo
+        )
+        VALUES (
+            v_entidad_id,
+            'POS_1175',
+            v_pos,
+            p_fecha_alta,
+            true
+        );
+    END IF;
+
+    RETURN v_entidad_id;
+END;
+$function$
+"
+crear_vigencia_codigo_claro,"CREATE OR REPLACE FUNCTION public.crear_vigencia_codigo_claro()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+BEGIN
+    IF NEW.activo THEN
+        INSERT INTO public.entidades_claro_vigencias (
+            codigo_id,
+            vigente_desde,
+            vigente_hasta,
+            motivo_apertura
+        )
+        VALUES (
+            NEW.id,
+            NEW.vigente_desde,
+            NEW.vigente_hasta,
+            'Alta inicial del código comercial'
+        );
+    END IF;
+
+    RETURN NEW;
+END;
+$function$
+"
+dar_baja_codigo_claro,"CREATE OR REPLACE FUNCTION public.dar_baja_codigo_claro(p_codigo_id uuid, p_fecha_baja date, p_motivo text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+    v_usuario_id uuid := auth.uid();
+    v_entidad_id uuid;
+    v_entidad public.entidades_claro%ROWTYPE;
+    v_codigo public.entidades_claro_codigos%ROWTYPE;
+    v_vigencia public.entidades_claro_vigencias%ROWTYPE;
+    v_motivo text := NULLIF(BTRIM(p_motivo), '');
+BEGIN
+    IF v_usuario_id IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE id = v_usuario_id
+          AND rol = 'ADMIN'
+          AND activo = true
+    ) THEN
+        RAISE EXCEPTION 'Operación no autorizada'
+            USING ERRCODE = '42501';
+    END IF;
+
+    IF p_fecha_baja IS NULL THEN
+        RAISE EXCEPTION 'Debe indicar la fecha de baja';
+    END IF;
+
+    IF v_motivo IS NULL THEN
+        RAISE EXCEPTION 'Debe indicar el motivo de baja';
+    END IF;
+
+    IF p_fecha_baja >
+        (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+    THEN
+        RAISE EXCEPTION 'La fecha de baja no puede ser futura';
+    END IF;
+
+    SELECT entidad_id
+    INTO v_entidad_id
+    FROM public.entidades_claro_codigos
+    WHERE id = p_codigo_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Código comercial inexistente';
+    END IF;
+
+    SELECT *
+    INTO v_entidad
+    FROM public.entidades_claro
+    WHERE id = v_entidad_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Titular inexistente';
+    END IF;
+
+    IF NOT v_entidad.activo THEN
+        RAISE EXCEPTION 'El titular se encuentra inactivo';
+    END IF;
+
+    IF v_entidad.tipo = 'PDV'
+       OR v_entidad.punto_venta_id IS NOT NULL
+       OR v_entidad.asesor_pdv_id IS NOT NULL
+    THEN
+        RAISE EXCEPTION
+            'El mantenimiento de códigos PDV todavía no está habilitado';
+    END IF;
+
+    PERFORM id
+    FROM public.entidades_claro_codigos
+    WHERE entidad_id = v_entidad_id
+    ORDER BY id
+    FOR UPDATE;
+
+    SELECT *
+    INTO v_codigo
+    FROM public.entidades_claro_codigos
+    WHERE id = p_codigo_id
+      AND entidad_id = v_entidad_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Código comercial inexistente';
+    END IF;
+
+    IF NOT v_codigo.activo THEN
+        RAISE EXCEPTION 'El código ya se encuentra inactivo';
+    END IF;
+
+    IF v_codigo.tipo_codigo NOT IN (
+        'IDENTITY', 'POS_1175'
+    ) THEN
+        RAISE EXCEPTION 'Tipo de código no habilitado';
+    END IF;
+
+    IF v_entidad.fecha_alta IS NOT NULL
+       AND p_fecha_baja < v_entidad.fecha_alta
+    THEN
+        RAISE EXCEPTION
+            'La fecha de baja es anterior al alta del titular';
+    END IF;
+
+    SELECT *
+    INTO v_vigencia
+    FROM public.entidades_claro_vigencias
+    WHERE codigo_id = p_codigo_id
+      AND vigente_hasta IS NULL
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION
+            'El código activo no tiene una vigencia abierta';
+    END IF;
+
+    IF v_vigencia.vigente_desde IS NOT NULL
+       AND p_fecha_baja < v_vigencia.vigente_desde
+    THEN
+        RAISE EXCEPTION
+            'La fecha de baja es anterior al inicio de vigencia';
+    END IF;
+
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_historial h
+        WHERE h.tabla = 'entidades_claro'
+          AND h.registro_id = v_entidad_id
+          AND h.datos_nuevos ->> 'evento' =
+              'REACTIVACION_TITULAR'
+          AND (
+              h.datos_nuevos ->> 'fecha_reactivacion'
+          )::date > p_fecha_baja
+    ) THEN
+        RAISE EXCEPTION
+            'La fecha es anterior a la última reactivación del titular';
+    END IF;
+
+    IF v_codigo.tipo_codigo = 'IDENTITY'
+       AND NOT EXISTS (
+           SELECT 1
+           FROM public.entidades_claro_codigos
+           WHERE entidad_id = v_entidad_id
+             AND id <> p_codigo_id
+             AND tipo_codigo IN (
+                 'IDENTITY', 'ENTIDAD_HIJA'
+             )
+             AND activo = true
+       )
+    THEN
+        PERFORM public.dar_baja_entidad_claro(
+            v_entidad_id,
+            p_fecha_baja,
+            v_motivo
+        );
+
+        RETURN p_codigo_id;
+    END IF;
+
+
+    IF v_codigo.tipo_codigo = 'IDENTITY'
+       AND NOT COALESCE(
+           (
+               SELECT range_agg(
+                   daterange(
+                       v.vigente_desde,
+                       v.vigente_hasta,
+                       '[)'
+                   )
+               ) @> daterange(
+                   p_fecha_baja,
+                   NULL,
+                   '[)'
+               )
+               FROM public.entidades_claro_codigos c
+               JOIN public.entidades_claro_vigencias v
+                 ON v.codigo_id = c.id
+               WHERE c.entidad_id = v_entidad_id
+                 AND c.id <> p_codigo_id
+                 AND c.tipo_codigo IN (
+                     'IDENTITY', 'ENTIDAD_HIJA'
+                 )
+           ),
+           false
+       )
+    THEN
+        RAISE EXCEPTION
+            'La baja dejaría al titular sin identidad comercial vigente durante un período';
+    END IF;
+
+    UPDATE public.entidades_claro_vigencias
+    SET vigente_hasta = p_fecha_baja,
+        motivo_cierre = v_motivo
+    WHERE id = v_vigencia.id;
+
+    UPDATE public.entidades_claro_codigos
+    SET activo = false,
+        vigente_hasta = p_fecha_baja
+    WHERE id = p_codigo_id;
+
+    INSERT INTO public.entidades_claro_historial (
+        tabla,
+        registro_id,
+        accion,
+        usuario_id,
+        datos_anteriores,
+        datos_nuevos
+    )
+    VALUES (
+        'entidades_claro_codigos',
+        p_codigo_id,
+        'UPDATE',
+        v_usuario_id,
+        jsonb_build_object(
+            'activo', true,
+            'codigo', v_codigo.codigo
+        ),
+        jsonb_build_object(
+            'activo', false,
+            'codigo', v_codigo.codigo,
+            'fecha_baja', p_fecha_baja,
+            'motivo_baja', v_motivo,
+            'evento', 'BAJA_CODIGO'
+        )
+    );
+
+    RETURN p_codigo_id;
+END;
+$function$
+"
+dar_baja_entidad_claro,"CREATE OR REPLACE FUNCTION public.dar_baja_entidad_claro(p_entidad_id uuid, p_fecha_baja date, p_motivo text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+    v_usuario_id uuid := auth.uid();
+    v_entidad public.entidades_claro%ROWTYPE;
+    v_motivo text := NULLIF(btrim(p_motivo), '');
+BEGIN
+
+    IF v_usuario_id IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE id = v_usuario_id
+          AND rol = 'ADMIN'
+          AND activo = true
+    ) THEN
+        RAISE EXCEPTION 'Operación no autorizada';
+    END IF;
+
+    IF p_fecha_baja IS NULL THEN
+        RAISE EXCEPTION 'Debe indicar la fecha de baja';
+    END IF;
+
+    IF v_motivo IS NULL THEN
+        RAISE EXCEPTION 'Debe indicar el motivo de baja';
+    END IF;
+
+    IF p_fecha_baja >
+        (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+    THEN
+        RAISE EXCEPTION 'La fecha de baja no puede ser futura';
+    END IF;
+
+    SELECT *
+    INTO v_entidad
+    FROM public.entidades_claro
+    WHERE id = p_entidad_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Entidad Claro inexistente';
+    END IF;
+
+    IF NOT v_entidad.activo THEN
+        RAISE EXCEPTION 'La entidad ya se encuentra inactiva';
+    END IF;
+
+    IF v_entidad.tipo = 'PDV'
+       OR v_entidad.punto_venta_id IS NOT NULL
+       OR v_entidad.asesor_pdv_id IS NOT NULL
+    THEN
+        RAISE EXCEPTION
+            'La baja de entidades PDV todavía no está habilitada';
+    END IF;
+
+    IF v_entidad.fecha_alta IS NOT NULL
+       AND p_fecha_baja < v_entidad.fecha_alta
+    THEN
+        RAISE EXCEPTION
+            'La fecha de baja es anterior a la fecha de alta';
+    END IF;
+
+    PERFORM c.id
+    FROM public.entidades_claro_codigos c
+    WHERE c.entidad_id = p_entidad_id
+    FOR UPDATE;
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_codigos c
+        WHERE c.entidad_id = p_entidad_id
+          AND c.activo = true
+          AND NOT EXISTS (
+              SELECT 1
+              FROM public.entidades_claro_vigencias v
+              WHERE v.codigo_id = c.id
+                AND v.vigente_hasta IS NULL
+          )
+    ) THEN
+        RAISE EXCEPTION
+            'Existen códigos activos sin vigencia abierta';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_codigos c
+        JOIN public.entidades_claro_vigencias v
+          ON v.codigo_id = c.id
+        WHERE c.entidad_id = p_entidad_id
+          AND c.activo = true
+          AND v.vigente_hasta IS NULL
+          AND v.vigente_desde > p_fecha_baja
+    ) THEN
+        RAISE EXCEPTION
+            'La fecha de baja es anterior al inicio de vigencia de un código';
+    END IF;
+
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_historial h
+        WHERE h.tabla = 'entidades_claro'
+          AND h.registro_id = p_entidad_id
+          AND h.datos_nuevos ->> 'evento' =
+              'REACTIVACION_TITULAR'
+          AND (
+              h.datos_nuevos ->> 'fecha_reactivacion'
+          )::date > p_fecha_baja
+    ) THEN
+        RAISE EXCEPTION
+            'La fecha es anterior a la última reactivación del titular';
+    END IF;
+
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_codigos c
+        JOIN public.entidades_claro_vigencias v
+          ON v.codigo_id = c.id
+        WHERE c.entidad_id = p_entidad_id
+          AND v.vigente_hasta IS NOT NULL
+          AND v.vigente_hasta > p_fecha_baja
+    ) THEN
+        RAISE EXCEPTION
+            'La baja del titular es anterior al cierre histórico de un código';
+    END IF;
+
+    UPDATE public.entidades_claro_vigencias v
+    SET
+        vigente_hasta = p_fecha_baja,
+        motivo_cierre = v_motivo
+    FROM public.entidades_claro_codigos c
+    WHERE v.codigo_id = c.id
+      AND c.entidad_id = p_entidad_id
+      AND c.activo = true
+      AND v.vigente_hasta IS NULL;
+
+    UPDATE public.entidades_claro_codigos
+    SET
+        activo = false,
+        vigente_hasta = p_fecha_baja
+    WHERE entidad_id = p_entidad_id
+      AND activo = true;
+
+    UPDATE public.entidades_claro
+    SET
+        activo = false,
+        fecha_baja = p_fecha_baja
+    WHERE id = p_entidad_id;
+
+    INSERT INTO public.entidades_claro_historial (
+        tabla,
+        registro_id,
+        accion,
+        usuario_id,
+        datos_anteriores,
+        datos_nuevos
+    )
+    VALUES (
+        'entidades_claro',
+        p_entidad_id,
+        'UPDATE',
+        v_usuario_id,
+        jsonb_build_object('activo', true),
+        jsonb_build_object(
+            'activo', false,
+            'fecha_baja', p_fecha_baja,
+            'motivo_baja', v_motivo,
+            'evento', 'BAJA_TITULAR'
+        )
+    );
+
+    RETURN p_entidad_id;
+
+END;
+$function$
+"
+editar_codigo_claro,"CREATE OR REPLACE FUNCTION public.editar_codigo_claro(p_codigo_id uuid, p_nuevo_codigo text, p_motivo text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+    v_usuario_id uuid := auth.uid();
+    v_entidad_id uuid;
+    v_entidad public.entidades_claro%ROWTYPE;
+    v_codigo public.entidades_claro_codigos%ROWTYPE;
+    v_nuevo_codigo text :=
+        NULLIF(UPPER(BTRIM(p_nuevo_codigo)), '');
+    v_motivo text :=
+        NULLIF(BTRIM(p_motivo), '');
+BEGIN
+    IF v_usuario_id IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE id = v_usuario_id
+          AND rol = 'ADMIN'
+          AND activo = true
+    ) THEN
+        RAISE EXCEPTION 'Operación no autorizada'
+            USING ERRCODE = '42501';
+    END IF;
+
+    SELECT entidad_id
+    INTO v_entidad_id
+    FROM public.entidades_claro_codigos
+    WHERE id = p_codigo_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Código comercial inexistente';
+    END IF;
+
+    SELECT *
+    INTO v_entidad
+    FROM public.entidades_claro
+    WHERE id = v_entidad_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Titular inexistente';
+    END IF;
+
+    IF v_entidad.tipo = 'PDV'
+       OR v_entidad.punto_venta_id IS NOT NULL
+       OR v_entidad.asesor_pdv_id IS NOT NULL
+    THEN
+        RAISE EXCEPTION
+            'El mantenimiento de códigos PDV todavía no está habilitado';
+    END IF;
+
+    SELECT *
+    INTO v_codigo
+    FROM public.entidades_claro_codigos
+    WHERE id = p_codigo_id
+      AND entidad_id = v_entidad_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Código comercial inexistente';
+    END IF;
+
+    IF v_codigo.tipo_codigo NOT IN (
+        'IDENTITY', 'POS_1175'
+    ) THEN
+        RAISE EXCEPTION 'Tipo de código no habilitado';
+    END IF;
+
+    IF v_nuevo_codigo IS NULL THEN
+        RAISE EXCEPTION 'Debe indicar el nuevo código';
+    END IF;
+
+    IF v_motivo IS NULL THEN
+        RAISE EXCEPTION
+            'Debe indicar el motivo de la corrección';
+    END IF;
+
+    IF v_nuevo_codigo = UPPER(BTRIM(v_codigo.codigo)) THEN
+        RAISE EXCEPTION
+            'El nuevo código es igual al código actual';
+    END IF;
+
+    IF v_codigo.tipo_codigo = 'IDENTITY' THEN
+
+        IF v_nuevo_codigo !~ '^(AGE|AGET|AGEP)[0-9]+$' THEN
+            RAISE EXCEPTION
+                'La entidad debe comenzar con AGE, AGET o AGEP';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM public.entidades_claro_codigos
+            WHERE id <> p_codigo_id
+              AND tipo_codigo IN ('IDENTITY', 'ENTIDAD_HIJA')
+              AND UPPER(BTRIM(codigo)) = v_nuevo_codigo
+        ) THEN
+            RAISE EXCEPTION
+                'La entidad Claro ya se encuentra registrada';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM public.entidades_claro_codigos
+            WHERE id <> p_codigo_id
+              AND tipo_codigo IN ('IDENTITY', 'ENTIDAD_HIJA')
+              AND BTRIM(codigo) = regexp_replace(
+                  v_nuevo_codigo,
+                  '^(AGET|AGEP|AGE)',
+                  ''
+              )
+        ) THEN
+            RAISE EXCEPTION
+                'Existe una entidad con el mismo número sin prefijo';
+        END IF;
+
+    ELSE
+
+        IF v_nuevo_codigo !~ '^[0-9]+$' THEN
+            RAISE EXCEPTION
+                'El número de POS debe contener solamente dígitos';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM public.entidades_claro_codigos
+            WHERE id <> p_codigo_id
+              AND tipo_codigo = 'POS_1175'
+              AND UPPER(BTRIM(codigo)) = v_nuevo_codigo
+        ) THEN
+            RAISE EXCEPTION
+                'El número de POS ya se encuentra registrado';
+        END IF;
+
+    END IF;
+
+    UPDATE public.entidades_claro_codigos
+    SET codigo = v_nuevo_codigo
+    WHERE id = p_codigo_id;
+
+    INSERT INTO public.entidades_claro_historial (
+        tabla,
+        registro_id,
+        accion,
+        usuario_id,
+        datos_anteriores,
+        datos_nuevos
+    )
+    VALUES (
+        'entidades_claro_codigos',
+        p_codigo_id,
+        'UPDATE',
+        v_usuario_id,
+        jsonb_build_object(
+            'codigo', v_codigo.codigo
+        ),
+        jsonb_build_object(
+            'codigo', v_nuevo_codigo,
+            'motivo_correccion', v_motivo,
+            'evento', 'CORRECCION_CODIGO'
+        )
+    );
+
+    RETURN p_codigo_id;
+END;
+$function$
+"
+editar_entidad_claro,"CREATE OR REPLACE FUNCTION public.editar_entidad_claro(p_entidad_id uuid, p_nombre text, p_tipo text, p_dni text, p_profile_id uuid, p_fecha_alta date, p_observaciones text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+    v_usuario_id uuid := auth.uid();
+    v_entidad public.entidades_claro%ROWTYPE;
+    v_nombre text;
+    v_tipo text;
+    v_dni text;
+BEGIN
+    IF v_usuario_id IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE id = v_usuario_id
+          AND rol = 'ADMIN'
+          AND activo = true
+    ) THEN
+        RAISE EXCEPTION
+            'No tenés permisos para editar entidades Claro.'
+            USING ERRCODE = '42501';
+    END IF;
+
+    SELECT *
+    INTO v_entidad
+    FROM public.entidades_claro
+    WHERE id = p_entidad_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'La entidad no existe.';
+    END IF;
+
+    IF v_entidad.tipo = 'PDV'
+       OR v_entidad.punto_venta_id IS NOT NULL
+       OR v_entidad.asesor_pdv_id IS NOT NULL THEN
+        RAISE EXCEPTION
+            'Los titulares de PDV todavía no pueden editarse desde este módulo.';
+    END IF;
+
+    v_nombre := NULLIF(BTRIM(p_nombre), '');
+    v_tipo := UPPER(BTRIM(p_tipo));
+    v_dni := NULLIF(BTRIM(p_dni), '');
+
+    IF v_nombre IS NULL THEN
+        RAISE EXCEPTION 'El nombre del titular es obligatorio.';
+    END IF;
+
+    IF v_tipo IS NULL OR v_tipo NOT IN (
+        'CALL', 'TERRENO', 'BBOO', 'AGENCIA'
+    ) THEN
+        RAISE EXCEPTION 'Tipo de entidad no válido.';
+    END IF;
+
+    IF v_dni IS NOT NULL
+       AND v_dni !~ '^[0-9]{7,8}$' THEN
+        RAISE EXCEPTION 'El DNI debe contener 7 u 8 dígitos.';
+    END IF;
+
+    IF p_fecha_alta IS NULL THEN
+        RAISE EXCEPTION 'La fecha de alta es obligatoria.';
+    END IF;
+
+    IF v_entidad.fecha_baja IS NOT NULL
+       AND p_fecha_alta > v_entidad.fecha_baja THEN
+        RAISE EXCEPTION
+            'La fecha de alta no puede ser posterior a la fecha de baja.';
+    END IF;
+
+    IF v_tipo IN ('CALL', 'TERRENO')
+       AND p_profile_id IS NULL THEN
+        RAISE EXCEPTION 'Debés seleccionar un usuario PGL.';
+    END IF;
+
+    IF p_profile_id IS NOT NULL THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM public.profiles p
+            WHERE p.id = p_profile_id
+              AND (
+                  p.activo = true
+                  OR p.id = v_entidad.profile_id
+              )
+              AND (
+                  (v_tipo = 'CALL'
+                   AND UPPER(BTRIM(p.vendedor)) LIKE 'L1 %')
+                  OR
+                  (v_tipo = 'TERRENO'
+                   AND UPPER(BTRIM(p.vendedor)) LIKE 'LT %')
+                  OR
+                  (v_tipo = 'BBOO'
+                   AND p.rol = 'BBOO')
+                  OR
+                  v_tipo = 'AGENCIA'
+              )
+        ) THEN
+            RAISE EXCEPTION
+                'El usuario PGL no corresponde al tipo de entidad seleccionado.';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM public.entidades_claro
+            WHERE profile_id = p_profile_id
+              AND id <> p_entidad_id
+        ) THEN
+            RAISE EXCEPTION
+                'El usuario PGL ya tiene otro titular asociado.';
+        END IF;
+    END IF;
+
+    UPDATE public.entidades_claro
+    SET
+        nombre = v_nombre,
+        tipo = v_tipo,
+        dni = v_dni,
+        profile_id = p_profile_id,
+        fecha_alta = p_fecha_alta,
+        observaciones = NULLIF(BTRIM(p_observaciones), '')
+    WHERE id = p_entidad_id;
+
+    RETURN p_entidad_id;
+END;
+$function$
+"
+reactivar_codigo_claro,"CREATE OR REPLACE FUNCTION public.reactivar_codigo_claro(p_codigo_id uuid, p_fecha_reactivacion date, p_motivo text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+    v_usuario_id uuid := auth.uid();
+    v_entidad_id uuid;
+    v_entidad public.entidades_claro%ROWTYPE;
+    v_codigo public.entidades_claro_codigos%ROWTYPE;
+    v_motivo text := NULLIF(BTRIM(p_motivo), '');
+BEGIN
+    IF v_usuario_id IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE id = v_usuario_id
+          AND rol = 'ADMIN'
+          AND activo = true
+    ) THEN
+        RAISE EXCEPTION 'Operación no autorizada'
+            USING ERRCODE = '42501';
+    END IF;
+
+    IF p_fecha_reactivacion IS NULL THEN
+        RAISE EXCEPTION
+            'Debe indicar la fecha de reactivación';
+    END IF;
+
+    IF v_motivo IS NULL THEN
+        RAISE EXCEPTION
+            'Debe indicar el motivo de reactivación';
+    END IF;
+
+    IF p_fecha_reactivacion >
+        (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+    THEN
+        RAISE EXCEPTION
+            'La fecha de reactivación no puede ser futura';
+    END IF;
+
+    SELECT entidad_id
+    INTO v_entidad_id
+    FROM public.entidades_claro_codigos
+    WHERE id = p_codigo_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Código comercial inexistente';
+    END IF;
+
+    SELECT *
+    INTO v_entidad
+    FROM public.entidades_claro
+    WHERE id = v_entidad_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Titular inexistente';
+    END IF;
+
+    IF NOT v_entidad.activo THEN
+        RAISE EXCEPTION
+            'Debe reactivar primero el titular';
+    END IF;
+
+    IF v_entidad.tipo = 'PDV'
+       OR v_entidad.punto_venta_id IS NOT NULL
+       OR v_entidad.asesor_pdv_id IS NOT NULL
+    THEN
+        RAISE EXCEPTION
+            'El mantenimiento de códigos PDV todavía no está habilitado';
+    END IF;
+
+    SELECT *
+    INTO v_codigo
+    FROM public.entidades_claro_codigos
+    WHERE id = p_codigo_id
+      AND entidad_id = v_entidad_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Código comercial inexistente';
+    END IF;
+
+    IF v_codigo.activo THEN
+        RAISE EXCEPTION
+            'El código ya se encuentra activo';
+    END IF;
+
+    IF v_codigo.tipo_codigo NOT IN (
+        'IDENTITY', 'POS_1175'
+    ) THEN
+        RAISE EXCEPTION 'Tipo de código no habilitado';
+    END IF;
+
+    IF v_codigo.vigente_hasta IS NULL THEN
+        RAISE EXCEPTION
+            'El código no tiene fecha de baja registrada';
+    END IF;
+
+    IF p_fecha_reactivacion < v_codigo.vigente_hasta THEN
+        RAISE EXCEPTION
+            'La reactivación no puede ser anterior a la baja';
+    END IF;
+
+    IF v_entidad.fecha_alta IS NOT NULL
+       AND p_fecha_reactivacion < v_entidad.fecha_alta
+    THEN
+        RAISE EXCEPTION
+            'La reactivación es anterior al alta del titular';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_vigencias
+        WHERE codigo_id = p_codigo_id
+          AND (
+              vigente_hasta IS NULL
+              OR vigente_hasta > p_fecha_reactivacion
+          )
+    ) THEN
+        RAISE EXCEPTION
+            'Existen vigencias incompatibles con la reactivación';
+    END IF;
+
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_historial h
+        WHERE h.tabla = 'entidades_claro'
+          AND h.registro_id = v_entidad_id
+          AND h.datos_nuevos ->> 'evento' =
+              'REACTIVACION_TITULAR'
+          AND (
+              h.datos_nuevos ->> 'fecha_reactivacion'
+          )::date > p_fecha_reactivacion
+    ) THEN
+        RAISE EXCEPTION
+            'La fecha es anterior a la última reactivación del titular';
+    END IF;
+
+    UPDATE public.entidades_claro_codigos
+    SET activo = true,
+        vigente_desde = p_fecha_reactivacion,
+        vigente_hasta = NULL
+    WHERE id = p_codigo_id;
+
+    INSERT INTO public.entidades_claro_vigencias (
+        codigo_id,
+        vigente_desde,
+        vigente_hasta,
+        motivo_apertura
+    )
+    VALUES (
+        p_codigo_id,
+        p_fecha_reactivacion,
+        NULL,
+        v_motivo
+    );
+
+    INSERT INTO public.entidades_claro_historial (
+        tabla,
+        registro_id,
+        accion,
+        usuario_id,
+        datos_anteriores,
+        datos_nuevos
+    )
+    VALUES (
+        'entidades_claro_codigos',
+        p_codigo_id,
+        'UPDATE',
+        v_usuario_id,
+        jsonb_build_object(
+            'activo', false,
+            'codigo', v_codigo.codigo,
+            'vigente_hasta', v_codigo.vigente_hasta
+        ),
+        jsonb_build_object(
+            'activo', true,
+            'codigo', v_codigo.codigo,
+            'fecha_reactivacion', p_fecha_reactivacion,
+            'motivo_reactivacion', v_motivo,
+            'evento', 'REACTIVACION_CODIGO'
+        )
+    );
+
+    RETURN p_codigo_id;
+END;
+$function$
+"
+reactivar_entidad_claro,"CREATE OR REPLACE FUNCTION public.reactivar_entidad_claro(p_entidad_id uuid, p_fecha_reactivacion date, p_motivo text, p_codigos_ids uuid[])
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+    v_usuario_id uuid := auth.uid();
+    v_entidad public.entidades_claro%ROWTYPE;
+    v_motivo text := NULLIF(btrim(p_motivo), '');
+BEGIN
+
+    IF v_usuario_id IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE id = v_usuario_id
+          AND rol = 'ADMIN'
+          AND activo = true
+    ) THEN
+        RAISE EXCEPTION 'Operación no autorizada';
+    END IF;
+
+    IF p_fecha_reactivacion IS NULL THEN
+        RAISE EXCEPTION
+            'Debe indicar la fecha de reactivación';
+    END IF;
+
+    IF v_motivo IS NULL THEN
+        RAISE EXCEPTION
+            'Debe indicar el motivo de reactivación';
+    END IF;
+
+    IF p_fecha_reactivacion >
+        (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+    THEN
+        RAISE EXCEPTION
+            'La fecha de reactivación no puede ser futura';
+    END IF;
+
+    SELECT *
+    INTO v_entidad
+    FROM public.entidades_claro
+    WHERE id = p_entidad_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Entidad Claro inexistente';
+    END IF;
+
+    IF v_entidad.activo THEN
+        RAISE EXCEPTION
+            'La entidad ya se encuentra activa';
+    END IF;
+
+    IF v_entidad.tipo = 'PDV'
+       OR v_entidad.punto_venta_id IS NOT NULL
+       OR v_entidad.asesor_pdv_id IS NOT NULL
+    THEN
+        RAISE EXCEPTION
+            'La reactivación de entidades PDV todavía no está habilitada';
+    END IF;
+
+    IF v_entidad.fecha_baja IS NULL THEN
+        RAISE EXCEPTION
+            'La entidad no tiene fecha de baja registrada';
+    END IF;
+
+    IF p_fecha_reactivacion < v_entidad.fecha_baja THEN
+        RAISE EXCEPTION
+            'La reactivación no puede ser anterior a la baja';
+    END IF;
+
+    IF COALESCE(cardinality(p_codigos_ids), 0) = 0 THEN
+        RAISE EXCEPTION
+            'Debe seleccionar al menos un código comercial';
+    END IF;
+
+    PERFORM c.id
+    FROM public.entidades_claro_codigos c
+    WHERE c.entidad_id = p_entidad_id
+    FOR UPDATE;
+
+    IF EXISTS (
+        SELECT 1
+        FROM unnest(p_codigos_ids) AS seleccionado(id)
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM public.entidades_claro_codigos c
+            WHERE c.id = seleccionado.id
+              AND c.entidad_id = p_entidad_id
+              AND c.activo = false
+        )
+    ) THEN
+        RAISE EXCEPTION
+            'La selección contiene códigos inválidos o activos';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_codigos
+        WHERE entidad_id = p_entidad_id
+          AND activo = true
+    ) THEN
+        RAISE EXCEPTION
+            'La entidad inactiva contiene códigos activos';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_vigencias
+        WHERE codigo_id = ANY(p_codigos_ids)
+          AND (
+              vigente_hasta IS NULL
+              OR vigente_hasta > p_fecha_reactivacion
+          )
+    ) THEN
+        RAISE EXCEPTION
+            'Existen vigencias incompatibles con la reactivación';
+    END IF;
+
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_codigos
+        WHERE entidad_id = p_entidad_id
+          AND id = ANY(p_codigos_ids)
+          AND tipo_codigo IN ('IDENTITY', 'ENTIDAD_HIJA')
+    ) THEN
+        RAISE EXCEPTION
+            'Debe seleccionar al menos un código de identidad comercial';
+    END IF;
+
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.entidades_claro_codigos c
+        JOIN public.entidades_claro_vigencias v
+          ON v.codigo_id = c.id
+        WHERE c.entidad_id = p_entidad_id
+          AND (
+              v.vigente_hasta IS NULL
+              OR v.vigente_hasta > p_fecha_reactivacion
+          )
+    ) THEN
+        RAISE EXCEPTION
+            'Existen vigencias históricas del titular incompatibles con la reactivación';
+    END IF;
+
+    UPDATE public.entidades_claro
+    SET
+        activo = true,
+        fecha_baja = NULL
+    WHERE id = p_entidad_id;
+
+    UPDATE public.entidades_claro_codigos
+    SET
+        activo = true,
+        vigente_desde = p_fecha_reactivacion,
+        vigente_hasta = NULL
+    WHERE entidad_id = p_entidad_id
+      AND id = ANY(p_codigos_ids);
+
+    INSERT INTO public.entidades_claro_vigencias (
+        codigo_id,
+        vigente_desde,
+        vigente_hasta,
+        motivo_apertura
+    )
+    SELECT
+        id,
+        p_fecha_reactivacion,
+        NULL,
+        v_motivo
+    FROM public.entidades_claro_codigos
+    WHERE entidad_id = p_entidad_id
+      AND id = ANY(p_codigos_ids);
+
+    INSERT INTO public.entidades_claro_historial (
+        tabla,
+        registro_id,
+        accion,
+        usuario_id,
+        datos_anteriores,
+        datos_nuevos
+    )
+    VALUES (
+        'entidades_claro',
+        p_entidad_id,
+        'UPDATE',
+        v_usuario_id,
+        jsonb_build_object(
+            'activo', false,
+            'fecha_baja', v_entidad.fecha_baja
+        ),
+        jsonb_build_object(
+            'activo', true,
+            'fecha_baja', NULL,
+            'fecha_reactivacion', p_fecha_reactivacion,
+            'motivo_reactivacion', v_motivo,
+            'codigos_reactivados', p_codigos_ids,
+            'evento', 'REACTIVACION_TITULAR'
+        )
+    );
+
+    RETURN p_entidad_id;
+
+END;
+$function$
+"
+registrar_historial_entidades_claro,"CREATE OR REPLACE FUNCTION public.registrar_historial_entidades_claro()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+    v_registro_id uuid;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        v_registro_id := OLD.id;
+    ELSE
+        v_registro_id := NEW.id;
+    END IF;
+
+    INSERT INTO public.entidades_claro_historial (
+        tabla,
+        registro_id,
+        accion,
+        usuario_id,
+        datos_anteriores,
+        datos_nuevos
+    )
+    VALUES (
+        TG_TABLE_NAME,
+        v_registro_id,
+        TG_OP,
+        auth.uid(),
+        CASE
+            WHEN TG_OP = 'INSERT' THEN NULL
+            ELSE to_jsonb(OLD)
+        END,
+        CASE
+            WHEN TG_OP = 'DELETE' THEN NULL
+            ELSE to_jsonb(NEW)
+        END
+    );
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+
+    RETURN NEW;
+END;
+$function$
+"
+sincronizar_dni_desde_entidad_claro,"CREATE OR REPLACE FUNCTION public.sincronizar_dni_desde_entidad_claro()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+    v_dni_perfil text;
+BEGIN
+    IF NEW.profile_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT dni_vendedor
+    INTO v_dni_perfil
+    FROM public.profiles
+    WHERE id = NEW.profile_id
+    FOR UPDATE;
+
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.dni IS NULL THEN
+            NEW.dni := v_dni_perfil;
+
+        ELSIF v_dni_perfil IS NOT NULL
+          AND NEW.dni IS DISTINCT FROM v_dni_perfil THEN
+            RAISE EXCEPTION
+                'El DNI ingresado no coincide con el DNI del usuario PGL.';
+        END IF;
+    ELSE
+        IF NEW.profile_id IS DISTINCT FROM OLD.profile_id THEN
+            IF NEW.dni IS NULL THEN
+                NEW.dni := v_dni_perfil;
+
+            ELSIF v_dni_perfil IS NOT NULL
+              AND NEW.dni IS DISTINCT FROM v_dni_perfil THEN
+                RAISE EXCEPTION
+                    'El DNI no coincide con el del nuevo usuario PGL.';
+            END IF;
+
+        ELSIF NEW.dni IS NOT DISTINCT FROM OLD.dni THEN
+            RETURN NEW;
+        END IF;
+    END IF;
+
+    IF NEW.dni IS DISTINCT FROM v_dni_perfil THEN
+        UPDATE public.profiles
+        SET dni_vendedor = NEW.dni
+        WHERE id = NEW.profile_id;
+    END IF;
+
+    RETURN NEW;
+END;
+$function$
+"

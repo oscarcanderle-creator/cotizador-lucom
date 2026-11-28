@@ -111,6 +111,19 @@ export default async function AdminPage() {
               </div>
             </a>
 
+          {/* ENTIDADES CLARO */}
+          <a
+            href="/admin/entidades-claro"
+            className="bg-gray-100 border border-gray-200 rounded-xl p-5 hover:bg-gray-200 hover:border-gray-300 hover:shadow-sm transition active:bg-red-600 active:border-red-600 active:[&>div]:text-white"
+          >
+            <div className="text-lg font-semibold text-gray-900">
+              Entidades Claro
+            </div>
+            <div className="text-sm text-gray-500 mt-2">
+              Maestro de entidades, vendedores, códigos comerciales y vinculaciones con PGL.
+            </div>
+          </a>
+
           {/* ABM ORIGEN DEL DATO */}
           <a
             href="/admin/origenes"
