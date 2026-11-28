@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import NuevaEntidadClaro, { type UsuarioDisponible } from './NuevaEntidadClaro'
 import BajaReactivarEntidad from './BajaReactivarEntidad'
 import GestionCodigosClaro from './GestionCodigosClaro'
+import HistorialClaro from './HistorialClaro'
 
 type Codigo = {
   id: string
@@ -259,6 +260,7 @@ export default function EntidadesClaroClient({
                         )}
                       />
                       <GestionCodigosClaro entidad={e} />
+                      <HistorialClaro tipo="titular" id={e.id} nombre={e.nombre} />
                       <BajaReactivarEntidad
                         entidad={{
                           id: e.id,
@@ -277,9 +279,10 @@ export default function EntidadesClaroClient({
                       />
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-400 whitespace-nowrap">
-                      Solo lectura
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-gray-400 whitespace-nowrap">Solo lectura</span>
+                      <HistorialClaro tipo="titular" id={e.id} nombre={e.nombre} />
+                    </div>
                   )}
                 </td>
               </tr>
