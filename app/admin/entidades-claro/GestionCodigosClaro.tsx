@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { gestionarCodigoClaro } from './actions'
+import HistorialClaro from './HistorialClaro'
 
 type Codigo = {
   id: string
@@ -94,8 +95,8 @@ export default function GestionCodigosClaro({ entidad }: { entidad: Entidad }) {
                       <td className={'p-2 ' + (c.activo ? 'text-green-700' : 'text-gray-500')}>{c.activo ? 'Activo' : 'Inactivo'}</td>
                       <td className="p-2 whitespace-nowrap">{fecha(c.vigente_desde)}</td>
                       <td className="p-2 whitespace-nowrap">{fecha(c.vigente_hasta)}</td>
-                      <td className="p-2"><button type="button" className={boton} disabled={!entidad.activo || guardando}
-                        onClick={() => elegir(c.activo ? 'baja' : 'reactivar', c.id)}>{c.activo ? 'Dar de baja' : 'Reactivar'}</button></td>
+                      <td className="p-2"><div className="flex flex-wrap gap-1"><HistorialClaro tipo="codigo" id={c.id} nombre={c.codigo + " — " + c.tipo_codigo} /><button type="button" className={boton} disabled={!entidad.activo || guardando}
+                        onClick={() => elegir(c.activo ? 'baja' : 'reactivar', c.id)}>{c.activo ? 'Dar de baja' : 'Reactivar'}</button></div></td>
                     </tr>)}
                     {!entidad.entidades_claro_codigos.length && <tr><td colSpan={6} className="p-4 text-center">Sin códigos registrados.</td></tr>}
                   </tbody>
