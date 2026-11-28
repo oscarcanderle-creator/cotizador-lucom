@@ -249,8 +249,9 @@ export async function gestionarCodigoClaro(formData: FormData) {
 
   const tipo = campo('tipo_codigo')
   const codigo = campo('codigo').toUpperCase()
-  if (accion === 'alta' && (!['ENTIDAD', 'POS'].includes(tipo) || !codigo ||
-    (tipo === 'ENTIDAD' && !/^(AGE|AGET|AGEP)[0-9]+$/.test(codigo)))) {
+  if (accion === 'alta' && (!['IDENTITY', 'POS_1175'].includes(tipo) || !codigo ||
+    (tipo === 'IDENTITY' && !/^(AGE|AGET|AGEP)[0-9]+$/.test(codigo)) ||
+    (tipo === 'POS_1175' && !/^[0-9]+$/.test(codigo)))) {
     return { ok: false, mensaje: 'Indicá un tipo y código válidos.' }
   }
 
