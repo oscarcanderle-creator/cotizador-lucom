@@ -7,7 +7,29 @@ type Vigencia = { id: string; vigente_desde: string | null; vigente_hasta: strin
 type Evento = { id: string; accion: string; usuario: string; datos_anteriores: Record<string, unknown> | null; datos_nuevos: Record<string, unknown> | null; created_at: string }
 type Resultado = { vigencias: Vigencia[]; eventos: Evento[] }
 const fecha = (v: string | null) => v ? v.split('-').reverse().join('/') : 'Sin fecha registrada'
-const fechaHora = (v: string) => new Date(v).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })
+const fechaHora = (v: string) => new Date(v).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hourCycle: 'h23' })
+const nombres: Record<string, string> = {
+  nombre: 'Nombre', dni: 'DNI', tipo: 'Tipo', activo: 'Estado',
+  fecha_alta: 'Fecha de alta', fecha_baja: 'Fecha de baja',
+  fecha_reactivacion: 'Fecha de reactivación', observaciones: 'Observaciones',
+  motivo: 'Motivo', motivo_baja: 'Motivo de baja', motivo_reactivacion: 'Motivo de reactivación',
+  profile_id: 'Vínculo con PGL', punto_venta_id: 'Vínculo con PDV', asesor_pdv_id: 'Vínculo con asesor PDV',
+}
+function mostrar(campo: string, valor: unknown) {
+  if (valor === null || valor === undefined || valor === '') return 'Sin dato'
+  if (campo === 'activo' && typeof valor === 'boolean') return valor ? 'Activo' : 'Inactivo'
+  if (campo.endsWith('_id')) return 'Vinculado'
+  if (typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor)) return fecha(valor)
+  return typeof valor === 'object' ? JSON.stringify(valor) : String(valor)
+}
+function cambios(e: Evento) {
+  const antes = e.datos_anteriores ?? {}
+  const despues = e.datos_nuevos ?? {}
+  return [...new Set([...Object.keys(antes), ...Object.keys(despues)])]
+    .filter(k => !['id', 'created_at', 'updated_at', 'evento'].includes(k))
+    .filter(k => e.accion === 'INSERT' ? despues[k] != null : JSON.stringify(antes[k]) !== JSON.stringify(despues[k]))
+    .map(k => ({ campo: k, nombre: nombres[k] ?? k.replaceAll('_', ' '), anterior: mostrar(k, antes[k]), nuevo: mostrar(k, despues[k]), cambioVinculo: k.endsWith('_id') && antes[k] != null && despues[k] != null && antes[k] !== despues[k] }))
+}
 function etiqueta(e: Evento) {
   const evento = e.datos_nuevos?.evento
   if (evento === 'BAJA_TITULAR') return 'Baja de titular'
@@ -55,9 +77,18 @@ export default function HistorialClaro({ tipo, id, nombre }: { tipo: 'titular' |
             {!datos.eventos.length && <p>No hay eventos registrados.</p>}
             {datos.eventos.map(e => <details key={e.id} className="rounded-xl border border-gray-200 p-4">
               <summary className="cursor-pointer"><strong>{etiqueta(e)}</strong><span className="ml-3 text-gray-500">{fechaHora(e.created_at)} · {e.usuario}</span></summary>
+              <div className="mt-3 overflow-x-auto">
+                {cambios(e).length ? <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50"><tr><th className="p-2">Campo</th>{e.accion !== 'INSERT' && <th className="p-2">Anterior</th>}<th className="p-2">{e.accion === 'INSERT' ? 'Valor' : 'Nuevo'}</th></tr></thead>
+                  <tbody className="divide-y divide-gray-100">{cambios(e).map(v => <tr key={v.campo}><td className="p-2 font-medium">{v.nombre}</td>{e.accion !== 'INSERT' && <td className="p-2 text-gray-500 break-words">{v.anterior}</td>}<td className="p-2 break-words">{v.cambioVinculo ? 'Vínculo modificado' : v.nuevo}</td></tr>)}</tbody>
+                </table> : <p className="text-gray-500">Sin cambios de campos visibles. Consultá el detalle técnico.</p>}
+              </div>
+              <details className="mt-3 border-t border-gray-100 pt-3">
+                <summary className="cursor-pointer text-xs text-gray-500">Ver detalle técnico completo</summary>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {[['Valores anteriores', e.datos_anteriores], ['Valores posteriores', e.datos_nuevos]].map(([titulo, valor], i) => <div key={i} className="min-w-0"><h3 className="font-medium">{String(titulo)}</h3><pre className="mt-1 whitespace-pre-wrap break-all rounded-lg bg-gray-50 p-3 text-xs">{valor ? JSON.stringify(valor, null, 2) : 'Sin datos registrados'}</pre></div>)}
               </div>
+              </details>
             </details>)}
           </>}
           <p className="text-xs text-gray-500">Consulta de solo lectura. Los registros históricos no se modifican.</p>
