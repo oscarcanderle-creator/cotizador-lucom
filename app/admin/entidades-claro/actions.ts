@@ -211,3 +211,63 @@ export async function reactivarEntidadClaro(formData: FormData) {
   revalidatePath('/admin/entidades-claro')
   return { ok: true, mensaje: 'Entidad Claro reactivada con los códigos seleccionados.' }
 }
+
+export async function gestionarCodigoClaro(formData: FormData) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, mensaje: 'La sesión ha expirado.' }
+
+  const { data: profile } = await supabase.from('profiles')
+    .select('rol, activo').eq('id', user.id).single()
+  if (!profile?.activo || profile.rol !== 'ADMIN') {
+    return { ok: false, mensaje: 'No tenés permisos para realizar esta operación.' }
+  }
+
+  const campo = (nombre: string) => String(formData.get(nombre) ?? '').trim()
+  const accion = campo('accion')
+  const fecha = campo('fecha')
+  const motivo = campo('motivo')
+  const entidadId = campo('entidad_id')
+  const codigoId = campo('codigo_id')
+  if (!fecha || !motivo || !entidadId || !['alta', 'baja', 'reactivar'].includes(accion)) {
+    return { ok: false, mensaje: 'Completá los datos requeridos.' }
+  }
+
+  const { data: entidad, error: errorEntidad } = await supabase.from('entidades_claro')
+    .select('id, tipo, activo, punto_venta_id, asesor_pdv_id').eq('id', entidadId).single()
+  if (errorEntidad || !entidad?.activo || entidad.tipo === 'PDV' || entidad.punto_venta_id || entidad.asesor_pdv_id) {
+    return { ok: false, mensaje: 'El titular no está habilitado para administrar códigos.' }
+  }
+
+  if (accion !== 'alta') {
+    const { data: codigo, error } = await supabase.from('entidades_claro_codigos')
+      .select('id, activo').eq('id', codigoId).eq('entidad_id', entidadId).single()
+    if (error || !codigo || codigo.activo !== (accion === 'baja')) {
+      return { ok: false, mensaje: 'El código no corresponde al titular o cambió de estado.' }
+    }
+  }
+
+  const tipo = campo('tipo_codigo')
+  const codigo = campo('codigo').toUpperCase()
+  if (accion === 'alta' && (!['ENTIDAD', 'POS'].includes(tipo) || !codigo ||
+    (tipo === 'ENTIDAD' && !/^(AGE|AGET|AGEP)[0-9]+$/.test(codigo)))) {
+    return { ok: false, mensaje: 'Indicá un tipo y código válidos.' }
+  }
+
+  const resultado = accion === 'alta'
+    ? await supabase.rpc('agregar_codigo_claro', {
+        p_entidad_id: entidadId, p_tipo_codigo: tipo, p_codigo: codigo,
+        p_fecha_alta: fecha, p_motivo: motivo,
+      })
+    : accion === 'baja'
+      ? await supabase.rpc('dar_baja_codigo_claro', {
+          p_codigo_id: codigoId, p_fecha_baja: fecha, p_motivo: motivo,
+        })
+      : await supabase.rpc('reactivar_codigo_claro', {
+          p_codigo_id: codigoId, p_fecha_reactivacion: fecha, p_motivo: motivo,
+        })
+
+  if (resultado.error) return { ok: false, mensaje: resultado.error.message }
+  revalidatePath('/admin/entidades-claro')
+  return { ok: true, mensaje: 'Código actualizado correctamente.' }
+}
