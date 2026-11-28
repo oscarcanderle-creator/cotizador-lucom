@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '../../../utils/supabase/server'
+import { createAdminClient } from '../../../utils/supabase/admin'
 
 export async function crearEntidadClaro(formData: FormData) {
   const supabase = await createClient()
@@ -233,14 +234,16 @@ export async function gestionarCodigoClaro(formData: FormData) {
     return { ok: false, mensaje: 'Completá los datos requeridos.' }
   }
 
-  const { data: entidad, error: errorEntidad } = await supabase.from('entidades_claro')
+  const admin = createAdminClient()
+  const { data: entidad, error: errorEntidad } = await admin.from('entidades_claro')
     .select('id, tipo, activo, punto_venta_id, asesor_pdv_id').eq('id', entidadId).single()
-  if (errorEntidad || !entidad?.activo || entidad.tipo === 'PDV' || entidad.punto_venta_id || entidad.asesor_pdv_id) {
+  if (errorEntidad) return { ok: false, mensaje: 'No se pudo consultar el titular: ' + errorEntidad.message }
+  if (!entidad?.activo || entidad.tipo === 'PDV' || entidad.punto_venta_id || entidad.asesor_pdv_id) {
     return { ok: false, mensaje: 'El titular no está habilitado para administrar códigos.' }
   }
 
   if (accion !== 'alta') {
-    const { data: codigo, error } = await supabase.from('entidades_claro_codigos')
+    const { data: codigo, error } = await admin.from('entidades_claro_codigos')
       .select('id, activo').eq('id', codigoId).eq('entidad_id', entidadId).single()
     if (error || !codigo || codigo.activo !== (accion === 'baja')) {
       return { ok: false, mensaje: 'El código no corresponde al titular o cambió de estado.' }
